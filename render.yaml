@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: timelymate-frontend
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    rootDir: frontend/web
+
+  - type: web
+    name: timelymate-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    rootDir: backend/app
+
+databases:
+  # PostgreSQL Database
+  - name: timely-mate-db
+    databaseName: timelymate 

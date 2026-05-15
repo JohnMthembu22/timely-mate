@@ -1,0 +1,38 @@
+# Node
+node_modules/
+
+# Python
+venv/
+.venv/
+new_venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# Build
+/dist/
+/build/
+frontend/web/dist-electron/
+frontend/web/.vite/
+
+# VSCode
+.vscode/
+
+# System
+Thumbs.db
+Desktop.ini
+
+# Others
+*.zip
+*.pem 

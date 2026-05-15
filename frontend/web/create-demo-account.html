@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Demo Account - Timely Mate</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .credentials {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Timely Mate Demo Account Creator</h1>
+        
+        <div id="status"></div>
+        
+        <div class="info">
+            <h3>📋 What this does:</h3>
+            <ul>
+                <li>Creates a demo admin account with full access to all features</li>
+                <li>Creates additional test accounts for different user roles</li>
+                <li>Sets up demo organization data</li>
+                <li>Prepares the app for comprehensive testing</li>
+            </ul>
+        </div>
+        
+        <button onclick="createDemoAccounts()">Create Demo Accounts</button>
+        <button onclick="clearAllData()">Clear All Data</button>
+        <button onclick="viewAccounts()">View Existing Accounts</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function createDemoAccounts() {
+            const demoUser = {
+                id: `user-${Date.now()}-demo`,
+                email: 'demo@timelymate.com',
+                password: 'demo123',
+                organizationName: 'Demo Organization',
+                role: 'admin',
+                permissions: {
+                    canCreateTasks: true,
+                    canEditTasks: true,
+                    canDeleteTasks: true,
+                    canAssignTasks: true,
+                    canViewAllTasks: true,
+                    canManageTeam: true,
+                    canAccessReports: true,
+                    canModifySettings: true,
+                    canManageUsers: true,
+                },
+                companyProfile: {
+                    name: 'Demo Organization',
+                    industry: 'Technology',
+                    size: 'Small (1-10 employees)',
+                    location: 'Global',
+                    website: 'https://demo.timelymate.com',
+                    description: 'Demo organization for testing Timely Mate features'
+                },
+                selectedPlan: 'premium',
+                registeredAt: new Date().toISOString(),
+            };
+
+            const additionalUsers = [
+                {
+                    id: `user-${Date.now()}-manager`,
+                    email: 'manager@timelymate.com',
+                    password: 'demo123',
+                    organizationName: 'Demo Organization',
+                    role: 'team_leader',
+                    permissions: {
+                        canCreateTasks: true,
+                        canEditTasks: true,
+                        canDeleteTasks: true,
+                        canAssignTasks: true,
+                        canViewAllTasks: true,
+                        canManageTeam: true,
+                        canAccessReports: true,
+                        canModifySettings: false,
+                        canManageUsers: false,
+                    },
+                    companyProfile: {
+                        name: 'Demo Organization',
+                        industry: 'Technology',
+                        size: 'Small (1-10 employees)',
+                        location: 'Global',
+                        website: 'https://demo.timelymate.com',
+                        description: 'Demo organization for testing Timely Mate features'
+                    },
+                    selectedPlan: 'premium',
+                    registeredAt: new Date().toISOString(),
+                },
+                {
+                    id: `user-${Date.now()}-employee`,
+                    email: 'employee@timelymate.com',
+                    password: 'demo123',
+                    organizationName: 'Demo Organization',
+                    role: 'employee',
+                    permissions: {
+                        canCreateTasks: false,
+                        canEditTasks: false,
+                        canDeleteTasks: false,
+                        canAssignTasks: false,
+                        canViewAllTasks: false,
+                        canManageTeam: false,
+                        canAccessReports: false,
+                        canModifySettings: false,
+                        canManageUsers: false,
+                    },
+                    companyProfile: {
+                        name: 'Demo Organization',
+                        industry: 'Technology',
+                        size: 'Small (1-10 employees)',
+                        location: 'Global',
+                        website: 'https://demo.timelymate.com',
+                        description: 'Demo organization for testing Timely Mate features'
+                    },
+                    selectedPlan: 'premium',
+                    registeredAt: new Date().toISOString(),
+                }
+            ];
+
+            // Get existing users
+            const existingUsers = JSON.parse(localStorage.getItem('timelymate_registered_users') || '[]');
+            
+            // Check if demo user already exists
+            const existingDemoUser = existingUsers.find(user => user.email === 'demo@timelymate.com');
+            
+            if (existingDemoUser) {
+                document.getElementById('status').innerHTML = '<div class="info">Demo accounts already exist!</div>';
+            } else {
+                // Add all users
+                existingUsers.push(demoUser);
+                additionalUsers.forEach(user => {
+                    const existingUser = existingUsers.find(u => u.email === user.email);
+                    if (!existingUser) {
+                        existingUsers.push(user);
+                    }
+                });
+                
+                // Save to localStorage
+                localStorage.setItem('timelymate_registered_users', JSON.stringify(existingUsers));
+                
+                document.getElementById('status').innerHTML = '<div class="success">✅ Demo accounts created successfully!</div>';
+            }
+            
+            // Display credentials
+            document.getElementById('results').innerHTML = `
+                <div class="credentials">
+                    <h3>🔑 Demo Account Credentials</h3>
+                    <h4>👑 Admin Account (Full Access)</h4>
+                    <p><strong>Email:</strong> demo@timelymate.com</p>
+                    <p><strong>Password:</strong> demo123</p>
+                    <p><strong>Role:</strong> Admin - Can access all features</p>
+                    
+                    <h4>👥 Team Leader Account</h4>
+                    <p><strong>Email:</strong> manager@timelymate.com</p>
+                    <p><strong>Password:</strong> demo123</p>
+                    <p><strong>Role:</strong> Team Leader - Can manage tasks and team</p>
+                    
+                    <h4>👤 Employee Account</h4>
+                    <p><strong>Email:</strong> employee@timelymate.com</p>
+                    <p><strong>Password:</strong> demo123</p>
+                    <p><strong>Role:</strong> Employee - Limited access</p>
+                    
+                    <hr>
+                    <p><strong>🌐 Login URL:</strong> <a href="http://localhost:3001/login" target="_blank">http://localhost:3001/login</a></p>
+                </div>
+            `;
+        }
+        
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear all demo data? This will remove all registered users.')) {
+                localStorage.removeItem('timelymate_registered_users');
+                localStorage.removeItem('timelymate_auth_token');
+                localStorage.removeItem('timelymate_user');
+                document.getElementById('status').innerHTML = '<div class="info">All demo data cleared!</div>';
+                document.getElementById('results').innerHTML = '';
+            }
+        }
+        
+        function viewAccounts() {
+            const users = JSON.parse(localStorage.getItem('timelymate_registered_users') || '[]');
+            if (users.length === 0) {
+                document.getElementById('results').innerHTML = '<div class="info">No accounts found. Create demo accounts first.</div>';
+            } else {
+                let html = '<div class="credentials"><h3>📋 Existing Accounts</h3>';
+                users.forEach(user => {
+                    html += `<p><strong>${user.email}</strong> (${user.role}) - ${user.organizationName}</p>`;
+                });
+                html += '</div>';
+                document.getElementById('results').innerHTML = html;
+            }
+        }
+        
+        // Auto-create accounts on page load
+        window.onload = function() {
+            createDemoAccounts();
+        };
+    </script>
+</body>
+</html>
+
+
+

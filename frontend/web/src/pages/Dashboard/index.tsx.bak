@@ -1,0 +1,902 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Box,
+  Container,
+  Grid,
+  Typography,
+  Card,
+  CardContent,
+  useTheme,
+  Stack,
+  IconButton,
+  LinearProgress,
+  Chip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Divider,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Alert,
+  Avatar,
+  Badge,
+  InputAdornment,
+  Paper,
+} from '@mui/material';
+import {
+  Timer,
+  Security,
+  VideoCall,
+  Assessment,
+  Group,
+  Settings,
+  Add as AddIcon,
+  PlayArrow,
+  Pause,
+  Stop,
+  Work,
+  AccessTime,
+  CheckCircle,
+  PendingActions,
+  Person,
+  CalendarToday,
+  Login as LoginIcon,
+  Logout as LogoutIcon,
+  Send as SendIcon,
+  Chat as ChatIcon,
+  Message as MessageIcon,
+  Notifications as NotificationsIcon,
+  Close as CloseIcon,
+  Visibility as VisibilityIcon,
+} from '@mui/icons-material';
+import { useAppSelector } from '../../store';
+import DashboardLayout from '../../components/DashboardLayout';
+import JobChat from '../../components/JobChat';
+
+// Mock data for active jobs
+const mockActiveJobs = [
+  {
+    id: '1',
+    name: 'Website Redesign',
+    client: 'Acme Corp',
+    startTime: '09:00 AM',
+    elapsedTime: '2h 30m',
+    totalTime: '8h 00m',
+    progress: 31,
+    status: 'active',
+  },
+  {
+    id: '2',
+    name: 'Mobile App Development',
+    client: 'TechStart Inc',
+    startTime: '10:15 AM',
+    elapsedTime: '1h 45m',
+    totalTime: '6h 00m',
+    progress: 29,
+    status: 'active',
+  },
+  {
+    id: '3',
+    name: 'Database Migration',
+    client: 'Global Systems',
+    startTime: '11:30 AM',
+    elapsedTime: '0h 30m',
+    totalTime: '4h 00m',
+    progress: 12,
+    status: 'active',
+  },
+];
+
+// Mock data for recent activities
+const mockRecentActivities = [
+  {
+    id: '1',
+    type: 'time_track',
+    description: 'Started tracking time for Website Redesign',
+    timestamp: '09:00 AM',
+    status: 'active',
+  },
+  {
+    id: '2',
+    type: 'meeting',
+    description: 'Team standup meeting',
+    timestamp: '10:00 AM',
+    status: 'completed',
+  },
+  {
+    id: '3',
+    type: 'task',
+    description: 'Completed UI mockups for Mobile App',
+    timestamp: '11:15 AM',
+    status: 'completed',
+  },
+];
+
+interface CalendarDayProps {
+  date: Date;
+  isToday: boolean;
+  isSelected: boolean;
+  isCurrentMonth: boolean;
+  hasActivity: boolean;
+  onClick: () => void;
+}
+
+interface Message {
+  id: string;
+  sender: string;
+  content: string;
+  timestamp: string;
+  isDirect: boolean;
+  recipient?: string;
+}
+
+interface ChatState {
+  isOpen: boolean;
+  selectedJob: typeof mockActiveJobs[0] | null;
+  messages: Message[];
+  newMessage: string;
+  selectedRecipient: string | null;
+}
+
+const ActionCard: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick?: () => void;
+}> = ({ icon, title, description, onClick }) => (
+  <Card 
+    sx={{ 
+      height: '100%', 
+      borderRadius: 4, 
+      boxShadow: 4,
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'transform 0.2s',
+      '&:hover': onClick ? {
+        transform: 'scale(1.02)',
+      } : {},
+    }}
+    onClick={onClick}
+  >
+    <CardContent>
+      <Stack spacing={2} alignItems="center" textAlign="center">
+        <Box sx={{ color: 'primary.main', transform: 'scale(1.5)' }}>{icon}</Box>
+        <Typography variant="h6" gutterBottom>
+          {title}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {description}
+        </Typography>
+      </Stack>
+    </CardContent>
+  </Card>
+);\n}
+
+const CalendarDay: React.FC<CalendarDayProps> = ({ date, isToday, isSelected, isCurrentMonth, hasActivity, onClick }) => (
+  <Box
+    onClick={onClick}
+    sx={{
+      width: '14.28%',
+      height: '80px',
+      p: 1,
+      border: '1px solid',
+      borderColor: 'divider',
+      cursor: 'pointer',
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      '&:hover': {
+        bgcolor: 'action.hover',
+      },
+      bgcolor: isSelected ? 'primary.main' : isToday ? 'primary.light' : 'transparent',
+      color: isSelected ? 'white' : isCurrentMonth ? 'text.primary' : 'text.disabled',
+    }}
+  >
+    <Typography
+      variant="body2"
+      sx={{
+        fontWeight: isToday ? 'bold' : 'normal',
+        width: '100%',
+        textAlign: 'center',
+        mb: 1,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '24px',
+      }}
+    >
+      {date.getDate()}
+    </Typography>
+    {hasActivity && (
+      <Box
+        sx={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          bgcolor: isSelected ? 'white' : 'primary.main',
+          position: 'absolute',
+          bottom: 8,
+        }}
+      />
+    )}
+  </Box>
+);\n}
+
+const Dashboard: React.FC = () => {
+  const navigate = useNavigate();\n}
+  const theme = useTheme();\n}
+  const user = useAppSelector((state) => state.auth.user);\n}
+  const [isClockedIn, setIsClockedIn] = useState(false);\n}
+  const [clockInTime, setClockInTime] = useState<string | null>(null);\n}
+  const [elapsedTime, setElapsedTime] = useState<string>('00:00:00');\n}
+  const [clockInAlert, setClockInAlert] = useState<boolean>(false);\n}
+  const [selectedJob, setSelectedJob] = useState<typeof mockActiveJobs[0] | null>(null);\n}
+  const [jobDetailsOpen, setJobDetailsOpen] = useState(false);\n}
+  const [showClockInPrompt, setShowClockInPrompt] = useState(false);\n}
+  const [clockInRecords, setClockInRecords] = useState<Array<{
+    id: string;
+    clockIn: string;
+    clockOut: string | null;
+    duration: string | null;
+  }>>([]);\n}
+  const [chatState, setChatState] = useState<ChatState>({
+    isOpen: false,
+    selectedJob: null,
+    messages: [],
+    newMessage: '',
+    selectedRecipient: null,
+  });\n}
+
+  // Mock team members for direct messaging
+  const teamMembers = [
+    { id: '1', name: 'John Doe', avatar: 'JD' },
+    { id: '2', name: 'Jane Smith', avatar: 'JS' },
+    { id: '3', name: 'Mike Johnson', avatar: 'MJ' },
+  ];
+
+  // Format time as HH:MM:SS
+  const formatTime = (date: Date): string => {
+    return date.toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });\n}
+  };
+
+  // Format date as YYYY-MM-DD
+  const formatDate = (date: Date): string => {
+    return date.toISOString().split('T')[0];
+  };
+
+  // Calculate duration between two times
+  const calculateDuration = (start: Date, end: Date): string => {
+    const diff = end.getTime() - start.getTime();\n}
+    const hours = Math.floor(diff / (1000 * 60 * 60));\n}
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));\n}
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);\n}
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Update elapsed time every second
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (isClockedIn && clockInTime) {
+      interval = setInterval(() => {
+        const startTime = new Date(clockInTime);\n}
+        const now = new Date();\n}
+        const diff = now.getTime() - startTime.getTime();\n}
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));\n}
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));\n}
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);\n}
+        
+        setElapsedTime(
+          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+        );\n}
+      }, 1000);\n}
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);\n}
+    };
+  }, [isClockedIn, clockInTime]);\n}
+
+  // Check if user needs to clock in when they first load the dashboard
+  useEffect(() => {
+    // In a real app, you would check if the user is already clocked in for today
+    // by fetching the clock-in status from an API
+    const hasClockInToday = localStorage.getItem('clockInToday') === new Date().toDateString();\n}
+    
+    if (!hasClockInToday && !isClockedIn) {
+      setShowClockInPrompt(true);\n}
+    }
+  }, [isClockedIn]);\n}
+
+  const handleClockIn = () => {
+    const now = new Date();\n}
+    const formattedTime = formatTime(now);\n}
+    const formattedDate = formatDate(now);\n}
+    
+    // Create a new clock-in record
+    const newRecord = {
+      id: Date.now().toString(),
+      clockIn: `${formattedDate} ${formattedTime}`,
+      clockOut: null,
+      duration: null,
+    };
+    
+    setClockInRecords(prev => [...prev, newRecord]);\n}
+    setIsClockedIn(true);\n}
+    setClockInTime(now.toISOString());\n}
+    setClockInAlert(true);\n}
+    setShowClockInPrompt(false);\n}
+    
+    // Save today's date to localStorage to remember user has clocked in
+    localStorage.setItem('clockInToday', new Date().toDateString());\n}
+    
+    // Hide the alert after 5 seconds
+    setTimeout(() => {
+      setClockInAlert(false);\n}
+    }, 5000);\n}
+    
+    // Here you would typically make an API call to record the clock in
+    console.log(`Clocked in at ${formattedTime}`);\n}
+  };
+
+  const handleClockOut = () => {
+    if (clockInTime) {
+      const clockOutTime = new Date();\n}
+      const clockInDate = new Date(clockInTime);\n}
+      const duration = calculateDuration(clockInDate, clockOutTime);\n}
+      
+      // Update the last clock-in record
+      setClockInRecords(prev => {
+        const updated = [...prev];
+        const lastRecord = updated[updated.length - 1];
+        if (lastRecord) {
+          lastRecord.clockOut = `${formatDate(clockOutTime)} ${formatTime(clockOutTime)}`;
+          lastRecord.duration = duration;
+        }
+        return updated;
+      });\n}
+      
+      console.log(`Clocked out after ${duration} of work`);\n}
+    }
+    
+    setIsClockedIn(false);\n}
+    setClockInTime(null);\n}
+    setElapsedTime('00:00:00');\n}
+    
+    // Remove today's clock-in record
+    localStorage.removeItem('clockInToday');\n}
+    
+    // Here you would typically make an API call to record the clock out
+  };
+
+  const handleViewAllJobs = () => {
+    navigate('/time-tracking');\n}
+  };
+
+  const handleViewAllActivities = () => {
+    navigate('/activities');\n}
+  };
+
+  const handleJobClick = (job: typeof mockActiveJobs[0]) => {
+    setSelectedJob(job);\n}
+    setJobDetailsOpen(true);\n}
+  };
+
+  const handleCloseJobDetails = () => {
+    setJobDetailsOpen(false);\n}
+    setSelectedJob(null);\n}
+  };
+
+  const handleActivityClick = (activityId: string) => {
+    navigate(`/activities/${activityId}`);\n}
+  };
+
+  const handleOpenChat = (job: typeof mockActiveJobs[0]) => {
+    setChatState(prev => ({
+      ...prev,
+      isOpen: true,
+      selectedJob: job,
+      messages: [], // In a real app, you would fetch messages here
+      newMessage: '',
+      selectedRecipient: null,
+    }));\n}
+  };
+
+  const handleCloseChat = () => {
+    setChatState(prev => ({
+      ...prev,
+      isOpen: false,
+      selectedJob: null,
+      messages: [],
+      newMessage: '',
+      selectedRecipient: null,
+    }));\n}
+  };
+
+  const handleSendMessage = () => {
+    if (!chatState.newMessage.trim()) return;
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      sender: 'You', // In a real app, this would be the current user's name
+      content: chatState.newMessage,
+      timestamp: new Date().toLocaleTimeString(),
+      isDirect: !!chatState.selectedRecipient,
+      recipient: chatState.selectedRecipient || undefined,
+    };
+
+    setChatState(prev => ({
+      ...prev,
+      messages: [...prev.messages, newMessage],
+      newMessage: '',
+      selectedRecipient: null,
+    }));\n}
+  };
+
+  const quickActions = [
+    {
+      icon: <Timer />,
+      title: 'Track Time',
+      description: 'Start tracking time for your current task',
+      onClick: () => console.log('Start time tracking'),
+    },
+    {
+      icon: <AddIcon />,
+      title: 'New Project',
+      description: 'Create a new project for your team',
+      onClick: () => console.log('Create project'),
+    },
+    {
+      icon: <Assessment />,
+      title: 'View Reports',
+      description: 'Check your team\'s performance metrics',
+      onClick: () => console.log('View reports'),
+    },
+    {
+      icon: <VideoCall />,
+      title: 'Team Meeting',
+      description: 'Start or join a video meeting',
+      onClick: () => console.log('Start meeting'),
+    },
+  ];
+
+  const managementTools = [
+    {
+      icon: <Group />,
+      title: 'Team',
+      description: 'Manage your team members and roles',
+      onClick: () => console.log('Team management'),
+    },
+    {
+      icon: <Security />,
+      title: 'Security',
+      description: 'Review and update security settings',
+      onClick: () => console.log('Security settings'),
+    },
+    {
+      icon: <Settings />,
+      title: 'Settings',
+      description: 'Configure your workspace preferences',
+      onClick: () => console.log('Settings'),
+    },
+  ];
+
+  return (
+    <DashboardLayout>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+        {/* Clock-in Prompt Dialog */}
+        <Dialog
+          open={showClockInPrompt}
+          onClose={() => setShowClockInPrompt(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ textAlign: 'center', py: 3 }}>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 'bold' }}>
+              Start Your Workday
+            </Typography>
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              <AccessTime sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
+              <Typography variant="body1" sx={{ mb: 3 }}>
+                Welcome to work! Please clock in to start tracking your workday.
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Today is {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Current time: {new Date().toLocaleTimeString()}
+              </Typography>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              size="large"
+              startIcon={<LoginIcon />}
+              onClick={handleClockIn}
+              sx={{ px: 4 }}
+            >
+              Clock In Now
+            </Button>
+            <Button 
+              variant="outlined" 
+              onClick={() => setShowClockInPrompt(false)}
+            >
+              Remind Me Later
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Header Section */}
+        <Box
+          sx={{
+            background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            color: 'white',
+            py: { xs: 4, md: 6 },
+          }}
+        >
+          <Container maxWidth="lg">
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                  Dashboard
+            </Typography>
+            <Stack direction="row" spacing={2} alignItems="center">
+              {isClockedIn && (
+                <Typography variant="h6" sx={{ fontWeight: 500 }}>
+                  <AccessTime sx={{ mr: 1, verticalAlign: 'middle' }} />
+                  {elapsedTime}
+                </Typography>
+              )}
+              <Button
+                variant="contained"
+                color={isClockedIn ? 'error' : 'success'}
+                startIcon={isClockedIn ? <LogoutIcon /> : <LoginIcon />}
+                onClick={isClockedIn ? handleClockOut : handleClockIn}
+                sx={{ 
+                  bgcolor: isClockedIn ? 'error.main' : 'success.main',
+                  '&:hover': {
+                    bgcolor: isClockedIn ? 'error.dark' : 'success.dark',
+                  },
+                }}
+              >
+                {isClockedIn ? 'Clock Out' : 'Clock In'}
+              </Button>
+            </Stack>
+          </Stack>
+            <Typography variant="h3" sx={{ mb: 2, fontWeight: 700 }}>
+              Welcome back, {user?.organizationName}!
+            </Typography>
+            <Typography variant="h6" sx={{ opacity: 0.9 }}>
+              Let's make today productive
+            </Typography>
+          </Container>
+        </Box>
+
+      {/* Clock In Alert */}
+      {clockInAlert && (
+        <Container maxWidth="lg" sx={{ mt: 2 }}>
+          <Alert 
+            severity="success" 
+            onClose={() => setClockInAlert(false)}
+            sx={{ borderRadius: 2 }}
+          >
+            Successfully clocked in at {clockInTime ? formatTime(new Date(clockInTime)) : ''}
+          </Alert>
+        </Container>
+      )}
+
+      {/* Work Summary Section */}
+      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+        <Typography variant="h4" sx={{ mb: 4 }}>
+          Work Summary
+        </Typography>
+        <Grid container spacing={4}>
+          {/* Active Jobs with Chat */}
+          <Grid item xs={12} md={8}>
+            <Card sx={{ height: '100%', borderRadius: 4, boxShadow: 4 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Active Jobs
+                </Typography>
+                <List>
+                  {mockActiveJobs.map((job) => (
+                    <React.Fragment key={job.id}>
+                      <ListItem
+                        button
+                        onClick={() => handleJobClick(job)}
+                        sx={{
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                          borderRadius: 1,
+                          mb: 1,
+                        }}
+                      >
+                        <ListItemIcon>
+                          <Work sx={{ color: 'primary.main' }} />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={job.name}
+                          secondary={`${job.client} • Started at ${job.startTime}`}
+                        />
+                        <Stack direction="row" spacing={2} alignItems="center">
+                          <Typography variant="body2" color="text.secondary">
+                            {job.elapsedTime} / {job.totalTime}
+                          </Typography>
+                          <Chip
+                            label={job.status}
+                            color={job.status === 'active' ? 'success' : 'default'}
+                            size="small"
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();\n}
+                              handleOpenChat(job);\n}
+                            }}
+                          >
+                            <Badge badgeContent={3} color="primary">
+                              <ChatIcon />
+                            </Badge>
+                          </IconButton>
+                        </Stack>
+                      </ListItem>
+                      <Box sx={{ px: 2, pb: 2 }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={job.progress}
+                          sx={{ height: 8, borderRadius: 4 }}
+                        />
+                      </Box>
+                      <Divider />
+                    </React.Fragment>
+                  ))}
+                </List>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  sx={{ mt: 2 }}
+                  onClick={handleViewAllJobs}
+                  fullWidth
+                >
+                  View All Jobs
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Recent Activities */}
+          <Grid item xs={12} md={4}>
+            <Card sx={{ height: '100%', borderRadius: 4, boxShadow: 4 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Recent Activities
+                </Typography>
+                <List>
+                  {mockRecentActivities.map((activity) => (
+                    <React.Fragment key={activity.id}>
+                      <ListItem
+                        button
+                        onClick={() => handleActivityClick(activity.id)}
+                        sx={{
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                          },
+                          borderRadius: 1,
+                          mb: 1,
+                        }}
+                      >
+                        <ListItemIcon>
+                          {activity.type === 'time_track' ? (
+                            <Timer sx={{ color: 'primary.main' }} />
+                          ) : activity.type === 'meeting' ? (
+                            <VideoCall sx={{ color: 'primary.main' }} />
+                          ) : (
+                            <CheckCircle sx={{ color: 'primary.main' }} />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={activity.description}
+                          secondary={activity.timestamp}
+                        />
+                        <Chip
+                          label={activity.status}
+                          color={activity.status === 'completed' ? 'success' : 'primary'}
+                          size="small"
+                        />
+                      </ListItem>
+                      <Divider />
+                    </React.Fragment>
+                  ))}
+                </List>
+                <Button
+                  variant="outlined"
+                  sx={{ mt: 2 }}
+                  onClick={handleViewAllActivities}
+                  fullWidth
+                >
+                  View All Activities
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </Container>
+
+        {/* Quick Actions */}
+        <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+          <Typography variant="h4" sx={{ mb: 4 }}>
+            Quick Actions
+          </Typography>
+          <Grid container spacing={4}>
+            {quickActions.map((action, index) => (
+              <Grid item xs={12} sm={6} md={3} key={index}>
+                <ActionCard {...action} />
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
+
+        {/* Management Tools */}
+        <Box sx={{ bgcolor: 'background.paper', py: { xs: 4, md: 6 } }}>
+          <Container maxWidth="lg">
+            <Typography variant="h4" sx={{ mb: 4 }}>
+              Management Tools
+            </Typography>
+            <Grid container spacing={4}>
+              {managementTools.map((tool, index) => (
+                <Grid item xs={12} sm={6} md={4} key={index}>
+                  <ActionCard {...tool} />
+                </Grid>
+              ))}
+            </Grid>
+          </Container>
+        </Box>
+
+      {/* Clock In Records */}
+      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+        <Typography variant="h4" sx={{ mb: 4 }}>
+          Clock In Records
+        </Typography>
+        <Card sx={{ borderRadius: 4, boxShadow: 4 }}>
+          <CardContent>
+            <List>
+              {clockInRecords.map((record) => (
+                <React.Fragment key={record.id}>
+                  <ListItem>
+                    <ListItemIcon>
+                      <AccessTime sx={{ color: 'primary.main' }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={`Clock In: ${record.clockIn}`}
+                      secondary={record.clockOut ? `Clock Out: ${record.clockOut} • Duration: ${record.duration}` : 'Currently Clocked In'}
+                    />
+                    <Chip
+                      label={record.clockOut ? 'Completed' : 'Active'}
+                      color={record.clockOut ? 'default' : 'success'}
+                      size="small"
+                    />
+                  </ListItem>
+                  <Divider />
+                </React.Fragment>
+              ))}
+              {clockInRecords.length === 0 && (
+                <ListItem>
+                  <ListItemText
+                    primary="No clock-in records yet"
+                    secondary="Your clock-in/out history will appear here"
+                  />
+                </ListItem>
+              )}
+            </List>
+          </CardContent>
+        </Card>
+      </Container>
+
+      {/* Job Details Dialog */}
+      <Dialog
+        open={jobDetailsOpen}
+        onClose={handleCloseJobDetails}
+        maxWidth="md"
+        fullWidth
+      >
+        {selectedJob && (
+          <>
+            <DialogTitle>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="h6">{selectedJob.name}</Typography>
+                <Chip
+                  label={selectedJob.status}
+                  color={selectedJob.status === 'active' ? 'success' : 'default'}
+                />
+              </Stack>
+            </DialogTitle>
+            <DialogContent>
+              <Stack spacing={3} sx={{ mt: 2 }}>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Client
+                  </Typography>
+                  <Typography variant="body1">{selectedJob.client}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Start Time
+                  </Typography>
+                  <Typography variant="body1">{selectedJob.startTime}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Time Tracking
+                  </Typography>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Typography variant="body1">
+                      Elapsed: {selectedJob.elapsedTime}
+                    </Typography>
+                    <Typography variant="body1">
+                      Total: {selectedJob.totalTime}
+                    </Typography>
+                  </Stack>
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    Progress
+                  </Typography>
+                  <LinearProgress
+                    variant="determinate"
+                    value={selectedJob.progress}
+                    sx={{ height: 8, borderRadius: 4 }}
+                  />
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    {selectedJob.progress}% Complete
+                  </Typography>
+        </Box>
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCloseJobDetails}>Close</Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={() => {
+                  handleCloseJobDetails();\n}
+                  navigate(`/time-tracking/job/${selectedJob.id}`);\n}
+                }}
+              >
+                View Full Details
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
+      {/* Chat Dialog */}
+      <JobChat
+        isOpen={chatState.isOpen}
+        onClose={handleCloseChat}
+        jobName={chatState.selectedJob?.name || ''}
+        teamMembers={teamMembers}
+      />
+    </Box>
+  </DashboardLayout>
+);\n}
+
+export default Dashboard;

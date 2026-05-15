@@ -1,0 +1,20 @@
+# API Configuration
+VITE_API_URL=https://your-backend-url.onrender.com
+
+# Application Settings
+VITE_APP_NAME=Timely Mate
+VITE_APP_URL=https://your-frontend-url.onrender.com
+VITE_ENABLE_ANALYTICS=true
+VITE_ENABLE_ERROR_REPORTING=true
+
+# Feature Flags
+VITE_ENABLE_NOTIFICATIONS=true
+VITE_ENABLE_PREMIUM_FEATURES=true
+VITE_ENABLE_REAL_TIME_CHAT=true
+
+# Real-time Configuration
+VITE_SOCKET_URL=https://your-backend-url.onrender.com
+
+# Production Settings
+VITE_DEBUG_MODE=false
+VITE_LOG_LEVEL=error 

@@ -1,0 +1,4 @@
+# Create a simple DMG background image placeholder
+# This is a placeholder - in production you'd want a proper PNG image
+echo "DMG Background Placeholder" > assets/dmg-background.png
+

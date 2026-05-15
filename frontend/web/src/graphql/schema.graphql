@@ -1,0 +1,146 @@
+# GraphQL Schema for Real-time Messaging with AWS AppSync
+
+type Message {
+  id: ID!
+  content: String!
+  senderId: ID!
+  senderName: String!
+  senderAvatar: String
+  receiverId: ID
+  roomId: ID!
+  roomType: RoomType!
+  timestamp: AWSDateTime!
+  messageType: MessageType!
+  fileUrl: String
+  fileName: String
+  isEdited: Boolean!
+  replyTo: ID
+  reactions: [MessageReaction!]
+  status: MessageStatus!
+}
+
+type MessageReaction {
+  emoji: String!
+  userId: ID!
+  userName: String!
+  timestamp: AWSDateTime!
+}
+
+type ChatRoom {
+  id: ID!
+  name: String!
+  type: RoomType!
+  participants: [ID!]!
+  lastMessage: Message
+  lastActivity: AWSDateTime!
+  isActive: Boolean!
+  meetingId: ID
+}
+
+type TypingIndicator {
+  userId: ID!
+  userName: String!
+  isTyping: Boolean!
+  timestamp: AWSDateTime!
+}
+
+enum RoomType {
+  MEETING
+  DIRECT
+  GROUP
+}
+
+enum MessageType {
+  TEXT
+  FILE
+  IMAGE
+  SYSTEM
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+input SendMessageInput {
+  content: String!
+  senderId: ID!
+  senderName: String!
+  senderAvatar: String
+  receiverId: ID
+  roomId: ID!
+  roomType: RoomType!
+  messageType: MessageType!
+  fileUrl: String
+  fileName: String
+  replyTo: ID
+}
+
+input CreateChatRoomInput {
+  name: String!
+  type: RoomType!
+  participants: [ID!]!
+  meetingId: ID
+}
+
+type Query {
+  getMessages(roomId: ID!, limit: Int, nextToken: String): MessageConnection
+  getChatRooms(userId: ID!): ChatRoomConnection
+  getMessage(id: ID!): Message
+  getChatRoom(id: ID!): ChatRoom
+}
+
+type Mutation {
+  sendMessage(input: SendMessageInput!): Message
+  createChatRoom(input: CreateChatRoomInput!): ChatRoom
+  updateMessageStatus(messageId: ID!, status: MessageStatus!): Message
+  addReaction(messageId: ID!, emoji: String!, userId: ID!, userName: String!): Message
+  removeReaction(messageId: ID!, emoji: String!, userId: ID!): Message
+  editMessage(messageId: ID!, content: String!): Message
+  deleteMessage(messageId: ID!): Boolean
+  joinChatRoom(roomId: ID!, userId: ID!): ChatRoom
+  leaveChatRoom(roomId: ID!, userId: ID!): ChatRoom
+  updateTypingStatus(roomId: ID!, userId: ID!, userName: String!, isTyping: Boolean!): TypingIndicator
+}
+
+type Subscription {
+  onMessageSent(roomId: ID!): Message
+    @aws_subscribe(mutations: ["sendMessage"])
+  
+  onMessageStatusUpdated(userId: ID!): Message
+    @aws_subscribe(mutations: ["updateMessageStatus"])
+  
+  onReactionAdded(roomId: ID!): Message
+    @aws_subscribe(mutations: ["addReaction", "removeReaction"])
+  
+  onMessageEdited(roomId: ID!): Message
+    @aws_subscribe(mutations: ["editMessage"])
+  
+  onMessageDeleted(roomId: ID!): ID
+    @aws_subscribe(mutations: ["deleteMessage"])
+  
+  onUserTyping(roomId: ID!): TypingIndicator
+    @aws_subscribe(mutations: ["updateTypingStatus"])
+  
+  onUserJoinedRoom(roomId: ID!): ChatRoom
+    @aws_subscribe(mutations: ["joinChatRoom"])
+  
+  onUserLeftRoom(roomId: ID!): ChatRoom
+    @aws_subscribe(mutations: ["leaveChatRoom"])
+}
+
+type MessageConnection {
+  items: [Message!]!
+  nextToken: String
+}
+
+type ChatRoomConnection {
+  items: [ChatRoom!]!
+  nextToken: String
+}
+
+# DynamoDB Table Definitions (for reference)
+# Messages Table: id (PK), roomId (GSI), timestamp (Sort Key)
+# ChatRooms Table: id (PK), participants (GSI)
+# UserRooms Table: userId (PK), roomId (SK) - for user's chat rooms lookup 

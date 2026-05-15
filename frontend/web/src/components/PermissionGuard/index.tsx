@@ -1,0 +1,93 @@
+import React from 'react';
+import { Box, Typography, Alert } from '@mui/material';
+import { Lock } from '@mui/icons-material';
+import { usePermissions } from '../../hooks/usePermissions';
+import { useAppSelector } from '../../store';
+import { UserPermissions } from '../../types/auth';
+
+interface PermissionGuardProps {
+  children: React.ReactNode;
+  permission?: keyof UserPermissions;
+  permissions?: (keyof UserPermissions)[];
+  requireAll?: boolean; // If true, requires ALL permissions. If false, requires ANY permission
+  fallback?: React.ReactNode;
+  showMessage?: boolean;
+  customMessage?: string;
+  allowedRoles?: ('admin' | 'team_leader' | 'employee')[]; // Direct role-based access
+}
+
+const PermissionGuard: React.FC<PermissionGuardProps> = ({
+  children,
+  permission,
+  permissions = [],
+  requireAll = false,
+  fallback,
+  showMessage = true,
+  customMessage,
+  allowedRoles
+}) => {
+  const { hasPermission } = usePermissions();
+  const { user } = useAppSelector((state) => state.auth);
+
+  // Check role-based access first if allowedRoles is provided
+  if (allowedRoles && user?.role) {
+    if (allowedRoles.includes(user.role)) {
+      return <>{children}</>;
+    }
+  }
+
+  // Create permissions array
+  const permissionsToCheck = permission ? [permission] : permissions;
+
+  // Check permissions
+  const hasAccess = (() => {
+    if (permissionsToCheck.length === 0) return true;
+    
+    if (requireAll) {
+      return permissionsToCheck.every(perm => hasPermission(perm));
+    } else {
+      return permissionsToCheck.some(perm => hasPermission(perm));
+    }
+  })();
+
+  if (hasAccess) {
+    return <>{children}</>;
+  }
+
+  // Show fallback or access denied message
+  if (fallback) {
+    return <>{fallback}</>;
+  }
+
+  if (!showMessage) {
+    return null;
+  }
+
+  return (
+    <Box sx={{ p: 3, textAlign: 'center' }}>
+      <Alert 
+        severity="warning" 
+        icon={<Lock />}
+        sx={{ 
+          maxWidth: 400, 
+          mx: 'auto',
+          '& .MuiAlert-message': {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 1
+          }
+        }}
+      >
+        <Typography variant="h6" component="div">
+          Access Restricted
+        </Typography>
+        <Typography variant="body2">
+          {customMessage || 'You do not have permission to access this feature. Contact your administrator for access.'}
+        </Typography>
+      </Alert>
+    </Box>
+  );
+};
+
+export default PermissionGuard; 

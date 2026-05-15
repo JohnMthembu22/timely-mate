@@ -1,0 +1,166 @@
+{
+  "name": "timely-mate",
+  "private": true,
+  "version": "1.0.1",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "homepage": "./",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "env:validate": "ts-node scripts/env-manager.ts validate",
+    "env:create": "ts-node scripts/env-manager.ts create",
+    "env:docs": "ts-node scripts/env-manager.ts docs",
+    "supabase:setup": "ts-node scripts/setup-supabase.ts",
+    "supabase:check": "ts-node scripts/setup-supabase.ts",
+    "start:dev": "npm run env:validate development && vite",
+    "start:staging": "npm run env:validate staging && vite --mode staging",
+    "build:staging": "npm run env:validate staging && vite build --mode staging",
+    "build:prod": "npm run env:validate production && vite build --mode production",
+    "clear-demo": "node scripts/clearDemoData.js",
+    "fresh-start": "npm run clear-demo && npm run dev",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-build": "npm run build && electron-builder",
+    "electron-dist": "npm run build && electron-builder --publish=never",
+    "electron-pack": "electron-builder --dir",
+    "electron-pack-all": "electron-builder --mac --win --linux"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@googlemaps/react-wrapper": "^1.2.0",
+    "@mui/icons-material": "^5.15.10",
+    "@mui/lab": "^5.0.0-alpha.165",
+    "@mui/material": "^5.15.10",
+    "@mui/x-date-pickers": "^7.28.3",
+    "@reduxjs/toolkit": "^2.1.0",
+    "@supabase/supabase-js": "^2.80.0",
+    "@tensorflow-models/body-pix": "^2.2.1",
+    "@tensorflow/tfjs": "^4.22.0",
+    "@types/date-fns": "^2.5.3",
+    "@types/node": "^20.11.17",
+    "axios": "^1.6.7",
+    "date-fns": "^2.30.0",
+    "file-saver": "^2.0.5",
+    "html2canvas": "^1.4.1",
+    "ini": "^5.0.0",
+    "jspdf": "^3.0.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-dropzone": "^14.2.3",
+    "react-hook-form": "^7.57.0",
+    "react-redux": "^9.1.0",
+    "react-router-dom": "^6.22.0",
+    "recharts": "^2.15.2",
+    "socket.io-client": "^4.8.1",
+    "uuid": "^9.0.1",
+    "webrtc-adapter": "^9.0.3",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "@types/file-saver": "^2.0.7",
+    "@types/jspdf": "^1.3.3",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@types/react-router-dom": "^5.3.3",
+    "@types/uuid": "^9.0.8",
+    "@vitejs/plugin-react": "^4.2.1",
+    "chalk": "^5.3.0",
+    "concurrently": "^9.2.1",
+    "electron": "^38.3.0",
+    "electron-builder": "^26.0.12",
+    "electron-is-dev": "^3.0.1",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^15.15.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.24.1",
+    "vercel": "^48.9.0",
+    "vite": "^5.1.0",
+    "wait-on": "^9.0.1"
+  },
+  "build": {
+    "appId": "com.timelymate.app",
+    "productName": "Timely Mate",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/",
+        "to": "assets/"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Timely Mate"
+    },
+    "dmg": {
+      "title": "Timely Mate Installer",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}
