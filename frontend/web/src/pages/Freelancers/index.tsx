@@ -76,6 +76,7 @@ import {
   Videocam as VideocamIcon,
 } from '@mui/icons-material';
 import DashboardLayout from '../../components/DashboardLayout';
+import { tabA11yProps, tabPanelA11yProps } from '../../utils/tabA11y';
 import FeatureGuard from '../../components/FeatureGuard';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useEmployees, Employee } from '../../contexts/EmployeeContext';
