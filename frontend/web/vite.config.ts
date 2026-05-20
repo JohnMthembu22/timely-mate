@@ -12,14 +12,28 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: false,
     assetsDir: 'assets',
-    // Main app chunk is large (MUI + pages); suppress Rollup size warning on Vercel/local builds
     chunkSizeWarningLimit: 6000,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom', '@mui/material'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('@mui/icons-material')) return 'mui-icons';
+            if (id.includes('@mui/material') || id.includes('@mui/system') || id.includes('@emotion')) {
+              return 'mui-core';
+            }
+            if (id.includes('recharts') || id.includes('d3-')) return 'charts';
+            if (id.includes('lucide-react')) return 'lucide';
+            if (
+              id.includes('react-dom') ||
+              id.includes('react-router') ||
+              id.includes('/react/') ||
+              id.includes('scheduler')
+            ) {
+              return 'react-vendor';
+            }
+          }
         },
       },
     },

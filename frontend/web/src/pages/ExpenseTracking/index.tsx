@@ -82,6 +82,14 @@ import { formatZAR } from '../../utils/currency';
 import { useNotifications, createNotification } from '../../contexts/NotificationContext';
 import { invoiceTemplates, quoteTemplates, getDefaultCompanyInfo, TemplateData } from '../../utils/invoiceTemplates';
 import { downloadPDF, previewHTML } from '../../utils/pdfGenerator';
+import {
+  buildAutoHeaderMapping,
+  detectCsvDelimiter,
+  getMissingRequiredMappings,
+  mapImportRows,
+  parseCsvLine,
+  stripBom,
+} from '../../utils/expenseImport';
 // No longer need mock data utilities
 
 interface Expense {
@@ -714,15 +722,19 @@ const ExpenseTracking: React.FC = () => {
         let headers: string[] = [];
 
         if (file.name.endsWith('.csv')) {
-          // Parse CSV file
-          const text = await file.text();
-          const lines = text.split('\n');
-          headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-          parsedData = lines.slice(1).filter(line => line.trim()).map(line => {
-            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-            const row: any = {};
+          const text = stripBom(await file.text());
+          const lines = text.split(/\r?\n/).filter((line) => line.trim());
+          if (lines.length < 2) {
+            setImportError('CSV file must include a header row and at least one data row.');
+            return;
+          }
+          const delimiter = detectCsvDelimiter(lines[0]);
+          headers = parseCsvLine(lines[0], delimiter);
+          parsedData = lines.slice(1).map((line) => {
+            const values = parseCsvLine(line, delimiter);
+            const row: Record<string, string> = {};
             headers.forEach((header, index) => {
-              row[header] = values[index] || '';
+              row[header] = values[index] ?? '';
             });
             return row;
           });
@@ -774,23 +786,7 @@ const ExpenseTracking: React.FC = () => {
         setCurrentBatch(0);
         setImportedCount(0);
 
-        // Auto-map headers
-        const autoMapping: Record<string, string> = {};
-        const systemFields = ['date', 'amount', 'category', 'description', 'project', 'mileage', 'liters', 'pricePerLiter', 'location'];
-        
-        headers.forEach(header => {
-          const lowerHeader = header.toLowerCase();
-          const mappedField = systemFields.find(field => 
-            lowerHeader.includes(field) || 
-            (field === 'date' && (lowerHeader.includes('date') || lowerHeader.includes('when'))) ||
-            (field === 'amount' && (lowerHeader.includes('amount') || lowerHeader.includes('cost') || lowerHeader.includes('price'))) ||
-            (field === 'description' && (lowerHeader.includes('description') || lowerHeader.includes('details') || lowerHeader.includes('notes'))) ||
-            (field === 'project' && (lowerHeader.includes('project') || lowerHeader.includes('job') || lowerHeader.includes('site')))
-          );
-          if (mappedField) {
-            autoMapping[header] = mappedField;
-          }
-        });
+        const autoMapping = buildAutoHeaderMapping(headers);
 
         setImportData({
           type: 'expenses',
@@ -823,9 +819,8 @@ const ExpenseTracking: React.FC = () => {
       if (!row.amount || isNaN(parseFloat(row.amount))) rowErrors.push('Valid amount is required');
       if (!row.description) rowErrors.push('Description is required');
       
-      // Date format validation
-      if (row.date && !/^\d{4}-\d{2}-\d{2}$/.test(row.date)) {
-        rowErrors.push('Date must be in YYYY-MM-DD format');
+      if (row.date && !/^\d{4}-\d{2}-\d{2}$/.test(String(row.date))) {
+        rowErrors.push('Date must be YYYY-MM-DD (or use a recognizable date format in your file)');
       }
       
       // Amount validation
@@ -882,23 +877,30 @@ const ExpenseTracking: React.FC = () => {
     setImportedCount(0);
     
     try {
-      // Map all data
-      const mappedData = importData.data.map(row => {
-        const mappedRow: any = {};
-        Object.entries(headerMapping).forEach(([fileHeader, systemField]) => {
-          if (row[fileHeader] !== undefined) {
-            mappedRow[systemField] = row[fileHeader];
-          }
-        });
-        return mappedRow;
-      });
+      const missingMaps = getMissingRequiredMappings(headerMapping);
+      if (missingMaps.length > 0) {
+        setImportError(
+          `Please map these required columns before importing: ${missingMaps.join(', ')}.`
+        );
+        setImporting(false);
+        return;
+      }
 
-      // Validate data
+      const mappedData = mapImportRows(importData.data, headerMapping);
+
       const validation = validateExpenseData(mappedData);
       setValidationResults(validation);
       
       if (validation.invalid.length > 0) {
-        setImportError(`Validation failed: ${validation.errors.slice(0, 3).join('; ')}${validation.errors.length > 3 ? '...' : ''}`);
+        const unmappedHint =
+          missingMaps.length === 0 && validation.invalid.length === importData.data.length
+            ? ' Check that your column headers match Date, Amount, and Description (or map them in Field Mapping).'
+            : '';
+        setImportError(
+          `Validation failed: ${validation.errors.slice(0, 3).join('; ')}${
+            validation.errors.length > 3 ? '...' : ''
+          }${unmappedHint}`
+        );
         setImporting(false);
         return;
       }
@@ -1293,20 +1295,23 @@ For best results, use the CSV template format.`;
         let headers: string[] = [];
 
         if (file.name.endsWith('.csv')) {
-          // Parse CSV file
-          const text = await file.text();
-          const lines = text.split('\n');
-          headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-          parsedData = lines.slice(1).filter(line => line.trim()).map(line => {
-            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-            const row: any = {};
+          const text = stripBom(await file.text());
+          const lines = text.split(/\r?\n/).filter((line) => line.trim());
+          if (lines.length < 2) {
+            setCashbookImportError('CSV file must include a header row and at least one data row.');
+            return;
+          }
+          const delimiter = detectCsvDelimiter(lines[0]);
+          headers = parseCsvLine(lines[0], delimiter);
+          parsedData = lines.slice(1).map((line) => {
+            const values = parseCsvLine(line, delimiter);
+            const row: Record<string, string> = {};
             headers.forEach((header, index) => {
-              row[header] = values[index] || '';
+              row[header] = values[index] ?? '';
             });
             return row;
           });
         } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-          // Mock Excel parsing - in real implementation, use xlsx library
           const mockData = [];
           for (let i = 0; i < 100; i++) {
             mockData.push({
@@ -1337,12 +1342,15 @@ For best results, use the CSV template format.`;
           parsedData = mockData;
         }
 
+        const cashbookAutoMapping = buildAutoHeaderMapping(headers);
+
         setCashbookImportData({
-          type: 'expenses', // Reusing the same type for simplicity
+          type: 'expenses',
           data: parsedData,
           headers: headers,
-          mappedHeaders: {},
+          mappedHeaders: cashbookAutoMapping,
         });
+        setCashbookHeaderMapping(cashbookAutoMapping);
 
         setCashbookImportStep(1);
       } catch (error) {
@@ -1354,17 +1362,7 @@ For best results, use the CSV template format.`;
   const handleCashbookPreviewData = () => {
     if (!cashbookImportData) return;
 
-    // Map ALL the data using header mappings (not just first 5 for validation)
-    const allMappedData = cashbookImportData.data.map(row => {
-      const mappedRow: any = {};
-      Object.keys(cashbookHeaderMapping).forEach(fileHeader => {
-        const systemField = cashbookHeaderMapping[fileHeader];
-        if (systemField && row[fileHeader]) {
-          mappedRow[systemField] = row[fileHeader];
-        }
-      });
-      return mappedRow;
-    });
+    const allMappedData = mapImportRows(cashbookImportData.data, cashbookHeaderMapping);
 
     // Get first 5 rows for preview display
     const previewData = allMappedData.slice(0, 5);
@@ -3212,7 +3210,10 @@ For best results, use the CSV template format.`;
                             <Button
                               variant="contained"
                               onClick={handleImportExpenses}
-                              disabled={importing}
+                              disabled={
+                                importing ||
+                                getMissingRequiredMappings(headerMapping).length > 0
+                              }
                             >
                               Start Import ({totalRecords.toLocaleString()} records)
                             </Button>
@@ -4557,7 +4558,15 @@ For best results, use the CSV template format.`;
                             <Button
                               variant="contained"
                               onClick={handleCashbookPreviewData}
-                              disabled={cashbookImporting || !cashbookHeaderMapping.date || !cashbookHeaderMapping.description || !cashbookHeaderMapping.amount || !cashbookHeaderMapping.type}
+                              disabled={
+                                cashbookImporting ||
+                                getMissingRequiredMappings(cashbookHeaderMapping, [
+                                  'date',
+                                  'amount',
+                                  'description',
+                                  'type',
+                                ]).length > 0
+                              }
                             >
                               Preview Data
                             </Button>

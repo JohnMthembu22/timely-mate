@@ -44,6 +44,32 @@ export const createAppTheme = (mode: 'light' | 'dark'): Theme => {
       },
     },
     components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          html: {
+            overflowX: 'hidden',
+          },
+          body: {
+            overflowX: 'hidden',
+          },
+          '#root': {
+            overflowX: 'hidden',
+            maxWidth: '100vw',
+          },
+        },
+      },
+      MuiContainer: {
+        styleOverrides: {
+          root: {
+            paddingLeft: 16,
+            paddingRight: 16,
+            '@media (min-width:600px)': {
+              paddingLeft: 24,
+              paddingRight: 24,
+            },
+          },
+        },
+      },
       MuiButton: {
         styleOverrides: {
           root: {
@@ -57,6 +83,14 @@ export const createAppTheme = (mode: 'light' | 'dark'): Theme => {
           root: {
             borderRadius: 12,
             boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+          },
+        },
+      },
+      MuiTableContainer: {
+        styleOverrides: {
+          root: {
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
           },
         },
       },

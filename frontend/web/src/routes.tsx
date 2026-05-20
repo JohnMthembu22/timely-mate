@@ -1,35 +1,36 @@
-import React from 'react';
+import React, { lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { CssBaseline } from '@mui/material';
-import Landing from './pages/Landing';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard';
-import TimeTracking from './pages/TimeTracking';
-import Projects from './pages/Projects';
-import Calendar from './pages/Calendar';
-import Team from './pages/Team';
-import OffsiteWork from './pages/OffsiteWork';
-import ExpenseTracking from './pages/ExpenseTracking';
-import IndustryModules from './pages/IndustryModules';
-import LearningPortal from './pages/LearningPortal';
-import Settings from './pages/Settings';
-import Profile from './pages/Profile';
-import HR from './pages/HR';
-import Reports from './pages/Reports';
-import Pricing from './pages/Pricing';
-import SessionPersistenceTest from './pages/SessionPersistenceTest';
-
-import Messages from './pages/Messages';
+import LazyRoute from './components/LazyRoute';
 import ProtectedRoute from './components/ProtectedRoute';
 import ClockInGuard from './components/ClockInGuard';
 import RoleBasedRedirect from './components/RoleBasedRedirect';
 import PermissionGuard from './components/PermissionGuard';
 import { useAppSelector } from './store';
-import Meetings from './pages/Meetings';
-import Freelancers from './pages/Freelancers';
 
-import Procurement from './pages/Procurement';
+const Landing = lazy(() => import('./pages/Landing'));
+const Login = lazy(() => import('./pages/Login'));
+const Signup = lazy(() => import('./pages/Signup'));
+const Pricing = lazy(() => import('./pages/Pricing'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const TimeTracking = lazy(() => import('./pages/TimeTracking'));
+const Projects = lazy(() => import('./pages/Projects'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const Team = lazy(() => import('./pages/Team'));
+const OffsiteWork = lazy(() => import('./pages/OffsiteWork'));
+const ExpenseTracking = lazy(() => import('./pages/ExpenseTracking'));
+const IndustryModules = lazy(() => import('./pages/IndustryModules'));
+const LearningPortal = lazy(() => import('./pages/LearningPortal'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Profile = lazy(() => import('./pages/Profile'));
+const HR = lazy(() => import('./pages/HR'));
+const Reports = lazy(() => import('./pages/Reports'));
+const SessionPersistenceTest = lazy(() => import('./pages/SessionPersistenceTest'));
+const Messages = lazy(() => import('./pages/Messages'));
+const Meetings = lazy(() => import('./pages/Meetings'));
+const Activities = lazy(() => import('./pages/Activities'));
+const Freelancers = lazy(() => import('./pages/Freelancers'));
+const Procurement = lazy(() => import('./pages/Procurement'));
 
 const AppRoutes = () => {
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
@@ -40,18 +41,45 @@ const AppRoutes = () => {
       <Routes>
         <Route
           path="/"
-          element={<Landing />}
+          element={
+            <LazyRoute>
+              <Landing />
+            </LazyRoute>
+          }
         />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/pricing" element={<Pricing />} />
+        <Route
+          path="/login"
+          element={
+            <LazyRoute>
+              <Login />
+            </LazyRoute>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <LazyRoute>
+              <Signup />
+            </LazyRoute>
+          }
+        />
+        <Route
+          path="/pricing"
+          element={
+            <LazyRoute>
+              <Pricing />
+            </LazyRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
               <ClockInGuard>
                 <RoleBasedRedirect>
-                  <Dashboard />
+                  <LazyRoute>
+                    <Dashboard />
+                  </LazyRoute>
                 </RoleBasedRedirect>
               </ClockInGuard>
             </ProtectedRoute>
@@ -62,7 +90,9 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <TimeTracking />
+                <LazyRoute>
+                  <TimeTracking />
+                </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>
           }
@@ -73,7 +103,9 @@ const AppRoutes = () => {
             <ProtectedRoute>
               <ClockInGuard>
                 <PermissionGuard permission="canAccessProjects" customMessage="Project access is restricted based on your role and department.">
-                  <Projects />
+                  <LazyRoute>
+                    <Projects />
+                  </LazyRoute>
                 </PermissionGuard>
               </ClockInGuard>
             </ProtectedRoute>
@@ -84,7 +116,9 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <Calendar />
+                <LazyRoute>
+                  <Calendar />
+                </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>
           }
@@ -95,7 +129,9 @@ const AppRoutes = () => {
             <ProtectedRoute>
               <ClockInGuard>
                 <PermissionGuard permission="canManageTeam" customMessage="Team management access is restricted to team leaders and administrators only.">
-                  <Team />
+                  <LazyRoute>
+                    <Team />
+                  </LazyRoute>
                 </PermissionGuard>
               </ClockInGuard>
             </ProtectedRoute>
@@ -106,7 +142,9 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <OffsiteWork />
+                <LazyRoute>
+                  <OffsiteWork />
+                </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>
           }
@@ -117,7 +155,9 @@ const AppRoutes = () => {
             <ProtectedRoute>
               <ClockInGuard>
                 <PermissionGuard permission="canAccessExpenses" customMessage="Expense tracking access is restricted to Finance department and administrators only.">
-                  <ExpenseTracking />
+                  <LazyRoute>
+                    <ExpenseTracking />
+                  </LazyRoute>
                 </PermissionGuard>
               </ClockInGuard>
             </ProtectedRoute>
@@ -128,7 +168,9 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <IndustryModules />
+                <LazyRoute>
+                  <IndustryModules />
+                </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>
           }
@@ -138,7 +180,9 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <LearningPortal />
+                <LazyRoute>
+                  <LearningPortal />
+                </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>
           }
@@ -149,7 +193,9 @@ const AppRoutes = () => {
             <ProtectedRoute>
               <ClockInGuard>
                 <PermissionGuard permission="canAccessHR" customMessage="HR access is restricted to HR department and administrators only.">
-                  <HR />
+                  <LazyRoute>
+                    <HR />
+                  </LazyRoute>
                 </PermissionGuard>
               </ClockInGuard>
             </ProtectedRoute>
@@ -160,12 +206,14 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <PermissionGuard 
-                  permission="canAccessReports" 
+                <PermissionGuard
+                  permission="canAccessReports"
                   allowedRoles={['admin', 'team_leader']}
                   customMessage="Reports access is restricted to administrators, managers, and team leaders only."
                 >
-                  <Reports />
+                  <LazyRoute>
+                    <Reports />
+                  </LazyRoute>
                 </PermissionGuard>
               </ClockInGuard>
             </ProtectedRoute>
@@ -177,7 +225,9 @@ const AppRoutes = () => {
             <ProtectedRoute>
               <ClockInGuard>
                 <PermissionGuard permission="canModifySettings" customMessage="Settings access is restricted to administrators and IT department only.">
-                  <Settings />
+                  <LazyRoute>
+                    <Settings />
+                  </LazyRoute>
                 </PermissionGuard>
               </ClockInGuard>
             </ProtectedRoute>
@@ -188,7 +238,9 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <Profile />
+                <LazyRoute>
+                  <Profile />
+                </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>
           }
@@ -198,7 +250,33 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <Meetings />
+                <LazyRoute>
+                  <Meetings />
+                </LazyRoute>
+              </ClockInGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/activities"
+          element={
+            <ProtectedRoute>
+              <ClockInGuard>
+                <LazyRoute>
+                  <Activities />
+                </LazyRoute>
+              </ClockInGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/activities/:id"
+          element={
+            <ProtectedRoute>
+              <ClockInGuard>
+                <LazyRoute>
+                  <Activities />
+                </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>
           }
@@ -209,7 +287,9 @@ const AppRoutes = () => {
             <ProtectedRoute>
               <ClockInGuard>
                 <PermissionGuard permission="canManageTeam" customMessage="Freelancer management access is restricted to team leaders and administrators only.">
-                  <Freelancers />
+                  <LazyRoute>
+                    <Freelancers />
+                  </LazyRoute>
                 </PermissionGuard>
               </ClockInGuard>
             </ProtectedRoute>
@@ -221,7 +301,9 @@ const AppRoutes = () => {
             <ProtectedRoute>
               <ClockInGuard>
                 <PermissionGuard permission="canAccessProcurement" customMessage="Procurement access is restricted to Operations department and administrators only.">
-                  <Procurement />
+                  <LazyRoute>
+                    <Procurement />
+                  </LazyRoute>
                 </PermissionGuard>
               </ClockInGuard>
             </ProtectedRoute>
@@ -232,7 +314,9 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <ClockInGuard>
-                <Messages />
+                <LazyRoute>
+                  <Messages />
+                </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>
           }
@@ -241,7 +325,9 @@ const AppRoutes = () => {
           path="/session-test"
           element={
             <ProtectedRoute>
-              <SessionPersistenceTest />
+              <LazyRoute>
+                <SessionPersistenceTest />
+              </LazyRoute>
             </ProtectedRoute>
           }
         />

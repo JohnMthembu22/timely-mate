@@ -10,6 +10,7 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import { mobileMenuButtonSx } from '../../theme/layout';
 
 interface NavigationProps {
   mobileOpen: boolean;

@@ -318,9 +318,14 @@ const Messages: React.FC = () => {
       );
 
       if (message) {
-        // Message will be added via real-time subscription
-        // Optimistically add it for immediate feedback
-        setActiveMessages(prev => [...prev, message]);
+        setActiveMessages((prev) => [...prev, message]);
+        const convs = await messagingService.getConversations();
+        setConversations(convs);
+        setActiveConversation((current) => {
+          if (!current) return current;
+          const refreshed = convs.find((c) => c.participant_id === current.participant_id);
+          return refreshed || current;
+        });
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -515,6 +520,7 @@ const Messages: React.FC = () => {
               <Box sx={{ display: 'flex', gap: 1, mt: '35px' }}>
                 {activeMainTab === MainTab.MESSAGES && (
               <Button
+                data-tour="new-message"
                 variant="contained"
                 startIcon={<PersonAdd />}
                 onClick={() => setUserSearchOpen(true)}

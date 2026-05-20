@@ -12,7 +12,6 @@ import {
   IconButton,
   useTheme,
   useMediaQuery,
-  Toolbar,
   Avatar,
   Tooltip,
 } from '@mui/material';
@@ -24,8 +23,16 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { UserPermissions } from '../../types/auth';
 import { dashboardNavigationGroups, type DashboardNavItem } from './dashboardNavigation';
 import { TESTING_MODE_UNLOCK_ALL } from '../../config/testingMode';
+import { MOBILE_APP_BAR_HEIGHT, mobileMenuButtonSx } from '../../theme/layout';
 
 const DRAWER_WIDTH = 256;
+
+const NAV_TOUR_ATTR: Record<string, string> = {
+  '/dashboard': 'nav-dashboard',
+  '/hr': 'nav-hr',
+  '/projects': 'nav-projects',
+  '/messages': 'nav-messages',
+};
 
 const SLATE = {
   bg: '#0f172a',
@@ -247,6 +254,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                   return (
                     <ListItem key={item.path} disablePadding sx={{ mb: 0.25 }}>
                       <ListItemButton
+                        data-tour={NAV_TOUR_ATTR[item.path]}
                         onClick={() => {
                           navigate(item.path);
                           if (isMobile) {
@@ -388,7 +396,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', minHeight: '100dvh', width: '100%', maxWidth: '100vw', overflowX: 'hidden' }}>
       <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
         <Drawer
           variant="temporary"
@@ -415,46 +423,94 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         </Drawer>
       </Box>
 
-      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        <Box
-          component="header"
-          sx={{
-            width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
-            ml: { md: `${DRAWER_WIDTH}px` },
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 1100,
-            backdropFilter: 'none',
-            color: 'text.primary',
-            borderBottom: 0,
-            borderColor: 'transparent',
-            bgcolor: 'transparent !important',
-            boxShadow: 'none',
-            background: 'none',
-          }}
-        >
-          <Toolbar disableGutters sx={{ minHeight: 0, py: 0, px: 0 }}>
+      <Box
+        sx={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          width: { xs: '100%', md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          ml: { md: `${DRAWER_WIDTH}px` },
+          minWidth: 0,
+        }}
+      >
+        {/* Mobile top bar — blue hamburger on light background */}
+        {isMobile && (
+          <Box
+            component="header"
+            sx={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: (t) => t.zIndex.appBar + 1,
+              height: MOBILE_APP_BAR_HEIGHT,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1,
+              bgcolor: '#ffffff',
+              borderBottom: '1px solid #e2e8f0',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.08)',
+            }}
+          >
             <IconButton
-              color="inherit"
-              aria-label="open drawer"
-              edge="start"
+              aria-label="Open navigation menu"
               onClick={handleDrawerToggle}
-              sx={{ mr: 2, display: { md: 'none' } }}
+              edge="start"
+              sx={mobileMenuButtonSx}
             >
               <MenuIcon />
             </IconButton>
-            <Box sx={{ flexGrow: 1 }} />
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }} />
-          </Toolbar>
-        </Box>
+            <Box
+              sx={{
+                width: 28,
+                height: 28,
+                borderRadius: 1,
+                flexShrink: 0,
+                background: 'linear-gradient(to top right, #3b82f6, #34d399)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                color: '#fff',
+                fontSize: '0.75rem',
+              }}
+            >
+              T
+            </Box>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 700,
+                color: '#0f172a',
+                letterSpacing: '-0.02em',
+                flex: 1,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              TimelyMate
+            </Typography>
+          </Box>
+        )}
 
-        <Box component="main" sx={{ flexGrow: 1 }}>
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            width: '100%',
+            maxWidth: '100%',
+            minWidth: 0,
+            overflowX: 'hidden',
+            pt: { xs: `${MOBILE_APP_BAR_HEIGHT}px`, md: 0 },
+          }}
+        >
           {children}
         </Box>
-        <Box sx={{ position: 'relative', zIndex: 1500 }}>
-          <FloatingStatusBar />
+        <Box sx={{ position: 'relative', zIndex: (t) => t.zIndex.appBar + 2 }}>
+          <FloatingStatusBar mobileAppBarOffset={isMobile ? MOBILE_APP_BAR_HEIGHT : 0} />
         </Box>
       </Box>
     </Box>

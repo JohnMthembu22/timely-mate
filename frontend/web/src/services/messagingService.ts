@@ -243,7 +243,22 @@ class MessagingService {
    * Mark messages as read
    */
   async markAsRead(recipientId: string): Promise<void> {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      const userId = this.getCurrentUserId();
+      if (!userId) return;
+      const messages = this.getLocalMessages(recipientId).map((m) =>
+        m.recipient_id === userId && !m.read_at
+          ? { ...m, read_at: new Date().toISOString() }
+          : m
+      );
+      const key = this.conversationStorageKey(userId, recipientId);
+      localStorage.setItem(key, JSON.stringify(messages));
+      const convs = this.getLocalConversations().map((c) =>
+        c.participant_id === recipientId ? { ...c, unread_count: 0 } : c
+      );
+      localStorage.setItem('timelymate_conversations', JSON.stringify(convs));
+      return;
+    }
 
     const userId = this.getCurrentUserId();
     if (!userId) return;
@@ -389,6 +404,45 @@ class MessagingService {
   /**
    * Local storage fallback methods
    */
+  private conversationStorageKey(userId: string, recipientId: string): string {
+    return `timelymate_messages_${[userId, recipientId].sort().join('__')}`;
+  }
+
+  private getLocalUserDisplayName(): string {
+    try {
+      const userStr = localStorage.getItem('timelymate_user');
+      if (!userStr) return 'You';
+      const user = JSON.parse(userStr);
+      return user.name || user.email?.split('@')[0] || 'You';
+    } catch {
+      return 'You';
+    }
+  }
+
+  private lookupParticipantMeta(participantId: string): {
+    name: string;
+    email: string;
+    avatar?: string;
+  } {
+    try {
+      const employees = JSON.parse(localStorage.getItem('timelymate_employees') || '[]');
+      const match = employees.find((e: { id: string }) => e.id === participantId);
+      if (match) {
+        return {
+          name: match.name,
+          email: match.email || `${match.name.toLowerCase().replace(/\s+/g, '.')}@timelymate.app`,
+          avatar: match.avatar,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+    return {
+      name: 'Team member',
+      email: `${participantId}@timelymate.app`,
+    };
+  }
+
   private getLocalConversations(): ChatConversation[] {
     try {
       const stored = localStorage.getItem('timelymate_conversations');
@@ -399,8 +453,11 @@ class MessagingService {
   }
 
   private getLocalMessages(recipientId: string): ChatMessage[] {
+    const userId = this.getCurrentUserId();
+    if (!userId) return [];
     try {
-      const stored = localStorage.getItem(`timelymate_messages_${recipientId}`);
+      const key = this.conversationStorageKey(userId, recipientId);
+      const stored = localStorage.getItem(key);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -409,6 +466,7 @@ class MessagingService {
 
   private sendLocalMessage(recipientId: string, content: string): ChatMessage {
     const userId = this.getCurrentUserId() || 'local-user';
+    const senderName = this.getLocalUserDisplayName();
     const message: ChatMessage = {
       id: `local-${Date.now()}`,
       sender_id: userId,
@@ -416,18 +474,44 @@ class MessagingService {
       content: content.trim(),
       created_at: new Date().toISOString(),
       read_at: null,
+      sender_name: senderName,
     };
 
     this.storeLocalMessage(message);
     return message;
   }
 
+  private upsertLocalConversation(partnerId: string, message: ChatMessage): void {
+    const meta = this.lookupParticipantMeta(partnerId);
+    const convs = this.getLocalConversations();
+    const existing = convs.find((c) => c.participant_id === partnerId);
+    const updated: ChatConversation = {
+      id: existing?.id || `conv-${partnerId}`,
+      participant_id: partnerId,
+      participant_name: meta.name,
+      participant_email: meta.email,
+      participant_avatar: meta.avatar,
+      last_message: message,
+      unread_count: existing?.unread_count ?? 0,
+      last_activity: message.created_at,
+    };
+
+    const next = [updated, ...convs.filter((c) => c.participant_id !== partnerId)];
+    localStorage.setItem('timelymate_conversations', JSON.stringify(next));
+  }
+
   private storeLocalMessage(message: ChatMessage): void {
+    const userId = this.getCurrentUserId();
+    if (!userId || !message.recipient_id) return;
+
     try {
-      const key = `timelymate_messages_${message.recipient_id || message.sender_id}`;
-      const existing = this.getLocalMessages(message.recipient_id || message.sender_id || '');
+      const partnerId =
+        message.sender_id === userId ? message.recipient_id : message.sender_id;
+      const key = this.conversationStorageKey(userId, partnerId);
+      const existing = this.getLocalMessages(partnerId);
       existing.push(message);
       localStorage.setItem(key, JSON.stringify(existing));
+      this.upsertLocalConversation(partnerId, message);
     } catch (error) {
       console.error('Error storing local message:', error);
     }

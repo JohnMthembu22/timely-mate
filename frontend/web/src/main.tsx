@@ -5,10 +5,11 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { store } from './store'
-// Import the clear localStorage utility
-import './utils/clearLocalStorage.js'
-// Import development welcome message
-import './utils/devWelcome'
+
+if (import.meta.env.DEV) {
+  void import('./utils/clearLocalStorage.js')
+  void import('./utils/devWelcome')
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

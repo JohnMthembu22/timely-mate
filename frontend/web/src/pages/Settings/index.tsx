@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -47,6 +48,8 @@ import { usePermissions } from '../../hooks/usePermissions';
 import AdminUserManager from '../../components/AdminUserManager';
 
 const Settings: React.FC = () => {
+  const location = useLocation();
+  const securitySectionRef = useRef<HTMLDivElement>(null);
   const { currency, setCurrency, isLoading, error, detectedCountry } = useCurrency();
   const { mode, setMode } = useTheme();
   const { canManageUsers } = usePermissions();
@@ -69,6 +72,14 @@ const Settings: React.FC = () => {
     // Here you would typically make an API call to save the settings
     console.log('Saving settings:', settings);
   };
+
+  useEffect(() => {
+    const state = location.state as { focusSection?: string } | null;
+    if (state?.focusSection === 'security') {
+      securitySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const handleThemeChange = (newTheme: string) => {
     if (newTheme === 'system') {
@@ -306,7 +317,7 @@ const Settings: React.FC = () => {
             )}
 
             {/* Security Settings Section */}
-            <Paper sx={{ p: 3, mb: 3, borderRadius: 4, boxShadow: 4 }}>
+            <Paper ref={securitySectionRef} sx={{ p: 3, mb: 3, borderRadius: 4, boxShadow: 4 }}>
               <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Shield /> Security Settings
               </Typography>

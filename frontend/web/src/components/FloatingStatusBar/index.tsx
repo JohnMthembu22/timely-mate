@@ -51,9 +51,11 @@ import CircleIcon from '@mui/icons-material/Circle';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications, NotificationItem } from '../../contexts/NotificationContext';
+import TourGuideButton from '../TourGuideButton';
 
 const Glass = styled(Box)(({ theme }) => ({
   background: 'transparent !important',
@@ -115,8 +117,16 @@ function formatCountdown(ms: number): string {
   return `${h}:${m}:${s}`;
 }
 
-const FloatingStatusBar: React.FC = () => {
+interface FloatingStatusBarProps {
+  /** Offset from top when dashboard mobile app bar is visible */
+  mobileAppBarOffset?: number;
+}
+
+const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({ mobileAppBarOffset = 0 }) => {
+  const theme = useTheme();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isCompact = useMediaQuery(theme.breakpoints.down('sm'));
   const { unreadCount, notifications, markAsRead, markAllAsRead } = useNotifications();
   const [now, setNow] = useState(() => Date.now());
   const [isClockedIn, setIsClockedIn] = useState(() => {
@@ -125,6 +135,7 @@ const FloatingStatusBar: React.FC = () => {
   });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsAnchor, setNotificationsAnchor] = useState<null | HTMLElement>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
   const [userStatus, setUserStatus] = useState<string>(() => {
@@ -226,11 +237,10 @@ const FloatingStatusBar: React.FC = () => {
       // Set the selected notification and open detail view
       setSelectedNotification(notification);
       setNotificationDetailOpen(true);
-      setNotificationsOpen(false);
+      handleNotificationsClose();
     } catch (error) {
       console.error('Error handling notification click:', error);
-      // Close notifications panel on error to prevent UI lockup
-      setNotificationsOpen(false);
+      handleNotificationsClose();
     }
   };
 
@@ -297,8 +307,14 @@ const FloatingStatusBar: React.FC = () => {
     }
   };
 
-  const handleNotificationsToggle = () => {
-    setNotificationsOpen(!notificationsOpen);
+  const handleNotificationsClick = (event: React.MouseEvent<HTMLElement>) => {
+    setNotificationsAnchor(event.currentTarget);
+    setNotificationsOpen((open) => !open);
+  };
+
+  const handleNotificationsClose = () => {
+    setNotificationsOpen(false);
+    setNotificationsAnchor(null);
   };
 
   const handleUserMenuClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -321,7 +337,7 @@ const FloatingStatusBar: React.FC = () => {
         navigate('/settings');
         break;
       case 'help':
-        navigate('/settings');
+        window.dispatchEvent(new CustomEvent('tm:startTour'));
         break;
       case 'logout':
         // Handle logout logic here
@@ -378,81 +394,102 @@ const FloatingStatusBar: React.FC = () => {
     <Box
       sx={{
         position: 'fixed',
-        top: { xs: 12, md: 16 },
-        right: { xs: 12, md: 20 },
-        zIndex: (theme) => theme.zIndex.appBar + 5,
+        top: isMobile ? mobileAppBarOffset + 8 : 16,
+        right: { xs: 8, sm: 12, md: 20 },
+        left: isMobile ? 'auto' : 'auto',
+        maxWidth: isMobile ? 'calc(100vw - 72px)' : 'none',
+        zIndex: (t) => t.zIndex.appBar + 5,
         display: 'flex',
         alignItems: 'center',
-        gap: '20px',
+        justifyContent: 'flex-end',
+        flexWrap: 'nowrap',
+        gap: { xs: 0.5, sm: 1, md: 2 },
       }}
     >
-      <Hollow 
-        onClick={() => navigate('/time-tracking')} 
-        sx={{ 
+      <Hollow
+        onClick={() => navigate('/time-tracking')}
+        sx={{
           cursor: 'pointer',
+          display: { xs: 'none', sm: 'flex' },
           border: isLowTime ? '1px solid #ff5a52' : '1px solid rgba(255,255,255,0.9)',
-          background: isLowTime ? 'rgba(255,90,82,0.2)' : 'rgba(0,0,0,0.35)'
+          background: isLowTime ? 'rgba(255,90,82,0.2)' : 'rgba(0,0,0,0.35)',
+          py: { xs: 0.75, md: 1 },
+          px: { xs: 1, md: 1.5 },
         }}
       >
         <WatchLaterOutlined sx={{ color: isLowTime ? '#ff5a52' : 'white', opacity: 0.9, fontSize: 18 }} />
-        <Typography 
-          variant="subtitle1" 
-          sx={{ 
-            color: isLowTime ? '#ff5a52' : 'white', 
-            letterSpacing: 2, 
-            fontWeight: 700 
+        <Typography
+          variant="subtitle1"
+          sx={{
+            color: isLowTime ? '#ff5a52' : 'white',
+            letterSpacing: { xs: 1, md: 2 },
+            fontWeight: 700,
+            fontSize: { xs: '0.75rem', md: '1rem' },
           }}
         >
           {countdown}
         </Typography>
       </Hollow>
 
+      <TourGuideButton variant="button" size="small" />
+
       <Button
+        data-tour="status-clock-in"
         variant="contained"
-        endIcon={<ArrowForward />}
+        endIcon={isCompact ? undefined : <ArrowForward />}
         sx={{
-          px: 2.5,
-          py: 1.25,
+          px: { xs: 1.25, sm: 2, md: 2.5 },
+          py: { xs: 0.75, md: 1.25 },
+          minWidth: { xs: 'auto', sm: 100 },
           fontWeight: 800,
           letterSpacing: 0.5,
-          borderRadius: 10,
+          borderRadius: { xs: 2, md: 10 },
           textTransform: 'uppercase',
-          fontSize: 13,
+          fontSize: { xs: 10, sm: 11, md: 13 },
           border: '1px solid rgba(255,255,255,0.9)',
           boxShadow: 'none',
           background: isClockedIn ? 'linear-gradient(135deg, #ff5a52, #e53935)' : 'rgba(255,255,255,1)',
-          color: isClockedIn ? '#ffffff' : 'primary.main'
+          color: isClockedIn ? '#ffffff' : 'primary.main',
+          flexShrink: 0,
         }}
         onClick={handleClockButton}
       >
-        {isClockedIn ? 'Clock Out' : 'Clock In'}
+        {isCompact ? (isClockedIn ? 'Out' : 'In') : isClockedIn ? 'Clock Out' : 'Clock In'}
       </Button>
 
       <Badge color="error" badgeContent={unreadCount} overlap="circular">
-        <RingButton 
-          size="large" 
-          onClick={handleNotificationsToggle} 
+        <RingButton
+          size={isCompact ? 'medium' : 'large'}
+          onClick={handleNotificationsClick}
           aria-label="Open notifications"
+          aria-expanded={notificationsOpen}
+          aria-haspopup="true"
           sx={{
+            width: { xs: 40, md: 46 },
+            height: { xs: 40, md: 46 },
             border: notificationsOpen ? '1px solid #ff5a52' : '1px solid rgba(255,255,255,0.9)',
-            background: notificationsOpen ? 'rgba(255,90,82,0.2)' : 'rgba(0,0,0,0.35)'
+            background: notificationsOpen ? 'rgba(255,90,82,0.2)' : 'rgba(0,0,0,0.35)',
+            flexShrink: 0,
           }}
         >
-          <NotificationsNoneOutlined />
+          <NotificationsNoneOutlined sx={{ fontSize: { xs: 20, md: 24 } }} />
         </RingButton>
       </Badge>
 
-      <ProfileCircle 
-        onClick={handleUserMenuClick} 
-        sx={{ 
+      <ProfileCircle
+        onClick={handleUserMenuClick}
+        sx={{
           cursor: 'pointer',
+          width: { xs: 40, md: 50 },
+          height: { xs: 40, md: 50 },
+          flexShrink: 0,
           border: userMenuOpen ? '1px solid #ff5a52' : '1px solid rgba(255,255,255,0.9)',
           background: userMenuOpen ? '#ff5a52' : currentStatus.color,
-          boxShadow: userMenuOpen ? '0 8px 20px rgba(255,90,82,0.4)' : `0 6px 16px ${currentStatus.color}40`
-        }} 
+          boxShadow: userMenuOpen ? '0 8px 20px rgba(255,90,82,0.4)' : `0 6px 16px ${currentStatus.color}40`,
+        }}
         aria-label="Open user menu"
       >
-        <Person />
+        <Person sx={{ fontSize: { xs: 20, md: 24 } }} />
       </ProfileCircle>
     </Box>
     <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
@@ -468,52 +505,51 @@ const FloatingStatusBar: React.FC = () => {
       </DialogActions>
     </Dialog>
 
-    {/* Notifications Panel */}
-    <Dialog 
-      open={notificationsOpen} 
-      onClose={() => setNotificationsOpen(false)} 
-      maxWidth="sm" 
-      fullWidth
+    {/* Notifications dropdown — anchored to bell */}
+    <Menu
+      anchorEl={notificationsAnchor}
+      open={notificationsOpen && Boolean(notificationsAnchor)}
+      onClose={handleNotificationsClose}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      disableScrollLock
       PaperProps={{
         sx: {
-          position: 'fixed',
-          top: { xs: 80, md: 90 },
-          right: { xs: 12, md: 20 },
-          left: 'auto',
-          bottom: 'auto',
-          maxHeight: '70vh',
+          width: { xs: 'min(calc(100vw - 24px), 400px)', sm: 400 },
+          maxHeight: 'min(70vh, 520px)',
           borderRadius: 3,
-          boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
           backdropFilter: 'blur(20px)',
-          background: 'rgba(255,255,255,0.95)',
-        }
+          background: 'rgba(255,255,255,0.98)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          mt: 1,
+        },
       }}
     >
-      <DialogTitle>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+      <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+          <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem' }}>
             Notifications
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
             {unreadCount > 0 && (
-              <Chip 
-                label={`${unreadCount} unread`} 
-                color="error" 
-                size="small" 
+              <Chip
+                label={`${unreadCount} unread`}
+                color="error"
+                size="small"
                 variant="outlined"
               />
             )}
-            <Button 
-              size="small" 
-              onClick={markAllAsRead}
-              disabled={unreadCount === 0}
-            >
+            <Button size="small" onClick={markAllAsRead} disabled={unreadCount === 0}>
               Mark all read
             </Button>
           </Stack>
         </Stack>
-      </DialogTitle>
-      <DialogContent sx={{ p: 0 }}>
+      </Box>
+
+      <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {!notifications || notifications.length === 0 ? (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
@@ -521,14 +557,12 @@ const FloatingStatusBar: React.FC = () => {
             </Typography>
           </Box>
         ) : (
-          <List sx={{ maxHeight: '50vh', overflow: 'auto' }}>
+          <List disablePadding>
             {notifications.map((notification, index) => {
-              // Safety check for each notification
               if (!notification || !notification.id) {
-                console.warn('Invalid notification found at index:', index);
                 return null;
               }
-              
+
               return (
                 <React.Fragment key={notification.id}>
                   <ListItem
@@ -543,12 +577,12 @@ const FloatingStatusBar: React.FC = () => {
                     }}
                   >
                     <ListItemIcon>
-                      <Avatar 
-                        sx={{ 
-                          width: 32, 
-                          height: 32, 
+                      <Avatar
+                        sx={{
+                          width: 32,
+                          height: 32,
                           backgroundColor: notification.read ? 'grey.300' : 'primary.main',
-                          color: 'white'
+                          color: 'white',
                         }}
                       >
                         {getNotificationIcon(notification.type)}
@@ -557,19 +591,19 @@ const FloatingStatusBar: React.FC = () => {
                     <ListItemText
                       primary={
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Typography 
-                            variant="subtitle2" 
-                            sx={{ 
+                          <Typography
+                            variant="subtitle2"
+                            sx={{
                               fontWeight: notification.read ? 400 : 600,
-                              color: notification.read ? 'text.secondary' : 'text.primary'
+                              color: notification.read ? 'text.secondary' : 'text.primary',
                             }}
                           >
                             {notification.title || 'No Title'}
                           </Typography>
                           <Stack direction="row" spacing={1} alignItems="center">
                             {notification.priority && (
-                              <Chip 
-                                label={notification.priority} 
+                              <Chip
+                                label={notification.priority}
                                 color={getPriorityColor(notification.priority)}
                                 size="small"
                                 variant="outlined"
@@ -582,11 +616,7 @@ const FloatingStatusBar: React.FC = () => {
                         </Stack>
                       }
                       secondary={
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary"
-                          sx={{ mt: 0.5 }}
-                        >
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                           {notification.description || 'No description'}
                         </Typography>
                       }
@@ -598,17 +628,21 @@ const FloatingStatusBar: React.FC = () => {
             })}
           </List>
         )}
-      </DialogContent>
-      <DialogActions sx={{ p: 2, pt: 1 }}>
-        <Button 
-          onClick={() => navigate('/messages')} 
-          variant="outlined" 
+      </Box>
+
+      <Box sx={{ p: 2, pt: 1, borderTop: 1, borderColor: 'divider', flexShrink: 0 }}>
+        <Button
+          onClick={() => {
+            handleNotificationsClose();
+            navigate('/messages');
+          }}
+          variant="outlined"
           fullWidth
         >
           View All Messages
         </Button>
-      </DialogActions>
-    </Dialog>
+      </Box>
+    </Menu>
 
     {/* User Menu Dropdown */}
     <Menu
@@ -618,7 +652,7 @@ const FloatingStatusBar: React.FC = () => {
       PaperProps={{
         sx: {
           position: 'fixed',
-          top: { xs: 80, md: 90 },
+          top: isMobile ? mobileAppBarOffset + 52 : 90,
           right: { xs: 12, md: 20 },
           left: 'auto',
           bottom: 'auto',

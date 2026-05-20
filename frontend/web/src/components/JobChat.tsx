@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useAppSelector } from '../store';
 import {
   Box,
   Dialog,
@@ -30,27 +31,55 @@ interface JobChatProps {
   isOpen: boolean;
   onClose: () => void;
   jobName: string;
+  jobId?: string;
   teamMembers: Array<{ id: string; name: string; avatar: string }>;
 }
 
-const JobChat: React.FC<JobChatProps> = ({ isOpen, onClose, jobName, teamMembers }) => {
+function chatStorageKey(jobId: string): string {
+  return `timelymate_job_chat_${jobId}`;
+}
+
+const JobChat: React.FC<JobChatProps> = ({ isOpen, onClose, jobName, jobId, teamMembers }) => {
+  const { user } = useAppSelector((state) => state.auth);
+  const storageKey = chatStorageKey(jobId || jobName.replace(/\s+/g, '-').toLowerCase());
+  const senderName = user?.name || user?.email?.split('@')[0] || 'You';
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) setMessages(JSON.parse(saved));
+    } catch {
+      setMessages([]);
+    }
+  }, [isOpen, storageKey]);
+
+  useEffect(() => {
+    if (!isOpen || messages.length === 0) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch {
+      /* ignore quota errors */
+    }
+  }, [messages, isOpen, storageKey]);
 
   const handleSendMessage = () => {
     if (!newMessage.trim()) return;
 
     const message: Message = {
       id: Date.now().toString(),
-      sender: 'You', // In a real app, this would be the current user's name
-      content: newMessage,
+      sender: senderName,
+      content: newMessage.trim(),
       timestamp: new Date().toLocaleTimeString(),
       isDirect: !!selectedRecipient,
       recipient: selectedRecipient || undefined,
     };
 
-    setMessages(prev => [...prev, message]);
+    setMessages((prev) => [...prev, message]);
     setNewMessage('');
     setSelectedRecipient(null);
   };
@@ -89,15 +118,15 @@ const JobChat: React.FC<JobChatProps> = ({ isOpen, onClose, jobName, teamMembers
                   display: 'flex',
                   flexDirection: 'column',
                   mb: 2,
-                  alignItems: message.sender === 'You' ? 'flex-end' : 'flex-start',
+                  alignItems: message.sender === senderName ? 'flex-end' : 'flex-start',
                 }}
               >
                 <Paper
                   sx={{
                     p: 2,
                     maxWidth: '70%',
-                    bgcolor: message.sender === 'You' ? 'primary.main' : 'grey.100',
-                    color: message.sender === 'You' ? 'white' : 'text.primary',
+                    bgcolor: message.sender === senderName ? 'primary.main' : 'grey.100',
+                    color: message.sender === senderName ? 'white' : 'text.primary',
                   }}
                 >
                   <Typography variant="subtitle2" gutterBottom>

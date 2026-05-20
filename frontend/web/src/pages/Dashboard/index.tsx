@@ -39,10 +39,11 @@ import { MainDashboardContent, MAIN_DASHBOARD_SAMPLE_PROJECTS } from '../../comp
 import { PersonalAttendanceTools } from '../../components/PersonalAttendanceTools/PersonalAttendanceTools';
 import JobChat from '../../components/JobChat';
 import { useEmployees } from '../../contexts/EmployeeContext';
-import { useNotifications, createNotification } from '../../contexts/NotificationContext';
 import { Briefcase, Users, Building2, Clock } from 'lucide-react';
 import type { MetricsGridItem } from '../../components/MetricsGrid/MetricsGrid';
 import { useArrayPersistence } from '../../hooks/usePersistence';
+import { useGuidedTour } from '../../contexts/GuidedTourContext';
+import { TOUR_AUTO_START_KEY, TOUR_COMPLETED_KEY } from '../../config/guidedTour';
 
 // Define job interface (matching TimeTracking)
 interface Job {
@@ -110,15 +111,34 @@ const ActionCard: React.FC<{
   title: string;
   description: string;
   onClick?: () => void;
-}> = ({ icon, title, description, onClick }) => (
+}> = ({ icon, title, description, onClick }) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!onClick) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
+  return (
   <Card
+    role={onClick ? 'button' : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    onClick={onClick}
+    onKeyDown={handleKeyDown}
     sx={{
       ...workspaceCardSx,
       height: '100%',
       cursor: onClick ? 'pointer' : 'default',
-      '&:hover': onClick ? { boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)' } : {},
+      outline: 'none',
+      transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+      '&:hover': onClick
+        ? { boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', borderColor: '#e2e8f0' }
+        : {},
+      '&:focus-visible': onClick
+        ? { boxShadow: '0 0 0 2px #fff, 0 0 0 4px #3b82f6', borderColor: '#93c5fd' }
+        : {},
     }}
-    onClick={onClick}
   >
     <CardContent sx={{ p: 2.5 }}>
       <Stack direction="row" spacing={2} alignItems="flex-start">
@@ -146,7 +166,8 @@ const ActionCard: React.FC<{
       </Stack>
     </CardContent>
   </Card>
-);
+  );
+};
 
 
 
@@ -154,59 +175,12 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAppSelector((state) => state.auth);
+  const { startTour } = useGuidedTour();
   
   // Call hooks - they should be available via context providers
   const [activeJobs] = useArrayPersistence<Job>('timelymate_active_jobs', []);
   const { employees } = useEmployees();
-  const { addNotification } = useNotifications();
   
-  // Debug: Log when component renders
-  useEffect(() => {
-    console.log('Dashboard component rendered', { 
-      user: user ? { id: user.id, email: user.email } : null, 
-      employeesCount: employees?.length || 0 
-    });
-  }, [user, employees]);
-
-  // Add sample notifications on component mount
-  useEffect(() => {
-    // Add some sample notifications for demonstration
-    setTimeout(() => {
-      addNotification(createNotification.message(
-        "New Message from Sarah",
-        "Sarah sent you a message about the project deadline"
-      ));
-    }, 1000);
-
-    setTimeout(() => {
-      addNotification(createNotification.task(
-        "Task Assignment",
-        "You have been assigned a new task: Review quarterly reports"
-      ));
-    }, 2000);
-
-    setTimeout(() => {
-      addNotification(createNotification.calendar(
-        "Meeting Reminder",
-        "Team standup meeting starts in 15 minutes"
-      ));
-    }, 3000);
-
-    setTimeout(() => {
-      addNotification(createNotification.timesheet(
-        "Timesheet Approved",
-        "Your timesheet for last week has been approved by your manager"
-      ));
-    }, 4000);
-
-    setTimeout(() => {
-      addNotification(createNotification.system(
-        "System Update",
-        "New features have been added to the dashboard",
-        "medium"
-      ));
-    }, 5000);
-  }, [addNotification]);
   
   // Date is now managed directly when needed
   
@@ -229,6 +203,18 @@ const Dashboard: React.FC = () => {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
   const [redirectPath, setRedirectPath] = useState<string | null>(locationState?.from || null);
+
+  // First-time guided tour (replay anytime via Tour guide in the top bar)
+  useEffect(() => {
+    if (!user) return;
+    const autoStarted = localStorage.getItem(TOUR_AUTO_START_KEY) === 'true';
+    const completed = localStorage.getItem(TOUR_COMPLETED_KEY) === 'true';
+    if (!autoStarted && !completed) {
+      localStorage.setItem(TOUR_AUTO_START_KEY, 'true');
+      const timer = window.setTimeout(() => startTour(), 1200);
+      return () => window.clearTimeout(timer);
+    }
+  }, [user, startTour]);
   
   // Use persistence hooks for data that should survive sessions
   const [clockInRecords, setClockInRecords] = useArrayPersistence<{
@@ -496,6 +482,28 @@ const Dashboard: React.FC = () => {
     setJobDetailsOpen(true);
   };
 
+  const handleProjectCardClick = (id: string) => {
+    const job = activeJobs.find((j) => j.id === id);
+    if (job) {
+      handleJobClick(job);
+      return;
+    }
+    if (MAIN_DASHBOARD_SAMPLE_PROJECTS.some((p) => p.id === id)) {
+      navigate('/projects');
+      return;
+    }
+    navigate('/projects');
+  };
+
+  const handleProjectMenuClick = (id: string) => {
+    const job = activeJobs.find((j) => j.id === id);
+    if (job) {
+      handleOpenChat(job);
+      return;
+    }
+    navigate('/projects');
+  };
+
   const handleCloseJobDetails = () => {
     setJobDetailsOpen(false);
     setSelectedJob(null);
@@ -532,25 +540,25 @@ const Dashboard: React.FC = () => {
       icon: <Timer />,
       title: 'Track Time',
       description: 'Start tracking time for your current task',
-      onClick: () => console.log('Start time tracking'),
+      onClick: () => navigate('/time-tracking'),
     },
     {
       icon: <AddIcon />,
       title: 'New Project',
       description: 'Create a new project for your team',
-      onClick: () => console.log('Create project'),
+      onClick: () => navigate('/projects', { state: { openCreateProject: true } }),
     },
     {
       icon: <Assessment />,
       title: 'View Reports',
       description: 'Check your team\'s performance metrics',
-      onClick: () => console.log('View reports'),
+      onClick: () => navigate('/reports'),
     },
     {
       icon: <VideoCall />,
       title: 'Team Meeting',
       description: 'Start or join a video meeting',
-      onClick: () => console.log('Start meeting'),
+      onClick: () => navigate('/meetings'),
     },
   ];
 
@@ -559,19 +567,19 @@ const Dashboard: React.FC = () => {
       icon: <Group />,
       title: 'Team',
       description: 'Manage your team members and roles',
-      onClick: () => console.log('Team management'),
+      onClick: () => navigate('/team'),
     },
     {
       icon: <Security />,
       title: 'Security',
       description: 'Review and update security settings',
-      onClick: () => console.log('Security settings'),
+      onClick: () => navigate('/settings', { state: { focusSection: 'security' } }),
     },
     {
       icon: <Settings />,
       title: 'Settings',
       description: 'Configure your workspace preferences',
-      onClick: () => console.log('Settings'),
+      onClick: () => navigate('/settings'),
     },
   ];
 
@@ -819,14 +827,8 @@ const Dashboard: React.FC = () => {
           </>
         }
         onViewAllProjects={handleViewAllJobs}
-        onProjectCardClick={(id) => {
-          const job = activeJobs.find((j) => j.id === id);
-          if (job) handleJobClick(job);
-        }}
-        onProjectMenuClick={(id) => {
-          const job = activeJobs.find((j) => j.id === id);
-          if (job) handleOpenChat(job);
-        }}
+        onProjectCardClick={handleProjectCardClick}
+        onProjectMenuClick={handleProjectMenuClick}
       />
 
       {/* Quick Actions */}
@@ -930,7 +932,12 @@ const Dashboard: React.FC = () => {
                 color="primary"
                 onClick={() => {
                   handleCloseJobDetails();
-                  navigate(`/time-tracking/job/${selectedJob.id}`);
+                  navigate('/projects', {
+                    state: {
+                      openProjectId: selectedJob.id,
+                      openProjectName: selectedJob.name,
+                    },
+                  });
                 }}
               >
                 View Full Details
@@ -945,6 +952,7 @@ const Dashboard: React.FC = () => {
         isOpen={chatState.isOpen}
         onClose={handleCloseChat}
         jobName={chatState.selectedJob?.name || ''}
+        jobId={chatState.selectedJob?.id}
         teamMembers={teamMembers}
       />
       </Box>

@@ -128,6 +128,51 @@ const dialogFieldInputSx = {
     height: 'auto',
     boxSizing: 'border-box' as const,
   },
+  '&.MuiInputBase-adornedStart, &.MuiInputBase-adornedEnd': {
+    minHeight: 48,
+    height: 'auto',
+    py: 0.5,
+    pr: 1,
+  },
+};
+
+/** Keep outlined labels above the border notch inside dialogs */
+export const popupDialogFieldLabelProps = { shrink: true as const };
+
+const dialogLabelBg = (isLight: boolean) => (isLight ? '#ffffff' : 'background.paper');
+
+/** Outlined fields in custom dialog bodies (e.g. Meetings schedule form) */
+export const popupDialogAdornedFieldSx: SxProps<Theme> = {
+  '& .MuiInputLabel-root': {
+    bgcolor: '#ffffff',
+    px: 0.75,
+    zIndex: 1,
+  },
+  '& .MuiOutlinedInput-root': {
+    minHeight: 48,
+    height: 'auto',
+    alignItems: 'center',
+  },
+  '& .MuiOutlinedInput-input': {
+    py: 1.25,
+  },
+};
+
+export const popupDialogMultilineFieldSx: SxProps<Theme> = {
+  '& .MuiInputLabel-root': {
+    bgcolor: '#ffffff',
+    px: 0.75,
+    zIndex: 1,
+  },
+  '& .MuiOutlinedInput-root': {
+    minHeight: 'auto',
+    height: 'auto',
+    alignItems: 'flex-start',
+    py: 0.75,
+  },
+  '& .MuiOutlinedInput-input': {
+    py: 1,
+  },
 };
 
 /** Multiline fields inside dialog bodies */
@@ -251,6 +296,22 @@ export function getPopupSurfaceComponentOverrides(theme: Theme): Components {
     MuiPopover: {
       styleOverrides: {
         paper: popoverPaper,
+      },
+    },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: {
+          '.MuiDialogContent-root &': {
+            bgcolor: dialogLabelBg(isLight),
+            px: 0.5,
+            zIndex: 1,
+          },
+        },
+        outlined: {
+          '.MuiDialogContent-root &.MuiInputLabel-shrink': {
+            transform: 'translate(14px, -9px) scale(0.75)',
+          },
+        },
       },
     },
     MuiOutlinedInput: {

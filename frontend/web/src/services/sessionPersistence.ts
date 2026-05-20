@@ -27,6 +27,7 @@ export const PERSISTENCE_KEYS = {
   OFFSITE_SETTINGS: 'offsiteWorkSettings',
   OFFSITE_LOCATIONS: 'offsiteWorkLocations',
   EMPLOYEES: 'timelymate_employees',
+  PROJECTS: 'timelymate_projects',
   
   // Notifications & Communication
   NOTIFICATIONS: 'timelymate_notifications',
@@ -151,7 +152,9 @@ class SessionPersistenceService {
       // Also save to a general backup key for recovery
       localStorage.setItem('timelymate_session_backup', JSON.stringify(sessionData));
       
-      console.log('Session data saved successfully', { sessionId: this.sessionId, dataKeys: Object.keys(sessionData) });
+      if (import.meta.env.DEV) {
+        console.log('Session data saved successfully', { sessionId: this.sessionId, dataKeys: Object.keys(sessionData) });
+      }
     } catch (error) {
       console.error('Error saving session data:', error);
     }

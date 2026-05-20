@@ -319,6 +319,7 @@ const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
               </IconButton>
             </Box>
             <Button
+              data-tour="new-project"
               variant="contained"
               disableElevation
               startIcon={<Plus size={14} />}

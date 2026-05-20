@@ -36,7 +36,6 @@ import {
   Snackbar,
   Alert,
   FormControlLabel,
-  InputAdornment,
   Switch,
   Accordion,
   AccordionSummary,
@@ -72,7 +71,41 @@ import {
 import DashboardLayout from '../../components/DashboardLayout';
 import VideoChat from '../../components/VideoChat';
 import FeatureGuard from '../../components/FeatureGuard';
+import {
+  popupFormLabelSx,
+  popupDialogAdornedFieldSx,
+  popupDialogMultilineFieldSx,
+} from '../../theme/popupSurfaces';
 import { v4 as uuidv4 } from 'uuid';
+
+const meetingFieldIconBoxSx = {
+  p: 1,
+  borderRadius: 1.5,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
+} as const;
+
+function FieldLabelWithIcon({
+  icon,
+  label,
+  required,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  required?: boolean;
+}) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+      {icon}
+      <Typography component="span" sx={{ ...popupFormLabelSx, mb: 0 }}>
+        {label}
+        {required ? ' *' : ''}
+      </Typography>
+    </Box>
+  );
+}
 
 // Interface definitions for type safety
 interface Meeting {
@@ -704,7 +737,7 @@ const Meetings: React.FC = () => {
                 background: 'rgba(255,255,255,0.2)',
                 backdropFilter: 'blur(10px)'
               }}>
-                <VideocamIcon sx={{ fontSize: 28 }} />
+                <VideocamIcon sx={{ fontSize: 28, color: '#fff' }} />
               </Box>
               <Box>
                 <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
@@ -717,7 +750,7 @@ const Meetings: React.FC = () => {
             </Box>
           </DialogTitle>
 
-          <DialogContent sx={{ p: 4, background: 'transparent' }}>
+          <DialogContent sx={{ p: 4, background: 'transparent', overflow: 'visible' }}>
             <Stack spacing={4}>
               {/* Meeting Basics Card */}
               <Box sx={{
@@ -728,7 +761,7 @@ const Meetings: React.FC = () => {
                 border: '1px solid rgba(255,255,255,0.3)',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
                 position: 'relative',
-                overflow: 'hidden',
+                overflow: 'visible',
                 '&::before': {
                   content: '""',
                   position: 'absolute',
@@ -757,73 +790,56 @@ const Meetings: React.FC = () => {
                 
                 <Grid container spacing={3}>
                   <Grid item xs={12}>
-                    <TextField
+                    <FieldLabelWithIcon
+                      required
                       label="Meeting Title"
+                      icon={
+                        <Box
+                          sx={{
+                            ...meetingFieldIconBoxSx,
+                            background:
+                              'linear-gradient(135deg, rgba(102,126,234,0.12), rgba(118,75,162,0.12))',
+                          }}
+                        >
+                          <EventNote sx={{ fontSize: 20, color: '#667eea' }} />
+                        </Box>
+                      }
+                    />
+                    <TextField
                       fullWidth
+                      placeholder="Enter meeting title"
                       value={newMeeting.title}
                       onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })}
                       required
                       variant="outlined"
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 3,
-                          background: 'rgba(255,255,255,0.8)',
-                          backdropFilter: 'blur(10px)',
-                          '&:hover': {
-                            boxShadow: '0 4px 12px rgba(102,126,234,0.15)'
-                          },
-                          '&.Mui-focused': {
-                            boxShadow: '0 4px 12px rgba(102,126,234,0.25)'
-                          }
-                        }
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Box sx={{ 
-                              p: 1, 
-                              borderRadius: 1.5, 
-                              background: 'linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,162,0.1))',
-                              mr: 1
-                            }}>
-                              <EventNote sx={{ fontSize: 20, color: '#667eea' }} />
-                            </Box>
-                          </InputAdornment>
-                        )
-                      }}
+                      sx={popupDialogAdornedFieldSx}
                     />
                   </Grid>
                   
                   <Grid item xs={12}>
-                    <TextField
+                    <FieldLabelWithIcon
                       label="Description"
+                      icon={
+                        <Box
+                          sx={{
+                            ...meetingFieldIconBoxSx,
+                            background:
+                              'linear-gradient(135deg, rgba(255,193,7,0.12), rgba(255,152,0,0.12))',
+                          }}
+                        >
+                          <Notes sx={{ fontSize: 20, color: '#ffc107' }} />
+                        </Box>
+                      }
+                    />
+                    <TextField
                       fullWidth
                       multiline
                       rows={3}
+                      placeholder="Add a short description"
                       value={newMeeting.description}
                       onChange={(e) => setNewMeeting({ ...newMeeting, description: e.target.value })}
                       variant="outlined"
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 3,
-                          background: 'rgba(255,255,255,0.8)',
-                          backdropFilter: 'blur(10px)'
-                        }
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start" sx={{ alignSelf: 'flex-start', mt: 1.5 }}>
-                            <Box sx={{ 
-                              p: 1, 
-                              borderRadius: 1.5, 
-                              background: 'linear-gradient(135deg, rgba(255,193,7,0.1), rgba(255,152,0,0.1))',
-                              mr: 1
-                            }}>
-                              <Notes sx={{ fontSize: 20, color: '#ffc107' }} />
-                            </Box>
-                          </InputAdornment>
-                        )
-                      }}
+                      sx={popupDialogMultilineFieldSx}
                     />
                   </Grid>
                 </Grid>
@@ -838,7 +854,7 @@ const Meetings: React.FC = () => {
                 border: '1px solid rgba(255,255,255,0.3)',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
                 position: 'relative',
-                overflow: 'hidden',
+                overflow: 'visible',
                 '&::before': {
                   content: '""',
                   position: 'absolute',
@@ -918,66 +934,68 @@ const Meetings: React.FC = () => {
                   </Grid>
 
                   <Grid item xs={12}>
-                    <TextField
-                      label={newMeeting.isVirtual ? "Meeting URL" : "Physical Location"}
-                      fullWidth
-                      value={newMeeting.location}
-                      onChange={(e) => setNewMeeting({ ...newMeeting, location: e.target.value })}
-                      placeholder={newMeeting.isVirtual ? "e.g., https://meet.google.com/xyz-abc" : "e.g., Main Conference Room"}
-                      variant="outlined"
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 3,
-                          background: 'rgba(255,255,255,0.8)',
-                          backdropFilter: 'blur(10px)'
-                        }
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Box sx={{ 
-                              p: 1, 
-                              borderRadius: 1.5, 
-                              background: newMeeting.isVirtual 
-                                ? 'linear-gradient(135deg, rgba(33,150,243,0.1), rgba(33,150,243,0.05))'
-                                : 'linear-gradient(135deg, rgba(156,39,176,0.1), rgba(156,39,176,0.05))',
-                              mr: 1
-                            }}>
-                              {newMeeting.isVirtual ? 
-                                <Link sx={{ fontSize: 20, color: '#2196f3' }} /> : 
-                                <LocationOn sx={{ fontSize: 20, color: '#9c27b0' }} />
-                              }
-                            </Box>
-                          </InputAdornment>
-                        ),
-                        endAdornment: newMeeting.isVirtual && (
-                          <InputAdornment position="end">
-                            <Button 
-                              variant="contained"
-                              size="small"
-                              sx={{
-                                borderRadius: 2,
-                                background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                                boxShadow: '0 4px 12px rgba(102,126,234,0.3)',
-                                '&:hover': {
-                                  background: 'linear-gradient(135deg, #764ba2, #667eea)',
-                                  transform: 'translateY(-1px)',
-                                  boxShadow: '0 6px 16px rgba(102,126,234,0.4)'
-                                }
-                              }}
-                              onClick={() => {
-                                const newLink = `${window.location.origin}/meetings/join/${uuidv4()}`;
-                                setNewMeeting(prev => ({ ...prev, location: newLink}));
-                                setSnackbarMessage('New meeting link generated!');
-                                setSnackbarOpen(true);
-                              }}
-                            >
-                              Generate Link
-                            </Button>
-                          </InputAdornment>
-                        )
-                      }}
+                    <FieldLabelWithIcon
+                      label={newMeeting.isVirtual ? 'Meeting URL' : 'Physical Location'}
+                      icon={
+                        <Box
+                          sx={{
+                            ...meetingFieldIconBoxSx,
+                            background: newMeeting.isVirtual
+                              ? 'linear-gradient(135deg, rgba(33,150,243,0.12), rgba(33,150,243,0.06))'
+                              : 'linear-gradient(135deg, rgba(156,39,176,0.12), rgba(156,39,176,0.06))',
+                          }}
+                        >
+                          {newMeeting.isVirtual ? (
+                            <Link sx={{ fontSize: 20, color: '#2196f3' }} />
+                          ) : (
+                            <LocationOn sx={{ fontSize: 20, color: '#9c27b0' }} />
+                          )}
+                        </Box>
+                      }
                     />
+                    <Stack
+                      direction={{ xs: 'column', sm: 'row' }}
+                      spacing={1.5}
+                      alignItems={{ xs: 'stretch', sm: 'flex-start' }}
+                    >
+                      <TextField
+                        fullWidth
+                        value={newMeeting.location}
+                        onChange={(e) => setNewMeeting({ ...newMeeting, location: e.target.value })}
+                        placeholder={
+                          newMeeting.isVirtual
+                            ? 'e.g., https://meet.google.com/xyz-abc'
+                            : 'e.g., Main Conference Room'
+                        }
+                        variant="outlined"
+                        sx={popupDialogAdornedFieldSx}
+                      />
+                      {newMeeting.isVirtual && (
+                        <Button
+                          variant="contained"
+                          sx={{
+                            flexShrink: 0,
+                            alignSelf: { sm: 'stretch' },
+                            minHeight: 48,
+                            borderRadius: 2,
+                            whiteSpace: 'nowrap',
+                            background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                            boxShadow: '0 4px 12px rgba(102,126,234,0.3)',
+                            '&:hover': {
+                              background: 'linear-gradient(135deg, #764ba2, #667eea)',
+                            },
+                          }}
+                          onClick={() => {
+                            const newLink = `${window.location.origin}/meetings/join/${uuidv4()}`;
+                            setNewMeeting((prev) => ({ ...prev, location: newLink }));
+                            setSnackbarMessage('New meeting link generated!');
+                            setSnackbarOpen(true);
+                          }}
+                        >
+                          Generate Link
+                        </Button>
+                      )}
+                    </Stack>
                   </Grid>
                 </Grid>
               </Box>
@@ -991,7 +1009,7 @@ const Meetings: React.FC = () => {
                 border: '1px solid rgba(255,255,255,0.3)',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
                 position: 'relative',
-                overflow: 'hidden',
+                overflow: 'visible',
                 '&::before': {
                   content: '""',
                   position: 'absolute',
@@ -1020,103 +1038,81 @@ const Meetings: React.FC = () => {
 
                 <Grid container spacing={3}>
                   <Grid item xs={12} md={6}>
-                    <TextField
+                    <FieldLabelWithIcon
+                      required
                       label="Date"
+                      icon={
+                        <Box
+                          sx={{
+                            ...meetingFieldIconBoxSx,
+                            background:
+                              'linear-gradient(135deg, rgba(255,152,0,0.12), rgba(255,193,7,0.12))',
+                          }}
+                        >
+                          <CalendarToday sx={{ fontSize: 20, color: '#ff9800' }} />
+                        </Box>
+                      }
+                    />
+                    <TextField
                       type="date"
                       fullWidth
                       value={newMeeting.date}
                       onChange={(e) => setNewMeeting({ ...newMeeting, date: e.target.value })}
                       required
-                      InputLabelProps={{ shrink: true }}
                       variant="outlined"
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 3,
-                          background: 'rgba(255,255,255,0.8)',
-                          backdropFilter: 'blur(10px)'
-                        }
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Box sx={{ 
-                              p: 1, 
-                              borderRadius: 1.5, 
-                              background: 'linear-gradient(135deg, rgba(255,152,0,0.1), rgba(255,193,7,0.1))',
-                              mr: 1
-                            }}>
-                              <CalendarToday sx={{ fontSize: 20, color: '#ff9800' }} />
-                            </Box>
-                          </InputAdornment>
-                        )
-                      }}
+                      sx={popupDialogAdornedFieldSx}
                     />
                   </Grid>
 
                   <Grid item xs={12} md={3}>
-                    <TextField
+                    <FieldLabelWithIcon
+                      required
                       label="Start Time"
+                      icon={
+                        <Box
+                          sx={{
+                            ...meetingFieldIconBoxSx,
+                            background:
+                              'linear-gradient(135deg, rgba(76,175,80,0.12), rgba(102,187,106,0.12))',
+                          }}
+                        >
+                          <AccessTime sx={{ fontSize: 20, color: '#4caf50' }} />
+                        </Box>
+                      }
+                    />
+                    <TextField
                       type="time"
                       fullWidth
                       value={newMeeting.startTime}
                       onChange={(e) => setNewMeeting({ ...newMeeting, startTime: e.target.value })}
                       required
-                      InputLabelProps={{ shrink: true }}
                       variant="outlined"
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 3,
-                          background: 'rgba(255,255,255,0.8)',
-                          backdropFilter: 'blur(10px)'
-                        }
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Box sx={{ 
-                              p: 1, 
-                              borderRadius: 1.5, 
-                              background: 'linear-gradient(135deg, rgba(76,175,80,0.1), rgba(102,187,106,0.1))',
-                              mr: 1
-                            }}>
-                              <AccessTime sx={{ fontSize: 20, color: '#4caf50' }} />
-                            </Box>
-                          </InputAdornment>
-                        )
-                      }}
+                      sx={popupDialogAdornedFieldSx}
                     />
                   </Grid>
 
                   <Grid item xs={12} md={3}>
-                    <TextField
+                    <FieldLabelWithIcon
                       label="End Time"
+                      icon={
+                        <Box
+                          sx={{
+                            ...meetingFieldIconBoxSx,
+                            background:
+                              'linear-gradient(135deg, rgba(76,175,80,0.12), rgba(102,187,106,0.12))',
+                          }}
+                        >
+                          <AccessTime sx={{ fontSize: 20, color: '#4caf50' }} />
+                        </Box>
+                      }
+                    />
+                    <TextField
                       type="time"
                       fullWidth
                       value={newMeeting.endTime}
                       onChange={(e) => setNewMeeting({ ...newMeeting, endTime: e.target.value })}
-                      InputLabelProps={{ shrink: true }}
                       variant="outlined"
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 3,
-                          background: 'rgba(255,255,255,0.8)',
-                          backdropFilter: 'blur(10px)'
-                        }
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Box sx={{ 
-                              p: 1, 
-                              borderRadius: 1.5, 
-                              background: 'linear-gradient(135deg, rgba(244,67,54,0.1), rgba(239,83,80,0.1))',
-                              mr: 1
-                            }}>
-                              <AccessTime sx={{ fontSize: 20, color: '#f44336' }} />
-                            </Box>
-                          </InputAdornment>
-                        )
-                      }}
+                      sx={popupDialogAdornedFieldSx}
                     />
                   </Grid>
                 </Grid>
@@ -1276,35 +1272,29 @@ const Meetings: React.FC = () => {
                 <AccordionDetails sx={{ p: 3 }}>
                   <Grid container spacing={3}>
                     <Grid item xs={12}>
-                      <TextField
+                      <FieldLabelWithIcon
                         label="Meeting Agenda"
+                        icon={
+                          <Box
+                            sx={{
+                              ...meetingFieldIconBoxSx,
+                              background:
+                                'linear-gradient(135deg, rgba(63,81,181,0.12), rgba(63,81,181,0.06))',
+                            }}
+                          >
+                            <Notes sx={{ fontSize: 20, color: '#3f51b5' }} />
+                          </Box>
+                        }
+                      />
+                      <TextField
                         fullWidth
                         multiline
                         rows={3}
+                        placeholder="Outline topics for this meeting"
                         value={newMeeting.agenda}
                         onChange={(e) => setNewMeeting({ ...newMeeting, agenda: e.target.value })}
                         variant="outlined"
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 3,
-                            background: 'rgba(255,255,255,0.8)',
-                            backdropFilter: 'blur(10px)'
-                          }
-                        }}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start" sx={{ alignSelf: 'flex-start', mt: 1.5 }}>
-                              <Box sx={{ 
-                                p: 1, 
-                                borderRadius: 1.5, 
-                                background: 'linear-gradient(135deg, rgba(63,81,181,0.1), rgba(63,81,181,0.05))',
-                                mr: 1
-                              }}>
-                                <Notes sx={{ fontSize: 20, color: '#3f51b5' }} />
-                              </Box>
-                            </InputAdornment>
-                          )
-                        }}
+                        sx={popupDialogMultilineFieldSx}
                       />
                     </Grid>
                     

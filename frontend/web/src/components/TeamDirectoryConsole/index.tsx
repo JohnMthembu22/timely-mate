@@ -160,15 +160,23 @@ const TeamDirectoryConsole: React.FC<TeamDirectoryConsoleProps> = ({
         </Button>
       </Box>
 
-      {/* Split workspace — table flex-1, drawer overlays right (reference layout) */}
+      {/* Split workspace — table and profile panel sit side by side (no overlay) */}
       <Box
         sx={{
           display: 'flex',
-          position: 'relative',
+          flexDirection: { xs: 'column', md: 'row' },
+          alignItems: 'stretch',
           minHeight: 500,
         }}
       >
-        <TableContainer sx={{ flex: 1, overflowX: 'auto' }}>
+        <TableContainer
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            overflowX: 'auto',
+            order: { xs: 1, md: 0 },
+          }}
+        >
           <Table size="small" sx={{ width: '100%' }}>
             <TableHead>
               <TableRow
@@ -362,31 +370,26 @@ const TeamDirectoryConsole: React.FC<TeamDirectoryConsoleProps> = ({
           </Table>
         </TableContainer>
 
-        {/* Contextual metrics drawer — w-80 / w-96 overlay */}
+        {/* Work Profile panel — shares row with table on md+, stacks below on mobile */}
         {selectedMember && (
           <Paper
-            elevation={16}
+            elevation={0}
             sx={{
-              position: { xs: 'fixed', md: 'absolute' },
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: { xs: '100%', sm: 320, md: 384 },
+              flexShrink: 0,
+              width: { xs: '100%', md: 384 },
               maxWidth: '100%',
-              zIndex: 10,
-              borderLeft: '1px solid #f1f5f9',
+              order: { xs: 2, md: 1 },
+              borderLeft: { xs: 'none', md: '1px solid #f1f5f9' },
+              borderTop: { xs: '1px solid #f1f5f9', md: 'none' },
+              bgcolor: '#fff',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
-              animation: 'teamDrawerIn 200ms ease-out',
-              '@keyframes teamDrawerIn': {
-                from: { transform: 'translateX(100%)', opacity: 0.6 },
-                to: { transform: 'translateX(0)', opacity: 1 },
-              },
+              minHeight: { xs: 'auto', md: 500 },
+              boxShadow: { xs: 'none', md: 'inset 8px 0 24px -16px rgba(15, 23, 42, 0.06)' },
             }}
           >
-            <Box>
+            <Box sx={{ flex: 1, overflowY: 'auto' }}>
               <Box
                 sx={{
                   p: 2,
@@ -590,6 +593,7 @@ const TeamDirectoryConsole: React.FC<TeamDirectoryConsoleProps> = ({
 
             <Box
               sx={{
+                flexShrink: 0,
                 p: 2,
                 borderTop: '1px solid #f1f5f9',
                 bgcolor: 'rgba(248, 250, 252, 0.4)',

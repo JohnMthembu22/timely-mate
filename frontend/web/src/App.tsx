@@ -6,6 +6,7 @@ import { EmployeeProvider } from './contexts/EmployeeContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import SessionRestoreProvider from './components/SessionRestoreProvider';
+import { GuidedTourProvider } from './contexts/GuidedTourContext';
 import { useElectron, useElectronMenu, useElectronTray } from './hooks/useElectron';
 import { useEffect } from 'react';
 
@@ -55,8 +56,9 @@ const App = () => {
             <SubscriptionProvider>
               <EmployeeProvider>
                 <NotificationProvider>
-                  <AppContent />
-                  {/* Removed old floating AppStatus */}
+                  <GuidedTourProvider>
+                    <AppContent />
+                  </GuidedTourProvider>
                 </NotificationProvider>
               </EmployeeProvider>
             </SubscriptionProvider>

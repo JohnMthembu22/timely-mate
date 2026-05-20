@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
+import { mobileMenuButtonSx } from '../../theme/layout';
 
 interface LandingLayoutProps {
   children: React.ReactNode;
@@ -59,7 +60,7 @@ const LandingLayout: React.FC<LandingLayoutProps> = ({ children }) => {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', width: '100%', overflowX: 'hidden' }}>
       <AppBar 
         position="fixed" 
         elevation={0} 
@@ -87,10 +88,10 @@ const LandingLayout: React.FC<LandingLayoutProps> = ({ children }) => {
 
             {isMobile ? (
               <IconButton
-                color="inherit"
-                aria-label="open menu"
+                aria-label="Open menu"
                 edge="end"
                 onClick={toggleMobileMenu}
+                sx={mobileMenuButtonSx}
               >
                 <MenuIcon />
               </IconButton>

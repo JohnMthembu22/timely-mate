@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -63,6 +64,8 @@ import ProjectsConsole, {
   type ProjectPriority,
 } from '../../components/ProjectsConsole';
 import { useEmployees } from '../../contexts/EmployeeContext';
+import { useArrayPersistence } from '../../hooks/usePersistence';
+import { generateProjectsFromEmployees } from '../../utils/projectSeed';
 import { format, parseISO, differenceInDays } from 'date-fns';
 // @ts-ignore
 import { saveAs } from 'file-saver';
@@ -185,6 +188,8 @@ const initialNewProject: NewProject = {
 
 const Projects: React.FC = () => {
   const theme = useTheme();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { employees } = useEmployees();
   const [arDialogOpen, setArDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -194,7 +199,8 @@ const Projects: React.FC = () => {
   const [projectDetailsOpen, setProjectDetailsOpen] = useState(false);
   const [newProject, setNewProject] = useState<NewProject>(initialNewProject);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useArrayPersistence<Project>('timelymate_projects', []);
+  const [projectsSeeded, setProjectsSeeded] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedProjectForMenu, setSelectedProjectForMenu] = useState<Project | null>(null);
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
@@ -241,75 +247,12 @@ const Projects: React.FC = () => {
   const [selectedProjectForNotes, setSelectedProjectForNotes] = useState<Project | null>(null);
   const [viewMode, setViewMode] = useState<ProjectViewMode>('grid');
 
-  // Generate projects from imported employees
-  React.useEffect(() => {
-    console.log('Employees in Projects page:', employees);
-    
-    if (employees.length > 0) {
-      const generatedProjects: Project[] = [];
-      
-      // Group employees by department to create department-based projects
-      const departments = [...new Set(employees.map(emp => emp.department))];
-      console.log('Departments found:', departments);
-      
-      departments.forEach((dept, index) => {
-        const deptEmployees = employees.filter(emp => emp.department === dept);
-        console.log(`Employees in ${dept}:`, deptEmployees);
-        
-        // Create team members from employees
-        const team: TeamMember[] = deptEmployees.map(emp => ({
-          name: emp.name,
-          avatar: emp.avatar || `https://i.pravatar.cc/150?u=${emp.id}`,
-          role: emp.position,
-        }));
-
-        // Generate project details based on department
-        const projectNames: { [key: string]: string } = {
-          'Engineering': 'Platform Development',
-          'Design': 'UI/UX Redesign',
-          'Marketing': 'Brand Campaign',
-          'Sales': 'Revenue Optimization',
-          'Product': 'Feature Development',
-          'Project Management': 'Process Improvement',
-          'HR': 'Employee Engagement',
-          'Finance': 'Financial Analysis'
-        };
-
-        const projectDescriptions: { [key: string]: string } = {
-          'Engineering': 'Develop and maintain the core platform infrastructure and features',
-          'Design': 'Redesign user interfaces and improve user experience across all products',
-          'Marketing': 'Launch comprehensive brand awareness and lead generation campaigns',
-          'Sales': 'Optimize sales processes and increase revenue through strategic initiatives',
-          'Product': 'Develop new features and improve existing product functionality',
-          'Project Management': 'Streamline project management processes and improve team efficiency',
-          'HR': 'Enhance employee satisfaction and retention through engagement initiatives',
-          'Finance': 'Analyze financial performance and optimize resource allocation'
-        };
-
-        const project: Project = {
-          id: (index + 1).toString(),
-          name: projectNames[dept] || `${dept} Initiative`,
-          description: projectDescriptions[dept] || `Strategic initiative for ${dept} department`,
-          progress: Math.floor(Math.random() * 60) + 20, // Random progress between 20-80%
-          color: `hsl(${index * 45}, 70%, 50%)`, // Generate different colors
-          team,
-          tasks: Math.floor(Math.random() * 15) + 5,
-          completedTasks: Math.floor(Math.random() * 8) + 2,
-          startDate: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          endDate: new Date(Date.now() + Math.random() * 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          startTime: '09:00',
-          endTime: '17:00',
-          projectTasks: [],
-          notes: [],
-        };
-
-        generatedProjects.push(project);
-      });
-
-      console.log('Generated projects:', generatedProjects);
-      setProjects(generatedProjects);
-    }
-  }, [employees]);
+  // Seed starter projects once when roster exists and nothing is saved yet
+  useEffect(() => {
+    if (projectsSeeded || employees.length === 0 || projects.length > 0) return;
+    setProjects(generateProjectsFromEmployees(employees) as Project[]);
+    setProjectsSeeded(true);
+  }, [employees, projects.length, projectsSeeded, setProjects]);
 
   const handleScanProject = () => {
     setIsScanning(true);
@@ -350,7 +293,7 @@ const Projects: React.FC = () => {
   };
 
   const handleNewProjectSubmit = () => {
-    const newId = (projects.length + 1).toString();
+    const newId = `project-${Date.now()}`;
     
     // Create team members based on selected members
     const team: TeamMember[] = [];
@@ -738,6 +681,46 @@ const Projects: React.FC = () => {
     const project = projects.find((p) => p.id === projectId);
     if (project) handleProjectClick(project);
   };
+
+  useEffect(() => {
+    const state = location.state as {
+      openProjectId?: string;
+      openProjectName?: string;
+      openCreateProject?: boolean;
+    } | null;
+    if (!state) return;
+
+    if (state.openCreateProject) {
+      setNewProjectDialogOpen(true);
+      navigate(location.pathname, { replace: true, state: {} });
+      return;
+    }
+
+    if (!state.openProjectId && !state.openProjectName) return;
+    if (projects.length === 0) return;
+
+    let project =
+      state.openProjectId != null
+        ? projects.find((p) => p.id === state.openProjectId)
+        : undefined;
+
+    if (!project && state.openProjectName) {
+      const nameLower = state.openProjectName.toLowerCase();
+      project = projects.find(
+        (p) =>
+          p.name.toLowerCase() === nameLower ||
+          nameLower.includes(p.name.toLowerCase()) ||
+          p.name.toLowerCase().includes(nameLower)
+      );
+    }
+
+    if (project) {
+      setSelectedProject(project);
+      setProjectDetailsOpen(true);
+    }
+
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.state, projects, location.pathname, navigate]);
 
   const sortedProjects = useMemo(
     () =>

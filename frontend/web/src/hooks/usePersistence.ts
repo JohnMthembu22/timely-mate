@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import sessionPersistence from '../services/sessionPersistence';
 
 /**
  * Hook to automatically persist data to localStorage and session storage
@@ -53,8 +52,7 @@ export function usePersistence<T>(
         if (onSave) {
           onSave(data);
         }
-        // Also save to session persistence
-        sessionPersistence.saveSessionData();
+        // Session backup runs on interval / page unload — not on every key write (was blocking UI)
       } catch (error) {
         console.error(`Error saving data for key ${key}:`, error);
       }
@@ -128,11 +126,7 @@ export function useArrayPersistence<T>(
     }
   };
   
-  usePersistence(key, data, {
-    onSave: (savedData) => {
-      console.log(`Array data saved for key ${key}:`, savedData.length, 'items');
-    }
-  });
+  usePersistence(key, data);
   
   return [data, setDataWithPersistence];
 }

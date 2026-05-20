@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useArrayPersistence } from '../hooks/usePersistence';
+import { seedDemoEmployeesIfEmpty } from '../utils/demoSeed';
 
 export interface Employee {
   id: string;
@@ -49,6 +50,10 @@ interface EmployeeProviderProps {
 
 export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({ children }) => {
   const [employees, setEmployees] = useArrayPersistence<Employee>('timelymate_employees', []);
+
+  useEffect(() => {
+    seedDemoEmployeesIfEmpty(employees, (list) => setEmployees((prev) => [...prev, ...list]));
+  }, [employees.length, setEmployees]);
 
   const addEmployee = (employee: Employee) => {
     setEmployees(prev => [...prev, employee]);

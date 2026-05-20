@@ -29,9 +29,20 @@ export function ProjectCard({
   onCardClick,
   onMenuClick,
 }: ProjectCardProps) {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!onCardClick) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onCardClick();
+    }
+  };
+
   return (
     <Box
+      role={onCardClick ? 'button' : undefined}
+      tabIndex={onCardClick ? 0 : undefined}
       onClick={onCardClick}
+      onKeyDown={handleKeyDown}
       sx={{
         ...SURFACE,
         p: 2.5,
@@ -40,9 +51,19 @@ export function ProjectCard({
         flexDirection: 'column',
         justifyContent: 'space-between',
         cursor: onCardClick ? 'pointer' : 'default',
-        transition: 'box-shadow 0.2s ease',
+        transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+        outline: 'none',
         '&:hover': onCardClick
-          ? { boxShadow: '0 4px 14px rgba(15, 23, 42, 0.1)' }
+          ? {
+              boxShadow: '0 4px 14px rgba(15, 23, 42, 0.1)',
+              borderColor: '#e2e8f0',
+            }
+          : {},
+        '&:focus-visible': onCardClick
+          ? {
+              boxShadow: '0 0 0 2px #fff, 0 0 0 4px #3b82f6',
+              borderColor: '#93c5fd',
+            }
           : {},
       }}
     >

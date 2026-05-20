@@ -4,17 +4,27 @@ import { useAppSelector } from '../../store';
 import { Box, Typography, Button, Paper, Container } from '@mui/material';
 import { AccessTime, Lock } from '@mui/icons-material';
 import { Department } from '../../types/auth';
+import { TESTING_MODE_UNLOCK_ALL } from '../../config/testingMode';
 
 interface ClockInGuardProps {
   children: ReactNode;
 }
+
+/** Routes reachable without clock-in (department home pages where users clock in). */
+const CLOCK_IN_EXEMPT_ROUTES = [
+  '/dashboard',
+  '/projects',
+  '/hr',
+  '/expense-tracking',
+  '/procurement',
+];
 
 const ClockInGuard: React.FC<ClockInGuardProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAppSelector((state) => state.auth);
   const [showClockInRequired, setShowClockInRequired] = useState(false);
-  
+
   // Determine the user's designated dashboard route
   const getDashboardRoute = (role: string, department: Department | undefined): string => {
     if (role === 'admin') {
@@ -51,43 +61,30 @@ const ClockInGuard: React.FC<ClockInGuardProps> = ({ children }) => {
   useEffect(() => {
     const hasClockInToday = localStorage.getItem('clockInToday') === new Date().toDateString();
     
-    // Allow access to the user's designated dashboard (where they can clock in)
-    // This includes /dashboard, /projects, /hr, /expense-tracking, /procurement
-    const allowedRoutes = [
-      '/dashboard',
-      '/projects',
-      '/hr',
-      '/expense-tracking',
-      '/procurement'
-    ];
-    
     // Allow admin users to bypass clock-in requirement
     if (user?.role === 'admin') {
       setShowClockInRequired(false);
       return;
     }
-    
-    // If user is on an allowed route, allow access (they can clock in there)
-    if (allowedRoutes.includes(location.pathname)) {
+
+    // Department home pages — user can clock in there without the guard blocking
+    if (CLOCK_IN_EXEMPT_ROUTES.includes(location.pathname)) {
       setShowClockInRequired(false);
       return;
     }
-    
-    // If not clocked in and trying to access any other page, redirect to their dashboard
-    // Only navigate if we're not already on the dashboard route to avoid loops
-    if (!hasClockInToday && location.pathname !== dashboardRoute) {
+
+    // Not clocked in: block content on the requested URL (do not redirect away —
+    // redirecting made dashboard quick-action / sidebar links look broken).
+    if (!hasClockInToday) {
       setShowClockInRequired(true);
-      navigate(dashboardRoute, { 
-        state: { 
-          from: location.pathname,
-          requiresClockIn: true
-        },
-        replace: true
-      });
     } else {
       setShowClockInRequired(false);
     }
-  }, [location.pathname, navigate, user?.role, dashboardRoute]);
+  }, [location.pathname, user?.role]);
+
+  if (TESTING_MODE_UNLOCK_ALL) {
+    return <>{children}</>;
+  }
 
   // Show clock-in required screen if user hasn't clocked in
   if (showClockInRequired) {
