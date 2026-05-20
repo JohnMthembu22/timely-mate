@@ -443,8 +443,10 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
           flexDirection: 'column',
           minHeight: '100dvh',
           minWidth: 0,
-          width: '100%',
+          // Fixed sidebar is out of flow — offset main column once and shrink width to match.
           ml: { xs: 0, md: `${DRAWER_WIDTH}px` },
+          width: { xs: '100%', md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          maxWidth: { xs: '100%', md: `calc(100% - ${DRAWER_WIDTH}px)` },
         }}
       >
         {/* Mobile top bar — blue hamburger on light background */}
