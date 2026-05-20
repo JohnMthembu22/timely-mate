@@ -14,6 +14,8 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     assetsDir: 'assets',
+    // Main app chunk is large (MUI + pages); suppress Rollup size warning on Vercel/local builds
+    chunkSizeWarningLimit: 6000,
     rollupOptions: {
       output: {
         manualChunks: {
