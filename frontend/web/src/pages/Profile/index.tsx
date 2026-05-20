@@ -468,7 +468,7 @@ Location: ${profile.location}
           mb: 4,
         }}
       >
-        <Container maxWidth="lg">
+        <Container maxWidth="xl">
           <Grid container alignItems="center" spacing={3}>
             <Grid item>
               <Avatar
@@ -492,7 +492,7 @@ Location: ${profile.location}
       </Box>
 
       {/* Main Content */}
-      <Container maxWidth="lg" sx={{ mt: -4, mb: 4 }}>
+      <Container maxWidth="xl" sx={{ mt: -4, mb: 4 }}>
         <Grid container spacing={3}>
           {/* Left Column - Main Profile Sections */}
           <Grid item xs={12} md={8}>
@@ -867,7 +867,7 @@ Location: ${profile.location}
       </Container>
 
       {/* Additional Sections */}
-      <Container maxWidth="lg" sx={{ mb: 4 }}>
+      <Container maxWidth="xl" sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ mb: 4, fontWeight: 600 }}>
           Additional Information
         </Typography>

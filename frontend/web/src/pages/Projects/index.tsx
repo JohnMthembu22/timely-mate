@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Container,
@@ -55,7 +55,15 @@ import {
   CheckCircle,
 } from '@mui/icons-material';
 import DashboardLayout from '../../components/DashboardLayout';
+import ProjectsConsole, {
+  type ProjectViewMode,
+  type ProjectHubRow,
+  type ProjectMetric,
+  type ProjectMilestone,
+  type ProjectPriority,
+} from '../../components/ProjectsConsole';
 import { useEmployees } from '../../contexts/EmployeeContext';
+import { format, parseISO, differenceInDays } from 'date-fns';
 // @ts-ignore
 import { saveAs } from 'file-saver';
 
@@ -129,6 +137,30 @@ const projectRoles = [
   'Product Owner',
   'Scrum Master'
 ];
+
+const getTeamInitials = (team: TeamMember[]) =>
+  team.slice(0, 4).map((m) =>
+    m.name
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((p) => p[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase()
+  );
+
+const getProjectPriority = (progress: number, endDate: string): ProjectPriority => {
+  try {
+    const due = parseISO(endDate.includes('T') ? endDate : `${endDate}T12:00:00`);
+    const daysLeft = differenceInDays(due, new Date());
+    if (daysLeft < 7 && progress < 50) return 'High';
+  } catch {
+    /* use progress only */
+  }
+  if (progress < 35) return 'High';
+  if (progress >= 70) return 'Low';
+  return 'Medium';
+};
 
 const initialNewProject: NewProject = {
   name: '',
@@ -207,6 +239,7 @@ const Projects: React.FC = () => {
     lineItems: [{ description: '', amount: '' }],
   });
   const [selectedProjectForNotes, setSelectedProjectForNotes] = useState<Project | null>(null);
+  const [viewMode, setViewMode] = useState<ProjectViewMode>('grid');
 
   // Generate projects from imported employees
   React.useEffect(() => {
@@ -701,37 +734,93 @@ const Projects: React.FC = () => {
     setProjectDetailsOpen(true);
   };
 
-  const features = [
-    {
-      icon: <QrCodeScanner sx={{ fontSize: 40 }} />,
-      title: 'Smart Project Tracking',
-      description: 'Scan color-coded project tags to start tasks automatically',
-      action: handleScanProject,
-    },
-    {
-      icon: <ViewInAr sx={{ fontSize: 40 }} />,
-      title: 'AR Project Preview',
-      description: 'View project details and timelines in augmented reality',
-      action: () => {
-        if (projects.length > 0) {
-          handleArPreview(projects[0]);
-        } else {
-          // Show a message that no projects are available for AR preview
-          alert('No projects available for AR preview. Please create a project first.');
+  const handleProjectClickById = (projectId: string) => {
+    const project = projects.find((p) => p.id === projectId);
+    if (project) handleProjectClick(project);
+  };
+
+  const sortedProjects = useMemo(
+    () =>
+      [...projects].sort((a, b) => {
+        if (a.createdAt && b.createdAt) {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         }
+        if (a.createdAt && !b.createdAt) return -1;
+        if (!a.createdAt && b.createdAt) return 1;
+        return parseInt(b.id, 10) - parseInt(a.id, 10);
+      }),
+    [projects]
+  );
+
+  const projectHubRows: ProjectHubRow[] = useMemo(
+    () =>
+      sortedProjects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        desc: p.description,
+        progress: p.progress,
+        tasks: `${p.completedTasks}/${p.tasks}`,
+        priority: getProjectPriority(p.progress, p.endDate),
+        team: getTeamInitials(p.team),
+        dueLabel: (() => {
+          try {
+            return format(parseISO(p.endDate.includes('T') ? p.endDate : `${p.endDate}T12:00:00`), 'd MMM');
+          } catch {
+            return p.endDate;
+          }
+        })(),
+        color: p.color,
+      })),
+    [sortedProjects]
+  );
+
+  const projectMetrics: ProjectMetric[] = useMemo(() => {
+    const activeTasks = projects.reduce(
+      (sum, p) => sum + Math.max(0, p.tasks - p.completedTasks),
+      0
+    );
+    const atRisk = projects.filter((p) => getProjectPriority(p.progress, p.endDate) === 'High').length;
+    const avg =
+      projects.length > 0
+        ? projects.reduce((sum, p) => sum + p.progress, 0) / projects.length
+        : 0;
+    return [
+      { label: 'Active Pipelines', value: String(projects.length), icon: 'folder' },
+      { label: 'Tasks Logged', value: `${activeTasks} Active`, icon: 'layers' },
+      {
+        label: 'At Risk Blks',
+        value: atRisk > 0 ? `${atRisk} Delayed` : 'None',
+        icon: 'alert',
       },
-    },
-    {
-      icon: <Timer sx={{ fontSize: 40 }} />,
-      title: 'Time Management',
-      description: 'Track time with countdown timers and instant device syncing',
-    },
-    {
-      icon: <DragIndicator sx={{ fontSize: 40 }} />,
-      title: 'Task Assignment',
-      description: 'Drag-and-drop task management with smart AI suggestions',
-    },
-  ];
+      { label: 'Avg Progression', value: `${avg.toFixed(1)}%`, icon: 'trend' },
+    ];
+  }, [projects]);
+
+  const projectMilestones: ProjectMilestone[] = useMemo(() => {
+    return [...projects]
+      .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
+      .slice(0, 4)
+      .map((p) => {
+        let dateLabel = p.endDate;
+        try {
+          const due = parseISO(p.endDate.includes('T') ? p.endDate : `${p.endDate}T12:00:00`);
+          const days = differenceInDays(due, new Date());
+          if (days < 0) dateLabel = 'Overdue';
+          else if (days === 0) dateLabel = 'Due today';
+          else if (days === 1) dateLabel = 'In 1 day';
+          else dateLabel = `In ${days} days`;
+        } catch {
+          /* keep raw date */
+        }
+        const atRisk = getProjectPriority(p.progress, p.endDate) === 'High';
+        return {
+          id: p.id,
+          title: `${p.name} delivery`,
+          date: dateLabel,
+          state: atRisk ? ('at-risk' as const) : ('normal' as const),
+        };
+      });
+  }, [projects]);
 
   // Invoice handling functions
   const handleInvoiceChange = (field: string, value: any) => {
@@ -770,7 +859,7 @@ const Projects: React.FC = () => {
   return (
     <DashboardLayout>
       <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-        {/* Header */}
+        {/* Page header */}
         <Box
           sx={{
             background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
@@ -778,379 +867,36 @@ const Projects: React.FC = () => {
             py: { xs: 4, md: 6 },
           }}
         >
-          <Container maxWidth="lg">
-            <Typography variant="h3" sx={{ mb: 2, fontWeight: 700, fontSize: { xs: '1.75rem', sm: '2rem', md: '2.5rem' } }}>
+          <Container maxWidth="xl">
+            <Typography
+              variant="h3"
+              sx={{
+                mb: 2,
+                fontWeight: 700,
+                fontSize: { xs: '1.75rem', sm: '2rem', md: '2.5rem' },
+              }}
+            >
               Project Management
             </Typography>
-            <Typography variant="h6" sx={{ 
-              mb: 2,
-              color: 'white'
-            }}>
+            <Typography variant="h6" sx={{ color: 'white', opacity: 0.95 }}>
               Manage projects with advanced tracking and collaboration tools
             </Typography>
           </Container>
         </Box>
 
-        {/* Quick Features */}
-        <Container maxWidth="lg" sx={{ mt: -4, mb: 6 }}>
-          <Grid container spacing={{ xs: 2, sm: 3 }}>
-            {features.map((feature, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <Card
-                  sx={{
-                    height: '100%',
-                    borderRadius: 4,
-                    cursor: feature.action ? 'pointer' : 'default',
-                    transition: 'transform 0.2s',
-                    '&:hover': feature.action ? {
-                      transform: 'scale(1.02)',
-                    } : {},
-                  }}
-                  onClick={feature.action}
-                >
-                  <CardContent>
-                    <Stack spacing={2} alignItems="center" textAlign="center">
-                      <Box sx={{ color: 'primary.main' }}>
-                        {feature.icon}
-                      </Box>
-                      <Typography variant="h6">
-                        {feature.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {feature.description}
-                      </Typography>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-
-        {/* Projects List */}
-        <Container maxWidth="lg" sx={{ mb: 6 }}>
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: { xs: 'column', sm: 'row' },
-            justifyContent: 'space-between', 
-            alignItems: { xs: 'flex-start', sm: 'center' }, 
-            mb: 4,
-            gap: { xs: 2, sm: 0 }
-          }}>
-            <Typography variant="h4" sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Active Projects</Typography>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              sx={{ borderRadius: 2 }}
-              onClick={handleNewProjectOpen}
-            >
-              New Project
-            </Button>
-          </Box>
-          <Grid container spacing={{ xs: 2, sm: 3 }}>
-            {projects.length === 0 ? (
-              <Grid item xs={12}>
-                <Card 
-                  sx={{ 
-                    borderRadius: 4,
-                    textAlign: 'center',
-                    py: 8,
-                    bgcolor: 'background.paper',
-                  }}
-                >
-                  <CardContent>
-                    <Stack spacing={3} alignItems="center">
-                      <FolderOpen sx={{ fontSize: 80, color: 'text.secondary' }} />
-                      <Typography variant="h5" color="text.secondary">
-                        No Projects Yet
-                      </Typography>
-                      <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400 }}>
-                        Get started by creating your first project. You can add team members, set schedules, and track progress all in one place.
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        startIcon={<Add />}
-                        size="large"
-                        onClick={handleNewProjectOpen}
-                        sx={{ borderRadius: 2, mt: 2 }}
-                      >
-                        Create Your First Project
-                      </Button>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ) : (
-              // Sort projects by creation date (newest first), then by ID
-              [...projects].sort((a, b) => {
-                if (a.createdAt && b.createdAt) {
-                  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                }
-                // If no createdAt, put projects without it at the end, or sort by ID
-                if (a.createdAt && !b.createdAt) return -1;
-                if (!a.createdAt && b.createdAt) return 1;
-                return parseInt(b.id) - parseInt(a.id); // Fallback: newest ID first
-              }).map((project) => (
-              <Grid item xs={12} key={project.id}>
-                <Card 
-                  sx={{ 
-                    borderRadius: 4,
-                    background: 'linear-gradient(145deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))',
-                    backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    boxShadow: 'none',
-                    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                    position: 'relative',
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                    '&::before': {
-                      content: '""',
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: '4px',
-                      background: `linear-gradient(90deg, ${project.color}, ${project.color}CC)`,
-                    },
-                    '&::after': {
-                      content: '""',
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      background: `linear-gradient(135deg, ${project.color}08, ${project.color}04)`,
-                      pointerEvents: 'none',
-                      zIndex: 0
-                    },
-                    '&:hover': {
-                      transform: 'translateY(-8px) scale(1.02)',
-                      boxShadow: '0 20px 40px rgba(0,0,0,0.12)',
-                      borderColor: project.color,
-                    }
-                  }}
-                  onClick={() => handleProjectClick(project)}
-                >
-                  <CardContent sx={{ position: 'relative', zIndex: 1, p: 4 }}>
-                    <Grid container spacing={4} alignItems="center">
-                      <Grid item xs={12} md={6}>
-                        <Stack spacing={2}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Box sx={{ 
-                              width: 12, 
-                              height: 12, 
-                              borderRadius: '50%', 
-                              bgcolor: project.color,
-                              boxShadow: `0 0 20px ${project.color}40`
-                            }} />
-                            <Typography variant="h5" fontWeight="bold" sx={{ color: 'text.primary' }}>
-                              {project.name}
-                            </Typography>
-                          </Box>
-                          <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-                            {project.description}
-                          </Typography>
-                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                              <Chip
-                                size="small"
-                              label={`${project.completedTasks}/${project.tasks} completed`}
-                              sx={{ 
-                                bgcolor: `${project.color}20`, 
-                                color: project.color,
-                                fontWeight: 600,
-                                borderRadius: 2
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTaskClick(project);
-                              }}
-                                clickable
-                              />
-                              <Chip
-                                size="small"
-                                label={`${project.tasks - project.completedTasks} active`}
-                                sx={{ 
-                                bgcolor: 'warning.light',
-                                color: 'warning.dark',
-                                fontWeight: 600,
-                                borderRadius: 2
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTaskClick(project);
-                              }}
-                                clickable
-                              />
-                            </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                            <Timer sx={{ fontSize: 16 }} />
-                            <Typography variant="body2">
-                              {project.startDate} to {project.endDate}
-                          </Typography>
-                            <Typography variant="body2" sx={{ mx: 1 }}>•</Typography>
-                            <Typography variant="body2">
-                              {project.startTime} - {project.endTime}
-                          </Typography>
-                          </Box>
-                        </Stack>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <Stack spacing={2}>
-                          <Typography variant="subtitle2" color="text.secondary" fontWeight="600">
-                            Progress
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <LinearProgress
-                              variant="determinate"
-                              value={project.progress}
-                              sx={{
-                                flexGrow: 1,
-                                height: 12,
-                                borderRadius: 6,
-                                bgcolor: `${project.color}20`,
-                                '& .MuiLinearProgress-bar': {
-                                  bgcolor: project.color,
-                                  borderRadius: 6,
-                                },
-                              }}
-                            />
-                            <Typography variant="h6" fontWeight="bold" sx={{ color: project.color, minWidth: '40px' }}>
-                              {project.progress}%
-                            </Typography>
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {project.progress === 100 ? 'Completed' : project.progress > 75 ? 'Almost Done' : project.progress > 50 ? 'In Progress' : 'Getting Started'}
-                          </Typography>
-                        </Stack>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <Stack spacing={2}>
-                          <Typography variant="subtitle2" color="text.secondary" fontWeight="600">
-                            Team ({project.team.length})
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 36, height: 36, border: '2px solid white' } }}>
-                            {project.team.map((member, index) => (
-                              <Avatar
-                                key={index}
-                                  src={member.avatar}
-                                sx={{
-                                  bgcolor: project.color,
-                                    fontWeight: 'bold',
-                                    fontSize: '0.875rem'
-                                }}
-                              >
-                                  {member.avatar || member.name.charAt(0)}
-                              </Avatar>
-                            ))}
-                          </AvatarGroup>
-                            {project.team.length > 4 && (
-                              <Typography variant="caption" color="text.secondary">
-                                +{project.team.length - 4} more
-                              </Typography>
-                            )}
-                          </Box>
-                        </Stack>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <Stack spacing={2}>
-                          <Typography variant="subtitle2" color="text.secondary" fontWeight="600">
-                            Notes ({project.notes.length})
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenNotes(project);
-                              }}
-                              sx={{ 
-                                color: project.color,
-                                bgcolor: `${project.color}15`,
-                                '&:hover': { bgcolor: `${project.color}25` }
-                              }}
-                            >
-                              <CommentIcon fontSize="small" />
-                          </IconButton>
-                          <Typography variant="body2" color="text.secondary">
-                            {project.notes.length} notes
-                          </Typography>
-                          </Box>
-                        </Stack>
-                      </Grid>
-                    </Grid>
-                    
-                    {/* Action Buttons */}
-                    <Box sx={{ 
-                      position: 'absolute', 
-                      top: 16, 
-                      right: 16, 
-                      display: 'flex', 
-                      gap: 1,
-                      opacity: 0,
-                      transition: 'opacity 0.3s ease',
-                      '&:hover': { opacity: 1 }
-                    }}>
-                      <IconButton 
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleArPreview(project);
-                        }}
-                        sx={{ 
-                          bgcolor: 'rgba(255,255,255,0.9)',
-                          '&:hover': { bgcolor: 'rgba(255,255,255,1)' }
-                        }}
-                      >
-                        <ViewInAr fontSize="small" />
-                      </IconButton>
-                      <IconButton 
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleScheduleMeeting(project);
-                        }}
-                        sx={{ 
-                          bgcolor: 'rgba(255,255,255,0.9)',
-                          '&:hover': { bgcolor: 'rgba(255,255,255,1)' }
-                        }}
-                      >
-                        <VideoCall fontSize="small" />
-                      </IconButton>
-                      <IconButton 
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditProject(project);
-                        }}
-                        sx={{ 
-                          bgcolor: 'rgba(255,255,255,0.9)',
-                          '&:hover': { bgcolor: 'rgba(255,255,255,1)' }
-                        }}
-                      >
-                        <Edit fontSize="small" />
-                      </IconButton>
-                      <IconButton 
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMenuClick(e, project);
-                        }}
-                        sx={{ 
-                          bgcolor: 'rgba(255,255,255,0.9)',
-                          '&:hover': { bgcolor: 'rgba(255,255,255,1)' }
-                        }}
-                      >
-                        <MoreVert fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-              ))
-            )}
-          </Grid>
-        </Container>
+        <ProjectsConsole
+          projects={projectHubRows}
+          metrics={projectMetrics}
+          milestones={projectMilestones}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onNewProject={handleNewProjectOpen}
+          onProjectClick={handleProjectClickById}
+          onProjectMenu={(e, projectId) => {
+            const project = projects.find((p) => p.id === projectId);
+            if (project) handleMenuClick(e, project);
+          }}
+        />
 
         {/* AR Preview Dialog */}
         <Dialog
@@ -1239,22 +985,7 @@ const Projects: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-            }
-          }}>
+          <DialogTitle sx={{ position: 'relative' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 

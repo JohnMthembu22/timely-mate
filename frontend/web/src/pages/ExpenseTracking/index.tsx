@@ -2111,7 +2111,7 @@ For best results, use the CSV template format.`;
             mb: 4,
           }}
         >
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Typography variant="h1" sx={{ fontSize: '3rem', fontWeight: 700, mb: 1 }}>
               Financial Management
             </Typography>
@@ -2424,7 +2424,7 @@ For best results, use the CSV template format.`;
           </Container>
         </Box>
 
-        <Container maxWidth="lg" sx={{ mt: -4 }}>
+        <Container maxWidth="xl" sx={{ mt: -4 }}>
           {/* Tabs */}
           <Paper sx={{ mb: 3, borderRadius: 2 }}>
             <Tabs 
@@ -2761,22 +2761,7 @@ For best results, use the CSV template format.`;
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              py: 3,
-              px: 4,
-              position: 'relative',
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '4px',
-                background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-              }
-            }}>
+            <DialogTitle sx={{ position: 'relative' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box sx={{ 
                   p: 1.5, 
@@ -3016,22 +3001,7 @@ For best results, use the CSV template format.`;
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              py: 3,
-              px: 4,
-              position: 'relative',
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '4px',
-                background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-              }
-            }}>
+            <DialogTitle sx={{ position: 'relative' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box sx={{ 
                   p: 1.5, 
@@ -3563,14 +3533,7 @@ For best results, use the CSV template format.`;
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   {selectedExpense?.category === 'Petrol' ? (
                   <LocalGasStation sx={{ fontSize: 28 }} />
@@ -3976,22 +3939,7 @@ For best results, use the CSV template format.`;
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              py: 3,
-              px: 4,
-              position: 'relative',
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '4px',
-                background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-              }
-            }}>
+            <DialogTitle sx={{ position: 'relative' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box sx={{ 
                   p: 1.5, 
@@ -4370,22 +4318,7 @@ For best results, use the CSV template format.`;
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              py: 3,
-              px: 4,
-              position: 'relative',
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '4px',
-                background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-              }
-            }}>
+            <DialogTitle sx={{ position: 'relative' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box sx={{ 
                   p: 1.5, 
@@ -5214,14 +5147,7 @@ For best results, use the CSV template format.`;
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 
@@ -5522,14 +5448,7 @@ For best results, use the CSV template format.`;
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 

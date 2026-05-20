@@ -494,7 +494,7 @@ const Messages: React.FC = () => {
         <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
         {/* Header */}
         <Box sx={{ background: 'linear-gradient(45deg, #2196F3, #f50057)', color: 'white', py: 10 }}>
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
               <Box>
                 <Typography variant="h4" sx={{ fontWeight: 700 }}>
@@ -606,7 +606,7 @@ const Messages: React.FC = () => {
         </Box>
 
         {/* Main Content */}
-        <Container maxWidth="lg" sx={{ mt: -4, mb: 4 }}>
+        <Container maxWidth="xl" sx={{ mt: -4, mb: 4 }}>
           <Card sx={{ borderRadius: 4, overflow: 'visible', boxShadow: '0 0 10px rgba(0,0,0,0.1)' }}>
             {/* Main Tabs */}
             <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3, pt: 3 }}>
@@ -1223,17 +1223,7 @@ const Messages: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 background: 'rgba(255, 255, 255, 0.2)', 
@@ -1335,17 +1325,7 @@ const Messages: React.FC = () => {
       >
         {selectedNotification && (
           <>
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              py: 3,
-              px: 4,
-              position: 'relative',
-              borderRadius: '16px 16px 0 0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
               <Box sx={{ 
                 background: 'rgba(255, 255, 255, 0.2)', 
                 borderRadius: 2, 

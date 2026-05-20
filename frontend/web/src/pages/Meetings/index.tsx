@@ -332,7 +332,7 @@ const Meetings: React.FC = () => {
             py: { xs: 4, md: 6 },
           }}
         >
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Typography variant="h3" sx={{ mb: 2, fontWeight: 700 }}>
               Meetings
             </Typography>
@@ -343,7 +343,7 @@ const Meetings: React.FC = () => {
         </Box>
 
         {/* Meetings Section */}
-        <Container maxWidth="lg" sx={{ py: 6 }}>
+        <Container maxWidth="xl" sx={{ py: 6 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
             <Typography variant="h4">
               All Meetings
@@ -696,22 +696,7 @@ const Meetings: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-            }
-          }}>
+          <DialogTitle sx={{ position: 'relative' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
@@ -1554,17 +1539,7 @@ const Meetings: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2
-          }}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
             <Box sx={{ 
               background: 'rgba(255, 255, 255, 0.2)', 
               borderRadius: 2, 

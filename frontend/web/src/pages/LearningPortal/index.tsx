@@ -933,7 +933,7 @@ const LearningPortal: React.FC = () => {
             mb: 4,
           }}
         >
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Typography variant="h1" sx={{ fontSize: '3rem', fontWeight: 500, mb: 1 }}>
               Learning Portal
             </Typography>
@@ -998,7 +998,7 @@ const LearningPortal: React.FC = () => {
           </Container>
         </Box>
 
-        <Container maxWidth="lg" sx={{ mt: -4 }}>
+        <Container maxWidth="xl" sx={{ mt: -4 }}>
           <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, mb: 4 }}>
             <Tabs
               value={currentTab}
@@ -1467,17 +1467,7 @@ const LearningPortal: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              py: 3,
-              px: 4,
-              position: 'relative',
-              borderRadius: '16px 16px 0 0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
               <Box sx={{ 
                 background: 'rgba(255, 255, 255, 0.2)', 
                 borderRadius: 2, 

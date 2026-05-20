@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createTheme, Theme, PaletteMode, ThemeProvider as MuiThemeProvider } from '@mui/material';
+import { getPopupSurfaceComponentOverrides } from '../theme/popupSurfaces';
 
 interface ThemeContextType {
   mode: PaletteMode;
@@ -15,7 +16,7 @@ interface ThemeProviderProps {
 }
 
 // Light theme configuration
-const lightTheme = createTheme({
+const lightThemeBase = createTheme({
   palette: {
     mode: 'light',
     primary: {
@@ -64,6 +65,15 @@ const lightTheme = createTheme({
   shape: {
     borderRadius: 8,
   },
+  breakpoints: {
+    values: {
+      xs: 0,
+      sm: 600,
+      md: 900,
+      lg: 1200,
+      xl: 1600,
+    },
+  },
   shadows: [
     'none',
     '0px 2px 1px -1px rgba(0,0,0,0.1),0px 1px 1px 0px rgba(0,0,0,0.07),0px 1px 3px 0px rgba(0,0,0,0.06)',
@@ -93,8 +103,12 @@ const lightTheme = createTheme({
   ],
 });
 
+const lightTheme = createTheme(lightThemeBase, {
+  components: getPopupSurfaceComponentOverrides(lightThemeBase),
+});
+
 // Dark theme configuration
-const darkTheme = createTheme({
+const darkThemeBase = createTheme({
   palette: {
     mode: 'dark',
     primary: {
@@ -143,6 +157,15 @@ const darkTheme = createTheme({
   shape: {
     borderRadius: 8,
   },
+  breakpoints: {
+    values: {
+      xs: 0,
+      sm: 600,
+      md: 900,
+      lg: 1200,
+      xl: 1600,
+    },
+  },
   shadows: [
     'none',
     '0px 2px 1px -1px rgba(0,0,0,0.2),0px 1px 1px 0px rgba(0,0,0,0.14),0px 1px 3px 0px rgba(0,0,0,0.12)',
@@ -170,6 +193,10 @@ const darkTheme = createTheme({
     '0px 11px 14px -7px rgba(0,0,0,0.2),0px 23px 36px 3px rgba(0,0,0,0.14),0px 9px 44px 8px rgba(0,0,0,0.12)',
     '0px 11px 15px -7px rgba(0,0,0,0.2),0px 24px 38px 3px rgba(0,0,0,0.14),0px 9px 46px 8px rgba(0,0,0,0.12)',
   ],
+});
+
+const darkTheme = createTheme(darkThemeBase, {
+  components: getPopupSurfaceComponentOverrides(darkThemeBase),
 });
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {

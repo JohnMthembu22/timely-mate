@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Users, Briefcase, AlertCircle, DollarSign } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   Box,
@@ -83,6 +84,7 @@ import {
   Functions,
 } from '@mui/icons-material';
 import DashboardLayout from '../../components/DashboardLayout';
+import { MetricsGrid } from '../../components/MetricsGrid/MetricsGrid';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { formatZAR } from '../../utils/currency';
 import { useEmployees, Employee } from '../../contexts/EmployeeContext';
@@ -106,15 +108,6 @@ interface LeaveRequest {
   daysRequested: number;
   submittedDate: string;
   rejectionReason?: string; // Add rejection reason field
-}
-
-interface PayrollRecord {
-  id: string;
-  employeeName: string;
-  period: string;
-  amount: number;
-  status: 'processed' | 'pending' | 'failed';
-  paymentDate: string;
 }
 
 interface ImportEmployee {
@@ -271,8 +264,6 @@ interface AIGroupingRecommendation {
   efficiency: number;
   estimatedSavings: number;
 }
-
-const payrollRecords: PayrollRecord[] = [];
 
 const salaryBrackets = [
   { min: 0, max: 70000, name: 'Entry Level' },
@@ -2270,6 +2261,58 @@ const HR: React.FC = () => {
     setOpenPayrollSettings(false);
   };
 
+  const hrHeroMetrics = useMemo(() => {
+    const deptSet = new Set(
+      employees.map((e) => e.department?.trim()).filter((d): d is string => Boolean(d))
+    );
+    const activeEmps = employees.filter((e) => e.status === 'active');
+    const positionSet = new Set(
+      activeEmps.map((e) => e.position?.trim()).filter((p): p is string => Boolean(p))
+    );
+    const avgAnn =
+      employees.length === 0
+        ? 0
+        : employees.reduce((sum, e) => sum + (Number(e.salary) || 0), 0) / employees.length;
+
+    const avgDisplay = employees.length === 0 ? '—' : `R${Math.round(avgAnn / 1000)}k`;
+
+    return [
+      {
+        title: 'Total Employees',
+        value: String(employees.length),
+        change:
+          employees.length === 0 ? 'Import employees to get started' : `${activeEmps.length} active`,
+        icon: Users,
+        iconColor: '#3b82f6',
+        iconBg: '#eff6ff',
+      },
+      {
+        title: 'Departments',
+        value: String(deptSet.size),
+        change: deptSet.size === 0 ? 'No departments yet' : 'Active across org',
+        icon: Briefcase,
+        iconColor: '#10b981',
+        iconBg: '#ecfdf5',
+      },
+      {
+        title: 'Active Positions',
+        value: String(positionSet.size),
+        change: positionSet.size === 0 ? 'No open roles' : `${positionSet.size} roles filled`,
+        icon: AlertCircle,
+        iconColor: '#f59e0b',
+        iconBg: '#fffbeb',
+      },
+      {
+        title: 'Avg. Salary',
+        value: avgDisplay,
+        change: employees.length === 0 ? 'No salary data' : 'Per annum avg.',
+        icon: DollarSign,
+        iconColor: '#a855f7',
+        iconBg: '#faf5ff',
+      },
+    ];
+  }, [employees]);
+
   return (
     <DashboardLayout>
       <Box
@@ -2282,7 +2325,7 @@ const HR: React.FC = () => {
           mb: 4,
         }}
       >
-        <Container maxWidth="lg">
+        <Container maxWidth="xl">
           <Typography variant="h1" sx={{ fontSize: '3rem', fontWeight: 700, mb: 1 }}>
             Human Resources
           </Typography>
@@ -2290,69 +2333,11 @@ const HR: React.FC = () => {
             Manage your team, payroll, and HR operations
           </Typography>
 
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)' }}>
-                <CardContent sx={{ textAlign: 'center' }}>
-                  <Group sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h4" sx={{ color: 'text.primary', mb: 0.5 }}>
-                    {employees.length}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Total Employees
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)' }}>
-                <CardContent sx={{ textAlign: 'center' }}>
-                  <EventAvailable sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h4" sx={{ color: 'text.primary', mb: 0.5 }}>
-                    {leaveRequests.filter(r => r.status === 'pending').length}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Pending Leaves
-                  </Typography>
-                  {employees.length > 0 && (
-                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 1 }}>
-                      {leaveRequests.length} total requests from {employees.length} employees
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)' }}>
-                <CardContent sx={{ textAlign: 'center' }}>
-                  <Payment sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h4" sx={{ color: 'text.primary', mb: 0.5 }}>
-                    {payrollRecords.filter(r => r.status === 'pending').length}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Pending Payroll
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)' }}>
-                <CardContent sx={{ textAlign: 'center' }}>
-                  <Assessment sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h4" sx={{ color: 'text.primary', mb: 0.5 }}>
-                    3
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Reports Due
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
+          <MetricsGrid metrics={hrHeroMetrics} />
         </Container>
       </Box>
 
-      <Container maxWidth="lg" sx={{ mt: -4 }}>
+      <Container maxWidth="xl" sx={{ mt: -4 }}>
         <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, mb: 4 }}>
           <Tabs
             value={currentTab}
@@ -4005,22 +3990,7 @@ const HR: React.FC = () => {
           }
         }}
       >
-        <DialogTitle sx={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-          px: 4,
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-          }
-        }}>
+        <DialogTitle sx={{ position: 'relative' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ 
               p: 1.5, 
@@ -4204,22 +4174,7 @@ const HR: React.FC = () => {
           }
         }}
       >
-        <DialogTitle sx={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-          px: 4,
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-          }
-        }}>
+        <DialogTitle sx={{ position: 'relative' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ 
               p: 1.5, 
@@ -4364,22 +4319,7 @@ const HR: React.FC = () => {
           }
         }}
       >
-        <DialogTitle sx={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-          px: 4,
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-          }
-        }}>
+        <DialogTitle sx={{ position: 'relative' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ 
               p: 1.5, 
@@ -4611,22 +4551,7 @@ const HR: React.FC = () => {
           }
         }}
       >
-        <DialogTitle sx={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-          px: 4,
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-          }
-        }}>
+        <DialogTitle sx={{ position: 'relative' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ 
               p: 1.5, 
@@ -5282,25 +5207,7 @@ const HR: React.FC = () => {
           }
         }}
       >
-        <DialogTitle sx={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-          px: 4,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-          }
-        }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
           <Box sx={{ 
             p: 1.5, 
             borderRadius: 2, 
@@ -5753,25 +5660,7 @@ const HR: React.FC = () => {
           }
         }}
       >
-        <DialogTitle sx={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-          px: 4,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-          }
-        }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
           <Box sx={{ 
             p: 1.5, 
             borderRadius: 2, 

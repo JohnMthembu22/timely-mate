@@ -120,7 +120,7 @@ const Settings: React.FC = () => {
           mb: 4,
         }}
       >
-        <Container maxWidth="lg">
+        <Container maxWidth="xl">
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             <SettingsIcon sx={{ fontSize: 40 }} />
             <Typography variant="h3" sx={{ fontWeight: 700 }}>
@@ -134,7 +134,7 @@ const Settings: React.FC = () => {
       </Box>
 
       {/* Main Content */}
-      <Container maxWidth="lg" sx={{ mt: -4, mb: 4 }}>
+      <Container maxWidth="xl" sx={{ mt: -4, mb: 4 }}>
         <Grid container spacing={3}>
           {/* Left Column - Main Settings */}
           <Grid item xs={12} md={8}>

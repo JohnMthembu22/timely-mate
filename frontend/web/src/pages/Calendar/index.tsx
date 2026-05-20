@@ -16,7 +16,7 @@ import {
   DialogActions,
   TextField,
   FormControl,
-  InputLabel,
+  InputAdornment,
   Select,
   MenuItem,
   Stack,
@@ -27,23 +27,12 @@ import {
   Tooltip,
   Switch,
   FormControlLabel,
-  Popover,
+  Popper,
+  Divider,
 } from '@mui/material';
 import {
   Add,
-  Event,
   VideoCall,
-  Today,
-  ViewKanban,
-  CalendarMonth,
-  ArrowBack,
-  ArrowForward,
-  QrCodeScanner,
-  ViewInAr,
-  Timer,
-  DragIndicator,
-  ChevronLeft,
-  ChevronRight,
   ViewDay,
   ViewWeek,
   ViewModule,
@@ -57,21 +46,36 @@ import {
   Speed,
   Analytics,
   CalendarViewDay,
-  Videocam as VideocamIcon,
 } from '@mui/icons-material';
-import { DateCalendar } from '@mui/x-date-pickers/DateCalendar';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { PickersDay, PickersDayProps } from '@mui/x-date-pickers/PickersDay';
-import { format, addMonths, subMonths, isSameDay, addDays } from 'date-fns';
+import {
+  format,
+  addMonths,
+  subMonths,
+  isSameDay,
+  addDays,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  startOfWeek,
+  endOfWeek,
+  isSameMonth,
+  isToday,
+} from 'date-fns';
+import {
+  ChevronLeft as ChevronLeftLucide,
+  ChevronRight as ChevronRightLucide,
+  Plus,
+  QrCode,
+  Clock as ClockLucide,
+  Users as UsersLucide,
+  Calendar as CalendarLucideIcon,
+  MapPin,
+  Users,
+} from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-import Timeline from '@mui/lab/Timeline';
-import TimelineItem from '@mui/lab/TimelineItem';
-import TimelineSeparator from '@mui/lab/TimelineSeparator';
-import TimelineConnector from '@mui/lab/TimelineConnector';
-import TimelineContent from '@mui/lab/TimelineContent';
-import TimelineDot from '@mui/lab/TimelineDot';
+import PopupHoverCard from '../../components/PopupHoverCard';
 import { useEmployees } from '../../contexts/EmployeeContext';
+import { popupFormLabelSx, popupNestedPanelSx } from '../../theme/popupSurfaces';
 
 interface TeamMember {
   name: string;
@@ -99,7 +103,7 @@ interface CalendarEvent {
   description: string;
   startDate: string;
   endDate: string;
-  type: 'meeting' | 'task';
+  type: 'meeting' | 'task' | 'production';
   priority: 'low' | 'medium' | 'high';
   status: 'todo' | 'in_progress' | 'completed';
   projectId?: string;
@@ -110,19 +114,122 @@ interface CalendarEvent {
   meetingLink?: string;
 }
 
+const SAMPLE_OPERATIONAL_BACKLOG: {
+  id: string;
+  title: string;
+  duration: string;
+  dept: string;
+  borderColor: string;
+}[] = [
+  { id: 'demo-1', title: 'Bulk T-Shirt Print Run', duration: '3 days', dept: 'Production', borderColor: '#f59e0b' },
+  { id: 'demo-2', title: 'Setup Signage Installation', duration: '1 day', dept: 'Operations', borderColor: '#3b82f6' },
+  { id: 'demo-3', title: 'Client Branding Sign-off', duration: '2 hours', dept: 'Creative', borderColor: '#10b981' },
+];
+
+type BacklogItem = {
+  id: string;
+  title: string;
+  duration: string;
+  dept: string;
+  borderColor: string;
+  sourceTask?: Task;
+};
+
+const blockContextLabel = (type?: CalendarEvent['type']) => {
+  if (type === 'production') return 'Production run';
+  if (type === 'task') return 'Task allocation';
+  return 'Meeting / sync';
+};
+
+const priorityLabel = (priority?: CalendarEvent['priority']) => {
+  if (priority === 'high') return 'High priority';
+  if (priority === 'low') return 'Low priority';
+  return 'Medium priority';
+};
+
+const defaultNewEventState = (): Partial<CalendarEvent> => ({
+  type: 'meeting',
+  priority: 'medium',
+  status: 'todo',
+  isVirtual: false,
+});
+
+const eventTypeChipLabel = (type: CalendarEvent['type']) => {
+  if (type === 'meeting') return 'Meeting';
+  if (type === 'production') return 'Production';
+  return 'Task';
+};
+
+const isTaskLike = (type: CalendarEvent['type']) => type === 'task' || type === 'production';
+
+const getNewBlockDialogCopy = (
+  event: Partial<CalendarEvent>,
+  fallbackDate: Date
+) => {
+  const title = event.title?.trim();
+  const context = blockContextLabel(event.type);
+  const priority = priorityLabel(event.priority);
+  const scheduleLabel = event.startDate
+    ? format(new Date(event.startDate), 'MMM d, yyyy · h:mm a')
+    : format(fallbackDate, 'MMM d, yyyy');
+
+  if (title) {
+    return {
+      heading: title,
+      subtitle: `${context} · ${priority} · ${scheduleLabel}`,
+    };
+  }
+
+  return {
+    heading: 'Schedule operational block',
+    subtitle: 'Add a title, timing, and context to place this on the runway.',
+  };
+};
+
+const isAvatarImageUrl = (value: string) => /^https?:\/\//i.test(value.trim());
+
+/** Renders profile photo when avatar is a URL, otherwise initials from name */
+const renderPersonAvatar = (
+  person: { name: string; avatar: string },
+  sx?: object
+) => {
+  const src = isAvatarImageUrl(person.avatar) ? person.avatar : undefined;
+  const initials =
+    person.name.trim().charAt(0).toUpperCase() ||
+    (person.avatar.length === 1 ? person.avatar.toUpperCase() : '?');
+
+  return (
+    <Avatar src={src} alt={person.name} imgProps={{ loading: 'lazy' }} sx={sx}>
+      {initials}
+    </Avatar>
+  );
+};
+
+const roundedLg = '8px';
+
+/** White inputs inside nested meeting panel (on top of global dialog field styles) */
+const meetingPanelFieldSx = {
+  '& .MuiOutlinedInput-root': { bgcolor: '#fff' },
+};
+
 const Calendar: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedTab, setSelectedTab] = useState(0);
+  /** Month shown in the operational grid (independent of selected day). */
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
+  /** Week strip anchor (Sunday-based). */
+  const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newEventDialogOpen, setNewEventDialogOpen] = useState(false);
   const { employees } = useEmployees();
-  const [newEvent, setNewEvent] = useState<Partial<CalendarEvent>>({
-    type: 'meeting',
-    priority: 'medium',
-    status: 'todo',
-    isVirtual: false,
-  });
+  const [newEvent, setNewEvent] = useState<Partial<CalendarEvent>>(defaultNewEventState);
+
+  const openNewEventDialog = (preset?: Partial<CalendarEvent>) => {
+    setNewEvent({ ...defaultNewEventState(), ...preset });
+    setNewEventDialogOpen(true);
+  };
+
+  const newBlockDialogCopy = getNewBlockDialogCopy(newEvent, selectedDate);
 
   // Generate mock tasks from employees data
   useEffect(() => {
@@ -183,35 +290,11 @@ const Calendar: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [view, setView] = useState('month');
-  const [showSmartScheduling, setShowSmartScheduling] = useState(false);
   const [showTimeBlockDialog, setShowTimeBlockDialog] = useState(false);
   
   // Hover popup state
   const [hoverEvent, setHoverEvent] = useState<CalendarEvent | null>(null);
   const [hoverAnchorEl, setHoverAnchorEl] = useState<HTMLElement | null>(null);
-
-  const features = [
-    {
-      icon: <QrCodeScanner sx={{ fontSize: 40, color: '#2196f3' }} />,
-      title: 'Smart Event Tracking',
-      description: 'Scan color-coded event tags to start tasks automatically',
-    },
-    {
-      icon: <ViewInAr sx={{ fontSize: 40, color: '#2196f3' }} />,
-      title: 'AR Event Preview',
-      description: 'View event details and timelines in augmented reality',
-    },
-    {
-      icon: <Timer sx={{ fontSize: 40, color: '#2196f3' }} />,
-      title: 'Time Management',
-      description: 'Track time with countdown timers and instant device syncing',
-    },
-    {
-      icon: <DragIndicator sx={{ fontSize: 40, color: '#2196f3' }} />,
-      title: 'Task Assignment',
-      description: 'Drag-and-drop task management with smart AI suggestions',
-    },
-  ];
 
   const handleNewEvent = () => {
     if (!newEvent.title || !newEvent.startDate) return;
@@ -222,10 +305,10 @@ const Calendar: React.FC = () => {
       description: newEvent.description || '',
       startDate: newEvent.startDate!,
       endDate: newEvent.endDate || newEvent.startDate!,
-      type: newEvent.type as 'meeting' | 'task',
+      type: newEvent.type as CalendarEvent['type'],
       priority: newEvent.priority as 'low' | 'medium' | 'high',
       status: newEvent.status as 'todo' | 'in_progress' | 'completed',
-      progress: newEvent.type === 'task' ? 0 : undefined,
+      progress: newEvent.type === 'meeting' ? undefined : 0,
       projectId: newEvent.projectId,
       attendees: newEvent.type === 'meeting' ? [] : undefined,
       location: newEvent.location,
@@ -233,40 +316,30 @@ const Calendar: React.FC = () => {
       meetingLink: newEvent.meetingLink,
     }]);
     setNewEventDialogOpen(false);
-    setNewEvent({
-      type: 'meeting',
-      priority: 'medium',
-      status: 'todo',
-      isVirtual: false,
-    });
+    setNewEvent(defaultNewEventState());
   };
 
   const getEventsByDate = (date: Date) => {
-    return events.filter(event => 
-      format(new Date(event.startDate), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
+    const key = format(date, 'yyyy-MM-dd');
+    const dayEvents = events.filter(
+      (event) => format(new Date(event.startDate), 'yyyy-MM-dd') === key
     );
-  };
-
-  const getEventsByStatus = (status: 'todo' | 'in_progress' | 'completed') => {
-    const eventsByStatus = events.filter(event => event.status === status);
-    const tasksByStatus = tasks.filter(task => task.status === status);
-    
-    // Convert tasks to calendar events for display
-    const taskEvents: CalendarEvent[] = tasksByStatus.map(task => ({
-      id: `task-${task.id}`,
-      title: task.title,
-      description: task.description,
-      startDate: task.dueDate,
-      endDate: task.dueDate,
-      type: 'task' as const,
-      priority: task.priority,
-      status: task.status,
-      projectId: task.projectId,
-      attendees: task.assignee ? [{ name: task.assignee.name, avatar: task.assignee.avatar }] : undefined,
-      progress: task.progress,
-    }));
-    
-    return [...eventsByStatus, ...taskEvents];
+    const taskEvents: CalendarEvent[] = tasks
+      .filter((task) => task.dueDate === key)
+      .map((task) => ({
+        id: `task-${task.id}`,
+        title: task.title,
+        description: task.description,
+        startDate: task.dueDate,
+        endDate: task.dueDate,
+        type: 'task' as const,
+        priority: task.priority,
+        status: task.status,
+        projectId: task.projectId,
+        attendees: task.assignee ? [{ name: task.assignee.name, avatar: task.assignee.avatar }] : undefined,
+        progress: task.progress,
+      }));
+    return [...dayEvents, ...taskEvents];
   };
 
   const handleEventClick = (event: CalendarEvent) => {
@@ -311,417 +384,981 @@ const Calendar: React.FC = () => {
     }));
   };
 
-  const CustomDay = (props: PickersDayProps<Date> & { hasEvents?: boolean }) => {
-    const { hasEvents, day, ...other } = props;
-    const dayEvents = getEventsByDate(day);
-    
-    return (
-      <Box sx={{ position: 'relative', height: '100%', minHeight: 80 }}>
-        <PickersDay {...other} day={day} />
-        
-        {/* Events for this day */}
-        <Box sx={{ 
-          position: 'absolute', 
-          top: 45, 
-          left: 0, 
-          right: 0, 
-          bottom: 0,
-          px: 0.5,
-          py: 0.5,
-        }}>
-          {dayEvents.slice(0, 3).map((event, index) => (
-            <Box
-              key={event.id}
-              sx={{
-                bgcolor: event.type === 'meeting' ? 'primary.main' : 'secondary.main',
-                color: 'white',
-                fontSize: '0.7rem',
-                px: 0.5,
-                py: 0.25,
-                mb: 0.25,
-                borderRadius: 1,
-                cursor: 'pointer',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontWeight: 500,
-                '&:hover': {
-                  bgcolor: event.type === 'meeting' ? 'primary.dark' : 'secondary.dark',
-                  transform: 'scale(1.02)',
-                  transition: 'all 0.2s ease',
-                },
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEventClick(event);
-              }}
-              onMouseEnter={(e) => handleEventMouseEnter(event, e.currentTarget)}
-              onMouseLeave={handleEventMouseLeave}
-            >
-              {event.title}
-            </Box>
-          ))}
-          {dayEvents.length > 3 && (
-            <Box
-              sx={{
-                bgcolor: 'text.secondary',
-                color: 'white',
-                fontSize: '0.7rem',
-                px: 0.5,
-                py: 0.25,
-                borderRadius: 1,
-                textAlign: 'center',
-                fontWeight: 500,
-              }}
-            >
-              +{dayEvents.length - 3} more
-            </Box>
-          )}
-        </Box>
-      </Box>
+  const eventStatusLabel = (s: CalendarEvent['status']) => {
+    if (s === 'in_progress') return 'In-Progress';
+    if (s === 'completed') return 'Done';
+    return 'To-Do';
+  };
+
+  const eventTypeShort = (e: CalendarEvent) => eventTypeChipLabel(e.type);
+
+  const getBacklogItems = (): BacklogItem[] => {
+    const unassigned = tasks.filter((t) => !t.assignee);
+    if (unassigned.length > 0) {
+      return unassigned.slice(0, 8).map((t) => {
+        const deptMatch = t.title.match(/ - (.+)$/);
+        return {
+          id: t.id,
+          title: t.title.replace(/ - .*$/, ''),
+          duration: '—',
+          dept: deptMatch ? deptMatch[1] : 'General',
+          borderColor:
+            t.priority === 'high' ? '#f59e0b' : t.priority === 'medium' ? '#3b82f6' : '#10b981',
+          sourceTask: t,
+        };
+      });
+    }
+    return SAMPLE_OPERATIONAL_BACKLOG.map((r) => ({ ...r }));
+  };
+
+  const scheduleDayToDatetimeLocal = (day: string, hour: number) => {
+    const h = String(hour).padStart(2, '0');
+    return `${day}T${h}:00`;
+  };
+
+  const handleBacklogItemClick = (item: BacklogItem) => {
+    const day = item.sourceTask?.dueDate || format(selectedDate, 'yyyy-MM-dd');
+    const startDate = scheduleDayToDatetimeLocal(day, 9);
+    const endDate = scheduleDayToDatetimeLocal(day, 10);
+
+    if (item.sourceTask) {
+      const t = item.sourceTask;
+      openNewEventDialog({
+        title: item.title,
+        description: t.description,
+        startDate,
+        endDate,
+        type: 'task',
+        priority: t.priority,
+        status: t.status,
+        projectId: t.projectId,
+      });
+    } else {
+      const blockType: CalendarEvent['type'] =
+        item.dept === 'Production' ? 'production' : 'task';
+      openNewEventDialog({
+        title: item.title,
+        description: `${item.dept} · ${item.duration}`,
+        startDate,
+        endDate,
+        type: blockType,
+        priority: 'medium',
+        status: 'todo',
+      });
+    }
+  };
+
+  const getMergedTimelineEvents = (): CalendarEvent[] => {
+    const taskEvents: CalendarEvent[] = tasks.map((task) => ({
+      id: `task-${task.id}`,
+      title: task.title,
+      description: task.description,
+      startDate: task.dueDate,
+      endDate: task.dueDate,
+      type: 'task' as const,
+      priority: task.priority,
+      status: task.status,
+      projectId: task.projectId,
+      attendees: task.assignee ? [{ name: task.assignee.name, avatar: task.assignee.avatar }] : undefined,
+      progress: task.progress,
+    }));
+    return [...events, ...taskEvents].sort(
+      (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
     );
   };
 
-  const renderCalendarView = () => (
-    <Box>
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        mb: 3,
+  const renderNewOperationalBlockButton = () => (
+    <Button
+      variant="contained"
+      size="medium"
+      startIcon={<Plus size={16} />}
+      onClick={() => openNewEventDialog()}
+      sx={{
+        textTransform: 'none',
+        fontWeight: 600,
+        fontSize: '0.75rem',
+        bgcolor: '#0f172a',
         px: 2,
         py: 1,
-        bgcolor: 'background.default',
-        borderRadius: 3,
-      }}>
-        <IconButton 
-          onClick={() => setSelectedDate(subMonths(selectedDate, 1))}
-          sx={{ 
-            bgcolor: 'action.hover',
-            '&:hover': { bgcolor: 'action.selected' },
-            width: 40,
-            height: 40,
-          }}
-        >
-          <ArrowBack />
-        </IconButton>
-        <Typography variant="h5" fontWeight="medium" color="text.primary">
-          {format(selectedDate, 'MMMM yyyy')}
-        </Typography>
-        <IconButton 
-          onClick={() => setSelectedDate(addMonths(selectedDate, 1))}
-          sx={{ 
-            bgcolor: 'action.hover',
-            '&:hover': { bgcolor: 'action.selected' },
-            width: 40,
-            height: 40,
-          }}
-        >
-          <ArrowForward />
-        </IconButton>
-      </Box>
-      <Box sx={{ px: 2 }}>
-        {/* Temporary simple calendar grid for testing */}
-        <Box sx={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(7, 1fr)', 
-          gap: 1,
-          p: 2,
-          minHeight: '600px',
-          bgcolor: 'background.paper',
-          borderRadius: 2,
-        }}>
-          {/* Day headers */}
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <Box key={day} sx={{ 
-              p: 2, 
-              textAlign: 'center', 
-              fontWeight: 'bold',
-              bgcolor: 'grey.100',
-              borderRadius: 1,
-            }}>
-              {day}
-            </Box>
-          ))}
-          
-          {/* Calendar days */}
-          {Array.from({ length: 35 }, (_, i) => {
-            const dayNumber = i + 1;
-            const currentDate = new Date();
-            const currentMonth = currentDate.getMonth();
-            const currentYear = currentDate.getFullYear();
-            const dayEvents = getEventsByDate(new Date(currentYear, currentMonth, dayNumber));
-            return (
-              <Box key={i} sx={{ 
-                p: 1, 
-                minHeight: 80,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                position: 'relative',
-                bgcolor: 'background.paper',
-              }}>
-                <Typography variant="body2" sx={{ mb: 1 }}>
-                  {dayNumber}
-                </Typography>
-                {dayEvents.slice(0, 3).map((event, index) => (
-                  <Box
-                    key={event.id}
-                    sx={{
-                      bgcolor: event.type === 'meeting' ? 'primary.main' : 'secondary.main',
-                      color: 'white',
-                      fontSize: '0.7rem',
-                      px: 0.5,
-                      py: 0.25,
-                      mb: 0.25,
-                      borderRadius: 1,
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 500,
-                      '&:hover': {
-                        bgcolor: event.type === 'meeting' ? 'primary.dark' : 'secondary.dark',
-                        transform: 'scale(1.02)',
-                        transition: 'all 0.2s ease',
-                      },
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEventClick(event);
-                    }}
-                    onMouseEnter={(e) => handleEventMouseEnter(event, e.currentTarget)}
-                    onMouseLeave={handleEventMouseLeave}
-                  >
-                    {event.title}
-                  </Box>
-                ))}
-                {dayEvents.length > 3 && (
-                  <Box
-                    sx={{
-                      bgcolor: 'text.secondary',
-                      color: 'white',
-                      fontSize: '0.7rem',
-                      px: 0.5,
-                      py: 0.25,
-                      borderRadius: 1,
-                      textAlign: 'center',
-                      fontWeight: 500,
-                    }}
-                  >
-                    +{dayEvents.length - 3} more
-                  </Box>
-                )}
-              </Box>
-            );
-          })}
-        </Box>
-      </Box>
-      <Box sx={{ mt: 4 }}>
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            mb: 2, 
-            px: 2,
-            fontWeight: 600,
-            color: 'text.primary',
-          }}
-        >
-          Events for {format(selectedDate, 'MMMM d, yyyy')}
-        </Typography>
-        <Stack spacing={2} sx={{ px: 2 }}>
-          {getEventsByDate(selectedDate).map(event => (
-            <Card 
-              key={event.id}
-              sx={{ 
-                cursor: 'pointer',
-                borderRadius: 3,
-                boxShadow: 1,
-                '&:hover': { 
-                  boxShadow: 4,
-                  transform: 'translateY(-2px)',
-                  transition: 'all 0.2s ease-in-out',
-                },
-                border: '1px solid',
-                borderColor: 'divider',
-              }}
-              onClick={() => handleEventClick(event)}
-            >
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="subtitle1" fontWeight="medium">{event.title}</Typography>
-                  <Chip
-                    size="small"
-                    label={event.type}
-                    color={event.type === 'meeting' ? 'primary' : 'secondary'}
-                    sx={{ 
-                      borderRadius: 2,
-                      fontWeight: 500,
-                    }}
-                  />
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  {event.description}
-                </Typography>
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Event sx={{ fontSize: 20 }} />
-                    {format(new Date(event.startDate), 'h:mm a')} - 
-                    {format(new Date(event.endDate), 'h:mm a')}
-                  </Typography>
-                  {event.type === 'task' && event.progress !== undefined && (
-                    <Box sx={{ mt: 1 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={event.progress}
-                        sx={{ 
-                          height: 6, 
-                          borderRadius: 3,
-                          bgcolor: 'action.hover',
-                          '& .MuiLinearProgress-bar': {
-                            borderRadius: 3,
-                          },
-                        }}
-                      />
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                        Progress: {event.progress}%
-                      </Typography>
-                    </Box>
-                  )}
-                  {event.type === 'meeting' && event.attendees && (
-                    <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
-                      {event.attendees.map(attendee => (
-                        <Chip
-                          key={attendee.name}
-                          size="small"
-                          avatar={<Avatar sx={{ bgcolor: 'primary.main' }}>{attendee.avatar}</Avatar>}
-                          label={attendee.name}
-                          sx={{ 
-                            borderRadius: 2,
-                            bgcolor: 'action.hover',
-                            color: 'text.primary',
-                          }}
-                        />
-                      ))}
-                    </Box>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
-      </Box>
+        '&:hover': { bgcolor: '#1e293b' },
+      }}
+    >
+      New operational block
+    </Button>
+  );
+
+  const renderSegmentMonthTimeline = () => (
+    <Box
+      sx={{
+        display: 'flex',
+        bgcolor: '#f1f5f9',
+        p: 0.5,
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <Button
+        size="small"
+        onClick={() => setView('month')}
+        variant={view === 'month' ? 'contained' : 'text'}
+        sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 72 }}
+      >
+        Month
+      </Button>
+      <Button
+        size="small"
+        onClick={() => setView('timeline')}
+        variant={view === 'timeline' ? 'contained' : 'text'}
+        sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 72 }}
+      >
+        Timeline
+      </Button>
     </Box>
   );
 
-  const renderKanbanView = () => (
-    <Grid container spacing={3}>
-      {(['todo', 'in_progress', 'completed'] as const).map(status => (
-        <Grid item xs={12} md={4} key={status}>
-          <Paper 
-            sx={{ 
-              p: 3, 
-              height: '100%',
-              borderRadius: 4,
-              bgcolor: status === 'todo' ? 'grey.50' :
-                      status === 'in_progress' ? 'primary.50' :
-                      'success.50',
-            }}
-          >
-            <Typography variant="h6" fontWeight="medium" sx={{ mb: 3 }}>
-              {status === 'todo' ? 'To Do' :
-               status === 'in_progress' ? 'In Progress' :
-               'Completed'}
-              <Typography 
-                component="span" 
-                variant="body2" 
-                color="text.secondary" 
-                sx={{ ml: 1 }}
-              >
-                ({getEventsByStatus(status).length})
-              </Typography>
-            </Typography>
-            <Stack spacing={2}>
-              {getEventsByStatus(status).map(event => (
-                <Card 
-                  key={event.id}
-                  sx={{ 
-                    cursor: 'pointer',
-                    borderRadius: 3,
-                    boxShadow: 1,
-                    '&:hover': { 
-                      boxShadow: 6,
-                      transform: 'translateY(-2px)',
-                      transition: 'all 0.2s ease-in-out',
-                    },
-                  }}
-                  onClick={() => handleEventClick(event)}
-                >
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="subtitle1" fontWeight="medium">{event.title}</Typography>
-                      <Chip
-                        size="small"
-                        label={event.type}
-                        color={event.type === 'meeting' ? 'primary' : 'secondary'}
-                        sx={{ borderRadius: 2 }}
-                      />
-                    </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      {format(new Date(event.startDate), 'MMM d, h:mm a')}
-                    </Typography>
-                    {event.type === 'task' && event.progress !== undefined && (
-                      <Box sx={{ mt: 1 }}>
-                        <LinearProgress
-                          variant="determinate"
-                          value={event.progress}
-                          sx={{ 
-                            height: 6, 
-                            borderRadius: 3,
-                            bgcolor: 'action.hover',
-                          }}
-                        />
-                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                          Progress: {event.progress}%
-                        </Typography>
-                      </Box>
-                    )}
-                    {event.type === 'meeting' && event.attendees && (
-                      <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
-                        {event.attendees.map(attendee => (
-                          <Chip
-                            key={attendee.name}
-                            size="small"
-                            avatar={<Avatar sx={{ bgcolor: 'primary.main' }}>{attendee.avatar}</Avatar>}
-                            label={attendee.name}
-                            sx={{ borderRadius: 2 }}
-                          />
-                        ))}
-                      </Box>
-                    )}
-                    {event.type === 'task' && event.attendees && (
-                      <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
-                        <Chip
-                          size="small"
-                          avatar={<Avatar sx={{ bgcolor: 'secondary.main' }}>{event.attendees[0].avatar}</Avatar>}
-                          label={`Assigned to: ${event.attendees[0].name}`}
-                          sx={{ borderRadius: 2 }}
-                        />
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </Stack>
-          </Paper>
-        </Grid>
-      ))}
+  const renderSegmentDayWeek = () => (
+    <Box
+      sx={{
+        display: 'flex',
+        bgcolor: '#f1f5f9',
+        p: 0.5,
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <Button
+        size="small"
+        onClick={() => setView('day')}
+        variant={view === 'day' ? 'contained' : 'text'}
+        sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 64 }}
+      >
+        Day
+      </Button>
+      <Button
+        size="small"
+        onClick={() => setView('week')}
+        variant={view === 'week' ? 'contained' : 'text'}
+        sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 64 }}
+      >
+        Week
+      </Button>
+    </Box>
+  );
+
+  const renderSegmentWeekMonth = () => (
+    <Box
+      sx={{
+        display: 'flex',
+        bgcolor: '#f1f5f9',
+        p: 0.5,
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <Button
+        size="small"
+        onClick={() => setView('week')}
+        variant={view === 'week' ? 'contained' : 'text'}
+        sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 72 }}
+      >
+        Week
+      </Button>
+      <Button
+        size="small"
+        onClick={() => setView('month')}
+        variant={view === 'month' ? 'contained' : 'text'}
+        sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 72 }}
+      >
+        Month
+      </Button>
+    </Box>
+  );
+
+  const renderOperationalTopBar = (actions: React.ReactNode) => (
+    <Grid item xs={12}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2, sm: 2.5 },
+          borderRadius: 3,
+          border: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { sm: 'center' },
+          justifyContent: 'space-between',
+          gap: 2,
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: '#0f172a', letterSpacing: '-0.02em' }}>
+            Operational schedule
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+            Drag incoming jobs onto the grid timeline to assign dates and sync tracking triggers.
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>{actions}</Box>
+      </Paper>
     </Grid>
   );
 
+  const renderMiniDarkEventCard = (ev: CalendarEvent, opts?: { compact?: boolean }) => (
+    <Box
+      onClick={(e) => {
+        e.stopPropagation();
+        handleEventClick(ev);
+      }}
+      onMouseEnter={(e) => handleEventMouseEnter(ev, e.currentTarget)}
+      onMouseLeave={handleEventMouseLeave}
+      sx={{
+        bgcolor: '#0f172a',
+        color: '#fff',
+        borderRadius: 1,
+        px: opts?.compact ? 0.75 : 1.25,
+        py: opts?.compact ? 0.5 : 1,
+        border: '1px solid',
+        borderColor: '#1e293b',
+        boxShadow: '0 4px 6px -1px rgba(15,23,42,0.35)',
+        cursor: 'pointer',
+        transition: 'transform 120ms ease',
+        '&:hover': { transform: 'scale(1.01)' },
+      }}
+    >
+      <Typography
+        sx={{
+          fontSize: opts?.compact ? '0.625rem' : '0.8rem',
+          fontWeight: 700,
+          lineHeight: 1.25,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: opts?.compact ? 'nowrap' : 'normal',
+        }}
+      >
+        {ev.title}
+      </Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 0.5,
+          mt: 0.35,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box
+          component="span"
+          sx={{
+            fontSize: '0.5rem',
+            fontWeight: 700,
+            px: 0.5,
+            py: 0.125,
+            borderRadius: 0.5,
+            bgcolor: 'rgba(16, 185, 129, 0.18)',
+            color: '#6ee7b7',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            lineHeight: 1.2,
+          }}
+        >
+          {eventStatusLabel(ev.status)}
+        </Box>
+        <Typography
+          component="span"
+          sx={{ fontSize: '0.5rem', fontWeight: 600, color: '#94a3b8', flexShrink: 0 }}
+        >
+          {eventTypeShort(ev)}
+        </Typography>
+      </Box>
+      {!opts?.compact && (
+        <Typography sx={{ fontSize: '0.65rem', color: '#94a3b8', mt: 0.75 }}>
+          {format(new Date(ev.startDate), 'h:mm a')} · {format(new Date(ev.endDate), 'h:mm a')}
+        </Typography>
+      )}
+    </Box>
+  );
+
+  const renderOperationalRightColumn = () => {
+    const backlogItems = getBacklogItems();
+    const selectedDayEvents = getEventsByDate(selectedDate);
+    const rosterCount =
+      selectedDayEvents.reduce((acc, e) => acc + (e.attendees?.length ?? 0), 0) || 4;
+    const estHours = Math.round((12 + selectedDayEvents.length * 2.3) * 10) / 10;
+
+    return (
+      <Grid item xs={12} lg={3}>
+        <Stack spacing={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2.5,
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0f172a' }}>
+              Unassigned backlog
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5, mb: 2 }}>
+              Click a card to schedule it on the selected day and open the operational block form.
+            </Typography>
+            <Stack spacing={1.25}>
+              {backlogItems.map((task) => (
+                <Paper
+                  key={task.id}
+                  component="button"
+                  type="button"
+                  elevation={0}
+                  onClick={() => handleBacklogItemClick(task)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleBacklogItemClick(task);
+                    }
+                  }}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderLeftWidth: 4,
+                    borderLeftColor: task.borderColor,
+                    cursor: 'pointer',
+                    width: '100%',
+                    textAlign: 'left',
+                    bgcolor: '#fff',
+                    transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
+                    '&:hover': {
+                      bgcolor: '#f8fafc',
+                      borderColor: '#cbd5e1',
+                      boxShadow: '0 2px 8px rgba(15, 23, 42, 0.06)',
+                    },
+                    '&:focus-visible': {
+                      outline: '2px solid #0f172a',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#334155', display: 'block' }}>
+                    {task.title}
+                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, alignItems: 'center' }}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                      Dept: {task.dept}
+                    </Typography>
+                    <Chip
+                      label={task.duration}
+                      size="small"
+                      sx={{
+                        height: 22,
+                        fontSize: '0.65rem',
+                        fontWeight: 600,
+                        bgcolor: '#f8fafc',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    />
+                  </Box>
+                </Paper>
+              ))}
+            </Stack>
+          </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2.5,
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                pb: 2,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+              }}
+            >
+              <Box>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontWeight: 700,
+                    color: 'text.secondary',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Focus target
+                </Typography>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0f172a', mt: 0.5 }}>
+                  Metrics for {format(selectedDate, 'MMMM d, yyyy')}
+                </Typography>
+              </Box>
+              <Tooltip title="Generate smart QR token">
+                <IconButton size="small" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                  <QrCode size={18} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <Stack spacing={1.5} sx={{ mt: 2 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  p: 1.5,
+                  bgcolor: '#f8fafc',
+                  borderRadius: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <ClockLucide size={18} color="#64748b" />
+                <Box>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                    Estimated allocation
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {estHours} tracking hours
+                  </Typography>
+                </Box>
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  p: 1.5,
+                  bgcolor: '#f8fafc',
+                  borderRadius: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <UsersLucide size={18} color="#64748b" />
+                <Box>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                    Staff rostered
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {Math.min(rosterCount, 12)} active personnel
+                  </Typography>
+                </Box>
+              </Box>
+            </Stack>
+          </Paper>
+        </Stack>
+      </Grid>
+    );
+  };
+
+  const renderCalendarView = () => {
+    const monthStart = startOfMonth(calendarMonth);
+    const monthEnd = endOfMonth(calendarMonth);
+    const rangeStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+    const rangeEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+    const calendarDays = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
+
+    const stackUnit = 46;
+
+    return (
+      <Grid container spacing={3}>
+        {renderOperationalTopBar(
+          <>
+            {renderSegmentMonthTimeline()}
+            {renderNewOperationalBlockButton()}
+          </>
+        )}
+
+        <Grid item xs={12} lg={9}>
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 2,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+              }}
+            >
+              <Typography variant="overline" sx={{ fontWeight: 700, color: 'text.secondary', letterSpacing: '0.08em' }}>
+                {format(calendarMonth, 'MMMM yyyy')}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.75 }}>
+                <IconButton
+                  size="small"
+                  onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+                  aria-label="Previous month"
+                >
+                  <ChevronLeftLucide size={18} />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))}
+                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+                  aria-label="Next month"
+                >
+                  <ChevronRightLucide size={18} />
+                </IconButton>
+              </Box>
+            </Box>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                textAlign: 'center',
+                py: 1,
+                bgcolor: 'rgba(248, 250, 252, 0.9)',
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+              }}
+            >
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                <Typography key={d} variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  {d}
+                </Typography>
+              ))}
+            </Box>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                gap: '1px',
+                bgcolor: '#e2e8f0',
+              }}
+            >
+              {calendarDays.map((day) => {
+                const inMonth = isSameMonth(day, calendarMonth);
+                const dayEvents = getEventsByDate(day);
+                const visible = dayEvents.slice(0, 2);
+                const more = dayEvents.length - visible.length;
+                const selected = isSameDay(day, selectedDate);
+
+                return (
+                  <Box
+                    key={day.toISOString()}
+                    onClick={() => {
+                      setSelectedDate(day);
+                      if (!isSameMonth(day, calendarMonth)) {
+                        setCalendarMonth(startOfMonth(day));
+                      }
+                    }}
+                    sx={{
+                      position: 'relative',
+                      minHeight: 128,
+                      bgcolor: inMonth ? '#fff' : 'rgba(248, 250, 252, 0.55)',
+                      p: 1,
+                      cursor: inMonth ? 'pointer' : 'default',
+                      transition: 'background-color 120ms ease',
+                      outline: selected ? '2px solid #0f172a' : 'none',
+                      outlineOffset: -2,
+                      zIndex: selected ? 1 : 0,
+                      ...(inMonth && isToday(day)
+                        ? { bgcolor: 'rgba(59, 130, 246, 0.06)' }
+                        : {}),
+                      '&:hover':
+                        inMonth && !selected ? { bgcolor: 'rgba(248, 250, 252, 0.95)' } : {},
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: 'block',
+                        fontWeight: 700,
+                        color: inMonth ? (selected ? '#0f172a' : 'text.secondary') : 'action.disabled',
+                        mb: 0.5,
+                      }}
+                    >
+                      {inMonth ? format(day, 'd') : ''}
+                    </Typography>
+
+                    {inMonth && visible.length > 0 && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          left: 6,
+                          right: 6,
+                          bottom: 6,
+                          top: 26,
+                          pointerEvents: 'none',
+                        }}
+                      >
+                        {visible.map((ev, idx) => (
+                          <Box
+                            key={ev.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEventClick(ev);
+                            }}
+                            onMouseEnter={(e) => handleEventMouseEnter(ev, e.currentTarget)}
+                            onMouseLeave={handleEventMouseLeave}
+                            sx={{
+                              position: 'absolute',
+                              left: 0,
+                              right: 0,
+                              bottom: 4 + idx * stackUnit,
+                              pointerEvents: 'auto',
+                              bgcolor: '#0f172a',
+                              color: '#fff',
+                              borderRadius: 1,
+                              px: 0.75,
+                              py: 0.5,
+                              border: '1px solid',
+                              borderColor: '#1e293b',
+                              boxShadow: '0 4px 6px -1px rgba(15,23,42,0.35)',
+                              cursor: 'pointer',
+                              transition: 'transform 120ms ease',
+                              '&:hover': { transform: 'scale(1.02)' },
+                            }}
+                          >
+                            <Typography
+                              sx={{
+                                fontSize: '0.625rem',
+                                fontWeight: 700,
+                                lineHeight: 1.25,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {ev.title}
+                            </Typography>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 0.5,
+                                mt: 0.25,
+                              }}
+                            >
+                              <Box
+                                component="span"
+                                sx={{
+                                  fontSize: '0.5rem',
+                                  fontWeight: 700,
+                                  px: 0.5,
+                                  py: 0.125,
+                                  borderRadius: 0.5,
+                                  bgcolor: 'rgba(16, 185, 129, 0.18)',
+                                  color: '#6ee7b7',
+                                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                                  lineHeight: 1.2,
+                                }}
+                              >
+                                {eventStatusLabel(ev.status)}
+                              </Box>
+                              <Typography
+                                component="span"
+                                sx={{
+                                  fontSize: '0.5rem',
+                                  fontWeight: 600,
+                                  color: '#94a3b8',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {eventTypeShort(ev)}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        ))}
+                        {more > 0 && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              position: 'absolute',
+                              left: 0,
+                              right: 0,
+                              bottom: 4 + visible.length * stackUnit,
+                              textAlign: 'center',
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              color: 'text.secondary',
+                              bgcolor: 'rgba(241, 245, 249, 0.95)',
+                              borderRadius: 0.5,
+                              py: 0.25,
+                              pointerEvents: 'none',
+                            }}
+                          >
+                            +{more} more
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+          </Paper>
+        </Grid>
+
+        {renderOperationalRightColumn()}
+      </Grid>
+    );
+  };
+
+  const renderDayView = () => {
+    const dayBlocks = getEventsByDate(selectedDate);
+
+    return (
+      <Grid container spacing={3}>
+        {renderOperationalTopBar(
+          <>
+            {renderSegmentDayWeek()}
+            <IconButton
+              size="small"
+              onClick={() => setSelectedDate(addDays(selectedDate, -1))}
+              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+              aria-label="Previous day"
+            >
+              <ChevronLeftLucide size={18} />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={() => setSelectedDate(addDays(selectedDate, 1))}
+              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+              aria-label="Next day"
+            >
+              <ChevronRightLucide size={18} />
+            </IconButton>
+            <Button size="small" variant="outlined" onClick={() => setSelectedDate(new Date())} sx={{ textTransform: 'none', fontWeight: 600 }}>
+              Today
+            </Button>
+            {renderNewOperationalBlockButton()}
+          </>
+        )}
+
+        <Grid item xs={12} lg={9}>
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              sx={{
+                px: 2,
+                py: 2,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 1,
+              }}
+            >
+              <Typography variant="overline" sx={{ fontWeight: 700, color: 'text.secondary', letterSpacing: '0.08em' }}>
+                Day runway
+              </Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+              </Typography>
+            </Box>
+            <Stack spacing={1.25} sx={{ p: 2 }}>
+              {dayBlocks.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No operational blocks on this date. Create one or switch days.
+                </Typography>
+              ) : (
+                dayBlocks.map((ev) => (
+                  <Box key={ev.id}>{renderMiniDarkEventCard(ev)}</Box>
+                ))
+              )}
+            </Stack>
+          </Paper>
+        </Grid>
+
+        {renderOperationalRightColumn()}
+      </Grid>
+    );
+  };
+
+  const renderWeekView = () => {
+    const weekStart = weekAnchor;
+    const weekEnd = endOfWeek(weekAnchor, { weekStartsOn: 0 });
+    const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
+    return (
+      <Grid container spacing={3}>
+        {renderOperationalTopBar(
+          <>
+            {renderSegmentWeekMonth()}
+            <IconButton
+              size="small"
+              onClick={() => setWeekAnchor(addDays(weekAnchor, -7))}
+              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+              aria-label="Previous week"
+            >
+              <ChevronLeftLucide size={18} />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={() => setWeekAnchor(addDays(weekAnchor, 7))}
+              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+              aria-label="Next week"
+            >
+              <ChevronRightLucide size={18} />
+            </IconButton>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', px: 0.5 }}>
+              {format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
+            </Typography>
+            {renderNewOperationalBlockButton()}
+          </>
+        )}
+
+        <Grid item xs={12} lg={9}>
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(7, minmax(0, 1fr))' },
+                gap: '1px',
+                bgcolor: '#e2e8f0',
+                minHeight: { sm: 320 },
+              }}
+            >
+              {days.map((day) => {
+                const colEvents = getEventsByDate(day);
+                const sel = isSameDay(day, selectedDate);
+                return (
+                  <Box
+                    key={day.toISOString()}
+                    sx={{
+                      bgcolor: '#fff',
+                      p: 1.25,
+                      minHeight: { xs: 'auto', sm: 300 },
+                      outline: sel ? '2px solid #0f172a' : 'none',
+                      outlineOffset: -2,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      onClick={() => {
+                        setSelectedDate(day);
+                        setWeekAnchor(startOfWeek(day, { weekStartsOn: 0 }));
+                      }}
+                      sx={{
+                        fontWeight: 700,
+                        color: isToday(day) ? 'primary.main' : '#334155',
+                        cursor: 'pointer',
+                        display: 'block',
+                        mb: 1,
+                      }}
+                    >
+                      {format(day, 'EEE d')}
+                    </Typography>
+                    <Stack spacing={1}>
+                      {colEvents.map((ev) => (
+                        <Box key={ev.id}>{renderMiniDarkEventCard(ev, { compact: true })}</Box>
+                      ))}
+                    </Stack>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Paper>
+        </Grid>
+
+        {renderOperationalRightColumn()}
+      </Grid>
+    );
+  };
+
+  const renderTimelineView = () => {
+    const items = getMergedTimelineEvents();
+
+    return (
+      <Grid container spacing={3}>
+        {renderOperationalTopBar(
+          <>
+            {renderSegmentMonthTimeline()}
+            {renderNewOperationalBlockButton()}
+          </>
+        )}
+
+        <Grid item xs={12} lg={9}>
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+            }}
+          >
+            <Box sx={{ px: 2, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="overline" sx={{ fontWeight: 700, color: 'text.secondary', letterSpacing: '0.08em' }}>
+                Chronological runway
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+                All meetings and due tasks merged on one timeline axis.
+              </Typography>
+            </Box>
+            <Stack spacing={2} sx={{ p: 2, maxHeight: { xs: 'none', md: '70vh' }, overflowY: 'auto' }}>
+              {items.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No operational blocks yet.
+                </Typography>
+              ) : (
+                items.map((ev) => (
+                  <Box key={ev.id} sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
+                    <Box sx={{ width: 88, flexShrink: 0, pt: 0.35 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#0f172a' }}>
+                        {format(new Date(ev.startDate), 'MMM d')}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                        {format(new Date(ev.startDate), 'yyyy')}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>{renderMiniDarkEventCard(ev)}</Box>
+                  </Box>
+                ))
+              )}
+            </Stack>
+          </Paper>
+        </Grid>
+
+        {renderOperationalRightColumn()}
+      </Grid>
+    );
+  };
+
   return (
     <DashboardLayout>
-      <LocalizationProvider dateAdapter={AdapterDateFns}>
         <Box
           sx={{
             background: 'linear-gradient(135deg, #2196f3 0%, #e91e63 100%)',
@@ -730,7 +1367,7 @@ const Calendar: React.FC = () => {
           }}
         >
           <Container maxWidth="xl">
-            <Box sx={{ color: 'white', mb: 6 }}>
+            <Box sx={{ color: 'white', mb: 3 }}>
               <Typography 
                 variant="h2" 
                 component="h1" 
@@ -751,39 +1388,6 @@ const Calendar: React.FC = () => {
                 Manage your schedule with advanced tracking and collaboration tools
               </Typography>
             </Box>
-
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-              {features.map((feature, index) => (
-                <Grid item xs={12} sm={6} md={3} key={index}>
-                  <Card
-                    sx={{
-                      height: '100%',
-                      borderRadius: 4,
-                      boxShadow: 2,
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 4,
-                      },
-                    }}
-                  >
-                    <CardContent>
-                      <Stack spacing={2} alignItems="center" textAlign="center">
-                        <Box sx={{ transform: 'scale(1.2)', mb: 1 }}>
-                          {feature.icon}
-                        </Box>
-                        <Typography variant="h6" fontWeight="medium">
-                          {feature.title}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {feature.description}
-                        </Typography>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
           </Container>
         </Box>
 
@@ -839,7 +1443,7 @@ const Calendar: React.FC = () => {
               <Button
                 variant="contained"
                 startIcon={<Add />}
-                onClick={() => setNewEventDialogOpen(true)}
+                onClick={() => openNewEventDialog()}
                 sx={{
                   borderRadius: 2,
                   textTransform: 'none',
@@ -858,253 +1462,305 @@ const Calendar: React.FC = () => {
 
             {view === 'month' ? (
               renderCalendarView()
-            ) : view === 'timeline' ? (
-              <Timeline>
-                {events.map((event) => (
-                  <TimelineItem key={event.id}>
-                    <TimelineSeparator>
-                      <TimelineDot />
-                      <TimelineConnector />
-                    </TimelineSeparator>
-                    <TimelineContent>
-                      {event.title}
-                    </TimelineContent>
-                  </TimelineItem>
-                ))}
-              </Timeline>
+            ) : view === 'day' ? (
+              renderDayView()
+            ) : view === 'week' ? (
+              renderWeekView()
             ) : (
-              renderKanbanView()
+              renderTimelineView()
             )}
           </Paper>
         </Container>
 
-        {/* New Event Dialog */}
+        {/* New operational block */}
             <Dialog
               open={newEventDialogOpen}
               onClose={() => setNewEventDialogOpen(false)}
               maxWidth="sm"
               fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 4,
-              background: 'linear-gradient(145deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              boxShadow: '0 24px 48px rgba(0,0,0,0.15)',
-              overflow: 'hidden'
-            }
-          }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-            }
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Box sx={{ 
-                p: 1.5, 
-                borderRadius: 2, 
-                background: 'rgba(255,255,255,0.2)',
-                backdropFilter: 'blur(10px)'
-              }}>
-                <VideocamIcon sx={{ fontSize: 28 }} />
+          <DialogTitle>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75 }}>
+              <Box
+                sx={{
+                  height: 40,
+                  width: 40,
+                  borderRadius: 2,
+                  bgcolor: 'rgba(255,255,255,0.1)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                }}
+              >
+                <CalendarLucideIcon size={20} strokeWidth={2} />
               </Box>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  Create New Event
+              <Box sx={{ minWidth: 0 }}>
+                <Typography
+                  sx={{
+                    fontWeight: 700,
+                    fontSize: '1.125rem',
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.25,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                  }}
+                >
+                  {newBlockDialogCopy.heading}
                 </Typography>
-                <Typography variant="subtitle1" sx={{ opacity: 0.9, fontWeight: 500 }}>
-                  Schedule meetings and tasks
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(191, 219, 254, 0.95)', mt: 0.25, fontWeight: 500 }}>
+                  {newBlockDialogCopy.subtitle}
                 </Typography>
               </Box>
             </Box>
           </DialogTitle>
               <DialogContent>
-                <Stack spacing={3} sx={{ mt: 2 }}>
-                  <TextField
-                    label="Title"
-                    value={newEvent.title || ''}
-                    onChange={(e) => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
-                    fullWidth
-                    required
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-                  />
-                  <TextField
-                    label="Description"
-                    value={newEvent.description || ''}
-                    onChange={(e) => setNewEvent(prev => ({ ...prev, description: e.target.value }))}
-                    multiline
-                    rows={3}
-                    fullWidth
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-                  />
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
+                <Stack spacing={2.5}>
+                  <Box>
+                    <Typography sx={popupFormLabelSx}>Block Title *</Typography>
+                    <TextField
+                      hiddenLabel
+                      required
+                      placeholder="e.g., Bulk T-Shirt Print Run / Setup Signage"
+                      value={newEvent.title || ''}
+                      onChange={(e) => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
+                      fullWidth
+                    />
+                  </Box>
+                  <Box>
+                    <Typography sx={popupFormLabelSx}>Description</Typography>
+                    <TextField
+                      hiddenLabel
+                      placeholder="Provide operational details or meeting agenda items..."
+                      value={newEvent.description || ''}
+                      onChange={(e) => setNewEvent(prev => ({ ...prev, description: e.target.value }))}
+                      multiline
+                      rows={3}
+                      fullWidth
+                    />
+                  </Box>
+
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                      gap: 2,
+                      width: '100%',
+                    }}
+                  >
+                    <Box>
+                      <Typography sx={popupFormLabelSx}>Start Date &amp; Time</Typography>
                       <TextField
-                        label="Start Date"
+                        hiddenLabel
                         type="datetime-local"
                         value={newEvent.startDate || ''}
                         onChange={(e) => setNewEvent(prev => ({ ...prev, startDate: e.target.value }))}
                         fullWidth
-                        InputLabelProps={{ shrink: true }}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                       />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
+                    </Box>
+                    <Box>
+                      <Typography sx={popupFormLabelSx}>End Date &amp; Time</Typography>
                       <TextField
-                        label="End Date"
+                        hiddenLabel
                         type="datetime-local"
                         value={newEvent.endDate || ''}
                         onChange={(e) => setNewEvent(prev => ({ ...prev, endDate: e.target.value }))}
                         fullWidth
-                        InputLabelProps={{ shrink: true }}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                       />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
+                    </Box>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                      gap: 2,
+                      width: '100%',
+                    }}
+                  >
+                    <Box>
+                      <Typography sx={popupFormLabelSx}>Block Context Type</Typography>
                       <FormControl fullWidth>
-                        <InputLabel>Type</InputLabel>
                         <Select
+                          displayEmpty
                           value={newEvent.type || 'meeting'}
-                          onChange={(e) => setNewEvent(prev => ({ ...prev, type: e.target.value as 'meeting' | 'task' }))}
-                          label="Type"
-                      sx={{ borderRadius: 2 }}
+                          onChange={(e) => setNewEvent(prev => ({ ...prev, type: e.target.value as CalendarEvent['type'] }))}
                         >
-                          <MenuItem value="meeting">Meeting</MenuItem>
-                          <MenuItem value="task">Task</MenuItem>
+                          <MenuItem value="meeting">Meeting / Sync</MenuItem>
+                          <MenuItem value="task">Task Allocation</MenuItem>
+                          <MenuItem value="production">Production Run</MenuItem>
                         </Select>
                       </FormControl>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
+                    </Box>
+                    <Box>
+                      <Typography sx={popupFormLabelSx}>Priority Level</Typography>
                       <FormControl fullWidth>
-                        <InputLabel>Priority</InputLabel>
                         <Select
                           value={newEvent.priority || 'medium'}
                           onChange={(e) => setNewEvent(prev => ({ ...prev, priority: e.target.value as 'low' | 'medium' | 'high' }))}
-                          label="Priority"
-                      sx={{ borderRadius: 2 }}
                         >
-                          <MenuItem value="low">Low</MenuItem>
-                          <MenuItem value="medium">Medium</MenuItem>
-                          <MenuItem value="high">High</MenuItem>
+                          <MenuItem value="low">Low Priority</MenuItem>
+                          <MenuItem value="medium">Medium Priority</MenuItem>
+                          <MenuItem value="high">High Priority</MenuItem>
                         </Select>
                       </FormControl>
-                    </Grid>
-                  </Grid>
+                    </Box>
+                  </Box>
 
-              {/* Meeting-specific fields */}
               {newEvent.type === 'meeting' && (
-                <Box>
-                  <Typography variant="subtitle1" sx={{ mb: 2 }}>Meeting Details</Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <FormControl fullWidth>
-                        <InputLabel>Meeting Type</InputLabel>
-                        <Select
-                          value={newEvent.isVirtual ? 'virtual' : 'in-person'}
-                          onChange={(e) => setNewEvent(prev => ({ ...prev, isVirtual: e.target.value === 'virtual' }))}
-                          label="Meeting Type"
-                          sx={{ borderRadius: 2 }}
-                        >
-                          <MenuItem value="in-person">In-Person</MenuItem>
-                          <MenuItem value="virtual">Virtual</MenuItem>
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        label="Location"
-                        value={newEvent.location || ''}
-                        onChange={(e) => setNewEvent(prev => ({ ...prev, location: e.target.value }))}
-                        fullWidth
-                        placeholder={newEvent.isVirtual ? "Enter meeting link" : "Enter location"}
-                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        label="Add Attendees"
-                        placeholder="Enter email addresses separated by commas"
-                        fullWidth
-                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-                        onChange={(e) => {
-                          const attendees = e.target.value.split(',').map(email => ({
+                <Box sx={popupNestedPanelSx}>
+                  <Typography
+                    sx={{
+                      fontSize: '0.625rem',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.12em',
+                      color: '#94a3b8',
+                      display: 'block',
+                      mb: 2,
+                    }}
+                  >
+                    Meeting specifics
+                  </Typography>
+                  <Stack spacing={2}>
+                    <Box>
+                      <Typography sx={popupFormLabelSx}>Presence</Typography>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: 1,
+                        bgcolor: 'rgba(226, 232, 240, 0.5)',
+                        p: 0.5,
+                        borderRadius: roundedLg,
+                      }}
+                    >
+                      {(['In-Person', 'Virtual'] as const).map((mode) => {
+                        const isVirtualMode = mode === 'Virtual';
+                        const selected = Boolean(newEvent.isVirtual) === isVirtualMode;
+                        return (
+                          <Button
+                            key={mode}
+                            type="button"
+                            disableElevation
+                            onClick={() =>
+                              setNewEvent((prev) => ({ ...prev, isVirtual: isVirtualMode }))
+                            }
+                            sx={{
+                              py: 0.75,
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              borderRadius: 1.5,
+                              textTransform: 'none',
+                              minWidth: 0,
+                              ...(selected
+                                ? {
+                                    bgcolor: '#fff',
+                                    color: '#0f172a',
+                                    boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
+                                    '&:hover': { bgcolor: '#fff' },
+                                  }
+                                : {
+                                    color: '#64748b',
+                                    bgcolor: 'transparent',
+                                    '&:hover': { bgcolor: 'transparent', color: '#0f172a' },
+                                  }),
+                            }}
+                          >
+                            {mode}
+                          </Button>
+                        );
+                      })}
+                    </Box>
+                    </Box>
+
+                    <Box>
+                      <Typography sx={popupFormLabelSx}>
+                        {newEvent.isVirtual ? 'Meeting link' : 'Location'}
+                      </Typography>
+                    <TextField
+                      hiddenLabel
+                      placeholder={
+                        newEvent.isVirtual
+                          ? 'Paste Meet, Teams, or Zoom link'
+                          : 'Enter boardroom or facility location'
+                      }
+                      value={
+                        newEvent.isVirtual
+                          ? newEvent.meetingLink || ''
+                          : newEvent.location || ''
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setNewEvent((prev) =>
+                          prev.isVirtual
+                            ? { ...prev, meetingLink: v }
+                            : { ...prev, location: v }
+                        );
+                      }}
+                      fullWidth
+                      sx={meetingPanelFieldSx}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start" sx={{ ml: 0.5 }}>
+                            <MapPin size={16} color="#94a3b8" strokeWidth={2} />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                    </Box>
+
+                    <Box>
+                      <Typography sx={popupFormLabelSx}>Attendees</Typography>
+                    <TextField
+                      hiddenLabel
+                      placeholder="Invite team members by name or email..."
+                      fullWidth
+                      value={(newEvent.attendees ?? []).map((a) => a.name).join(', ')}
+                      sx={meetingPanelFieldSx}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start" sx={{ ml: 0.5 }}>
+                            <Users size={16} color="#94a3b8" strokeWidth={2} />
+                          </InputAdornment>
+                        ),
+                      }}
+                      onChange={(e) => {
+                        const attendees = e.target.value
+                          .split(',')
+                          .map((email) => ({
                             name: email.trim(),
-                            avatar: email.trim().charAt(0).toUpperCase()
-                          }));
-                          setNewEvent(prev => ({ ...prev, attendees }));
-                        }}
-                      />
-                    </Grid>
-                  </Grid>
+                            avatar: email.trim().charAt(0).toUpperCase(),
+                          }))
+                          .filter((a) => a.name.length > 0);
+                        setNewEvent((prev) => ({ ...prev, attendees }));
+                      }}
+                    />
+                    </Box>
+                  </Stack>
                 </Box>
               )}
                 </Stack>
               </DialogContent>
-          <DialogActions sx={{ 
-            p: 4, 
-            pt: 2,
-            background: 'transparent',
-            borderTop: '1px solid rgba(0,0,0,0.05)',
-            gap: 2,
-            flexDirection: 'column',
-            alignItems: 'stretch'
-          }}>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-              <Button 
-                onClick={() => setNewEventDialogOpen(false)}
-                variant="outlined"
-                size="large"
-                sx={{
-                  borderRadius: 3,
-                  px: 4,
-                  py: 1.5,
-                  borderColor: 'rgba(0,0,0,0.2)',
-                  color: 'text.secondary',
-                  '&:hover': {
-                    borderColor: 'rgba(0,0,0,0.4)',
-                    background: 'rgba(0,0,0,0.02)'
-                  }
-                }}
-              >
+          <DialogActions>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', alignItems: 'center', width: '100%', flexWrap: 'wrap' }}>
+              <Button onClick={() => setNewEventDialogOpen(false)} variant="text">
                 Cancel
               </Button>
               <Button
                 variant="contained"
+                className="popup-submit-dark"
+                disableElevation
                 onClick={handleNewEvent}
                 disabled={!newEvent.title || !newEvent.startDate}
-                size="large"
-                sx={{
-                  borderRadius: 3,
-                  px: 4,
-                  py: 1.5,
-                  fontWeight: 700,
-                  textTransform: 'none',
-                  background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                  boxShadow: '0 8px 24px rgba(102,126,234,0.3)',
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #764ba2, #667eea)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 12px 32px rgba(102,126,234,0.4)'
-                  },
-                  '&:disabled': {
-                    background: 'linear-gradient(135deg, rgba(102,126,234,0.3), rgba(118,75,162,0.3))',
-                    color: 'rgba(255,255,255,0.7)'
-                  }
-                }}
               >
-                Create Event
+                Create Block
               </Button>
             </Box>
           </DialogActions>
@@ -1119,58 +1775,84 @@ const Calendar: React.FC = () => {
               }}
               maxWidth="sm"
               fullWidth
-          PaperProps={{
-            sx: { borderRadius: 3 }
-          }}
             >
               {selectedEvent && (
                 <>
-                  <DialogTitle>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="h6" fontWeight="medium">
-                      {selectedEvent.title}
-                  </Typography>
+                  <DialogTitle sx={{ pb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="caption" sx={{ opacity: 0.88, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', mb: 0.75 }}>
+                          Block detail
+                        </Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
+                          {selectedEvent.title}
+                        </Typography>
+                      </Box>
                       <Chip
                         size="small"
-                        label={selectedEvent.type}
-                        color={selectedEvent.type === 'meeting' ? 'primary' : 'secondary'}
-                    sx={{ borderRadius: 2 }}
+                        label={eventTypeChipLabel(selectedEvent.type)}
+                        sx={{
+                          borderRadius: 1,
+                          fontWeight: 700,
+                          fontSize: '0.7rem',
+                          bgcolor: 'rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.35)',
+                          '& .MuiChip-label': { px: 1 },
+                        }}
                       />
                     </Box>
                   </DialogTitle>
                   <DialogContent>
-                    <Stack spacing={3} sx={{ mt: 2 }}>
-                  <Typography variant="body1" color="text.secondary">
-                        {selectedEvent.description}
+                    <Stack spacing={2.5}>
+                  <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.65 }}>
+                        {selectedEvent.description || 'No description provided.'}
                       </Typography>
-                      <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                          Time
+                      <Divider sx={{ borderColor: '#e2e8f0' }} />
+                      <Box
+                        sx={{
+                          p: 2,
+                          borderRadius: 2,
+                          bgcolor: '#fff',
+                          border: '1px solid #e2e8f0',
+                          boxShadow: '0 1px 2px rgba(15,23,42,0.05)',
+                        }}
+                      >
+                    <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#64748b', display: 'block', mb: 1 }}>
+                          Schedule
                         </Typography>
-                    <Typography variant="body1">
-                          {format(new Date(selectedEvent.startDate), 'MMM d, yyyy h:mm a')} - 
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#0f172a' }}>
+                          {format(new Date(selectedEvent.startDate), 'MMM d, yyyy · h:mm a')} —{' '}
                           {format(new Date(selectedEvent.endDate), 'h:mm a')}
                         </Typography>
                       </Box>
                   {selectedEvent.type === 'meeting' && (
                     <>
-                        <Box>
-                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        <Box
+                          sx={{
+                            p: 2,
+                            borderRadius: 2,
+                            bgcolor: '#fff',
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                        <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#64748b', display: 'block', mb: 1 }}>
                           Location
                             </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <LocationOn sx={{ color: 'text.secondary' }} />
-                          <Typography variant="body1">
-                            {selectedEvent.isVirtual ? 'Virtual Meeting' : selectedEvent.location}
+                          <LocationOn sx={{ fontSize: 20, color: '#64748b' }} />
+                          <Typography variant="body2" sx={{ fontWeight: 500, color: '#334155' }}>
+                            {selectedEvent.isVirtual ? 'Virtual Meeting' : selectedEvent.location || '—'}
                             </Typography>
                           </Box>
                         {selectedEvent.isVirtual && selectedEvent.meetingLink && (
                           <Button
-                            variant="outlined"
+                            variant="contained"
+                            size="small"
                             startIcon={<VideoCall />}
                             href={selectedEvent.meetingLink}
                             target="_blank"
-                            sx={{ mt: 1 }}
+                            sx={{ mt: 2, py: 1 }}
                           >
                             Join Meeting
                           </Button>
@@ -1178,16 +1860,17 @@ const Calendar: React.FC = () => {
                         </Box>
                       {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
                         <Box>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#64748b', display: 'block', mb: 1 }}>
                             Attendees
                           </Typography>
                           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                             {selectedEvent.attendees.map(attendee => (
                               <Chip
                                 key={attendee.name}
-                                avatar={<Avatar sx={{ bgcolor: 'primary.main' }}>{attendee.avatar}</Avatar>}
+                                size="small"
+                                avatar={renderPersonAvatar(attendee, { bgcolor: 'primary.main', width: 28, height: 28 })}
                                 label={attendee.name}
-                                sx={{ borderRadius: 2 }}
+                                sx={{ borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: '#fff', fontWeight: 500 }}
                               />
                             ))}
                           </Box>
@@ -1195,14 +1878,14 @@ const Calendar: React.FC = () => {
                       )}
                     </>
                   )}
-                  {selectedEvent.type === 'task' && (
+                  {isTaskLike(selectedEvent.type) && (
                     <>
-                      <Box>
+                      <Box sx={{ p: 2, borderRadius: 2, bgcolor: '#fff', border: '1px solid #e2e8f0' }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                          <Typography variant="subtitle2" color="text.secondary">
+                          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#64748b' }}>
                             Progress
                           </Typography>
-                          <Typography variant="body2">
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a' }}>
                             {selectedEvent.progress}%
                           </Typography>
                         </Box>
@@ -1210,22 +1893,26 @@ const Calendar: React.FC = () => {
                           variant="determinate"
                           value={selectedEvent.progress}
                           sx={{ 
-                            height: 6, 
-                            borderRadius: 3,
-                            bgcolor: 'action.hover',
+                            height: 8, 
+                            borderRadius: 99,
+                            bgcolor: '#e2e8f0',
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 99,
+                              background: 'linear-gradient(90deg, #2196f3, #e91e63)',
+                            },
                           }}
                         />
                       </Box>
                       {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
                         <Box>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#64748b', display: 'block', mb: 1 }}>
                             Assigned To
                           </Typography>
                           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                             <Chip
-                              avatar={<Avatar sx={{ bgcolor: 'secondary.main' }}>{selectedEvent.attendees[0].avatar}</Avatar>}
+                              avatar={renderPersonAvatar(selectedEvent.attendees[0], { bgcolor: 'secondary.main' })}
                               label={selectedEvent.attendees[0].name}
-                              sx={{ borderRadius: 2 }}
+                              sx={{ borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: '#fff', fontWeight: 500 }}
                             />
                           </Box>
                         </Box>
@@ -1234,33 +1921,24 @@ const Calendar: React.FC = () => {
                   )}
                     </Stack>
                   </DialogContent>
-              <DialogActions sx={{ p: 3 }}>
+              <DialogActions>
                     <Button 
                       onClick={() => {
                         setEventDialogOpen(false);
                         setSelectedEvent(null);
                       }}
-                  sx={{ 
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    px: 3,
-                      }}
+                  variant="outlined"
                     >
                       Close
                     </Button>
-                    {selectedEvent.type === 'task' && (
+                    {isTaskLike(selectedEvent.type) && (
                       <Button
                         variant="contained"
-                        color={selectedEvent.status === 'completed' ? 'success' : 'primary'}
+                        className={selectedEvent.status === 'completed' ? 'popup-submit-dark' : undefined}
                         onClick={() => handleStatusChange(
                           selectedEvent,
                           selectedEvent.status === 'completed' ? 'todo' : 'completed'
                         )}
-                    sx={{ 
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      px: 3,
-                    }}
                       >
                         {selectedEvent.status === 'completed' ? 'Reopen' : 'Mark Complete'}
                       </Button>
@@ -1270,15 +1948,9 @@ const Calendar: React.FC = () => {
                     variant="contained"
                     startIcon={<VideoCall />}
                     onClick={() => {
-                      // Handle joining meeting
                       if (selectedEvent.meetingLink) {
                         window.open(selectedEvent.meetingLink, '_blank');
                       }
-                    }}
-                    sx={{ 
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      px: 3,
                     }}
                   >
                     Join Meeting
@@ -1290,107 +1962,119 @@ const Calendar: React.FC = () => {
             </Dialog>
 
         {/* Time Block Dialog */}
-        <Dialog open={showTimeBlockDialog} onClose={() => setShowTimeBlockDialog(false)}>
-          <DialogTitle>Create Time Block</DialogTitle>
+        <Dialog
+          open={showTimeBlockDialog}
+          onClose={() => setShowTimeBlockDialog(false)}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em', fontSize: '1.05rem' }}>
+              Time block
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.9, display: 'block', mt: 0.5 }}>
+              Quick placeholder — wire to scheduling when ready
+            </Typography>
+          </DialogTitle>
           <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-              <TextField label="Block Title" fullWidth />
-              <TextField label="Duration" select fullWidth defaultValue="1h">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField label="Block title" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#fff' } }} />
+              <TextField label="Duration" select fullWidth defaultValue="1h" sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#fff' } }}>
                 <MenuItem value="30m">30 minutes</MenuItem>
                 <MenuItem value="1h">1 hour</MenuItem>
                 <MenuItem value="2h">2 hours</MenuItem>
                 <MenuItem value="4h">4 hours</MenuItem>
               </TextField>
-              <TextField label="Color" select fullWidth defaultValue="#4CAF50">
+              <TextField label="Color" select fullWidth defaultValue="#2196F3" sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#fff' } }}>
                 <MenuItem value="#4CAF50">Green</MenuItem>
                 <MenuItem value="#2196F3">Blue</MenuItem>
                 <MenuItem value="#FF9800">Orange</MenuItem>
                 <MenuItem value="#F44336">Red</MenuItem>
               </TextField>
               <FormControlLabel
-                control={<Switch />}
-                label="Recurring"
+                control={<Switch size="small" />}
+                label={<Typography variant="body2" sx={{ color: '#475569' }}>Recurring</Typography>}
               />
           </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setShowTimeBlockDialog(false)}>Cancel</Button>
+            <Button variant="outlined" onClick={() => setShowTimeBlockDialog(false)}>
+              Cancel
+            </Button>
             <Button variant="contained" onClick={() => setShowTimeBlockDialog(false)}>
               Create
             </Button>
           </DialogActions>
         </Dialog>
 
-        {/* Event Hover Popup */}
-        <Popover
-          open={Boolean(hoverEvent)}
+        {/* Event hover preview — Popper avoids Modal scroll-lock (page jumping to top) */}
+        <Popper
+          open={Boolean(hoverEvent && hoverAnchorEl)}
           anchorEl={hoverAnchorEl}
-          onClose={handleEventMouseLeave}
-          anchorOrigin={{
-            vertical: 'bottom',
-            horizontal: 'center',
-          }}
-          transformOrigin={{
-            vertical: 'top',
-            horizontal: 'center',
-          }}
+          placement="bottom"
+          modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
           sx={{
+            zIndex: (theme) => theme.zIndex.tooltip,
             pointerEvents: 'none',
-            zIndex: 9999,
-            '& .MuiPopover-paper': {
-              pointerEvents: 'auto',
-              borderRadius: 2,
-              boxShadow: 3,
-              maxWidth: 300,
-              zIndex: 9999,
-            },
-          }}
-          slotProps={{
-            paper: {
-              sx: {
-                zIndex: 9999,
-              }
-            }
           }}
         >
           {hoverEvent && (
-            <Box sx={{ p: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2" fontWeight="medium" sx={{ color: 'text.primary' }}>
+            <PopupHoverCard>
+              <Box sx={{ p: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1.35 }}>
                   {hoverEvent.title}
                 </Typography>
                 <Chip
                   size="small"
-                  label={hoverEvent.type}
-                  color={hoverEvent.type === 'meeting' ? 'primary' : 'secondary'}
-                  sx={{ borderRadius: 1, fontSize: '0.7rem' }}
+                  label={eventTypeChipLabel(hoverEvent.type)}
+                  sx={{
+                    borderRadius: 1,
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    height: 22,
+                    bgcolor: '#f1f5f9',
+                    color: '#475569',
+                    border: '1px solid #e2e8f0',
+                  }}
                 />
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                {hoverEvent.description}
+              <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mb: 1.25, lineHeight: 1.5 }}>
+                {hoverEvent.description || 'No description'}
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Event sx={{ fontSize: 16, color: 'text.secondary' }} />
-                <Typography variant="caption" color="text.secondary">
-                  {format(new Date(hoverEvent.startDate), 'h:mm a')} - 
-                  {format(new Date(hoverEvent.endDate), 'h:mm a')}
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  mb: 1,
+                  py: 1,
+                  px: 1.25,
+                  borderRadius: 1.5,
+                  bgcolor: '#f8fafc',
+                  border: '1px solid #f1f5f9',
+                }}
+              >
+                <AccessTime sx={{ fontSize: 18, color: '#64748b' }} />
+                <Typography variant="caption" sx={{ fontWeight: 600, color: '#334155' }}>
+                  {format(new Date(hoverEvent.startDate), 'h:mm a')} — {format(new Date(hoverEvent.endDate), 'h:mm a')}
                 </Typography>
               </Box>
               {hoverEvent.type === 'meeting' && hoverEvent.location && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <LocationOn sx={{ fontSize: 16, color: 'text.secondary' }} />
-                  <Typography variant="caption" color="text.secondary">
+                  <LocationOn sx={{ fontSize: 18, color: '#64748b' }} />
+                  <Typography variant="caption" sx={{ color: '#475569', fontWeight: 500 }}>
                     {hoverEvent.isVirtual ? 'Virtual Meeting' : hoverEvent.location}
                   </Typography>
                 </Box>
               )}
-              {hoverEvent.type === 'task' && hoverEvent.progress !== undefined && (
+              {isTaskLike(hoverEvent.type) && hoverEvent.progress !== undefined && (
                 <Box sx={{ mt: 1 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary">
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#64748b' }}>
                       Progress
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#0f172a' }}>
                       {hoverEvent.progress}%
                     </Typography>
                   </Box>
@@ -1398,16 +2082,20 @@ const Calendar: React.FC = () => {
                     variant="determinate"
                     value={hoverEvent.progress}
                     sx={{ 
-                      height: 4, 
-                      borderRadius: 2,
-                      bgcolor: 'action.hover',
+                      height: 6, 
+                      borderRadius: 99,
+                      bgcolor: '#e2e8f0',
+                      '& .MuiLinearProgress-bar': {
+                        borderRadius: 99,
+                        background: 'linear-gradient(90deg, #2196f3, #e91e63)',
+                      },
                     }}
                   />
                 </Box>
               )}
               {hoverEvent.type === 'meeting' && hoverEvent.attendees && hoverEvent.attendees.length > 0 && (
-                <Box sx={{ mt: 1 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                <Box sx={{ mt: 1.25, pt: 1.25, borderTop: '1px solid #f1f5f9' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#64748b', display: 'block', mb: 0.75 }}>
                     Attendees ({hoverEvent.attendees.length})
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
@@ -1415,31 +2103,33 @@ const Calendar: React.FC = () => {
                       <Chip
                         key={attendee.name}
                         size="small"
-                        avatar={<Avatar sx={{ bgcolor: 'primary.main', width: 16, height: 16, fontSize: '0.6rem' }}>{attendee.avatar}</Avatar>}
+                        avatar={renderPersonAvatar(attendee, { bgcolor: '#334155', width: 18, height: 18, fontSize: '0.55rem' })}
                         label={attendee.name}
                         sx={{ 
-                          borderRadius: 1, 
-                          fontSize: '0.6rem',
-                          height: 20,
+                          borderRadius: 1.5, 
+                          fontSize: '0.65rem',
+                          height: 24,
+                          border: '1px solid #e2e8f0',
+                          bgcolor: '#fff',
                           '& .MuiChip-avatar': {
-                            width: 16,
-                            height: 16,
+                            width: 18,
+                            height: 18,
                           },
                         }}
                       />
                     ))}
                     {hoverEvent.attendees.length > 3 && (
-                      <Typography variant="caption" color="text.secondary">
-                        +{hoverEvent.attendees.length - 3} more
+                      <Typography variant="caption" sx={{ alignSelf: 'center', color: '#64748b', fontWeight: 600 }}>
+                        +{hoverEvent.attendees.length - 3}
                       </Typography>
                     )}
                   </Box>
                 </Box>
               )}
-            </Box>
+              </Box>
+            </PopupHoverCard>
           )}
-        </Popover>
-      </LocalizationProvider>
+        </Popper>
     </DashboardLayout>
   );
 };

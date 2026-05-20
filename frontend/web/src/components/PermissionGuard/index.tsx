@@ -4,6 +4,7 @@ import { Lock } from '@mui/icons-material';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAppSelector } from '../../store';
 import { UserPermissions } from '../../types/auth';
+import { TESTING_MODE_UNLOCK_ALL } from '../../config/testingMode';
 
 interface PermissionGuardProps {
   children: React.ReactNode;
@@ -28,6 +29,10 @@ const PermissionGuard: React.FC<PermissionGuardProps> = ({
 }) => {
   const { hasPermission } = usePermissions();
   const { user } = useAppSelector((state) => state.auth);
+
+  if (TESTING_MODE_UNLOCK_ALL) {
+    return <>{children}</>;
+  }
 
   // Check role-based access first if allowedRoles is provided
   if (allowedRoles && user?.role) {

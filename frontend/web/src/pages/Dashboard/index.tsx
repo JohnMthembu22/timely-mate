@@ -7,24 +7,19 @@ import {
   Typography,
   Card,
   CardContent,
-  useTheme,
   Stack,
-  IconButton,
   LinearProgress,
   Chip,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
-  Divider,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Alert,
-  Avatar,
-  AvatarGroup,
 } from '@mui/material';
 import {
   Timer,
@@ -34,24 +29,20 @@ import {
   Group,
   Settings,
   Add as AddIcon,
-  Work,
   AccessTime,
   CheckCircle,
   Login as LoginIcon,
-  Logout as LogoutIcon,
-  Chat as ChatIcon,
-  Person,
-  Business,
-  TrendingUp,
-  AttachMoney,
 } from '@mui/icons-material';
 import { useAppSelector } from '../../store';
 import DashboardLayout from '../../components/DashboardLayout';
+import { MainDashboardContent, MAIN_DASHBOARD_SAMPLE_PROJECTS } from '../../components/MainDashboardContent/MainDashboardContent';
+import { PersonalAttendanceTools } from '../../components/PersonalAttendanceTools/PersonalAttendanceTools';
 import JobChat from '../../components/JobChat';
-import { useCurrency } from '../../contexts/CurrencyContext';
 import { useEmployees } from '../../contexts/EmployeeContext';
 import { useNotifications, createNotification } from '../../contexts/NotificationContext';
-import { useArrayPersistence, usePrimitivePersistence } from '../../hooks/usePersistence';
+import { Briefcase, Users, Building2, Clock } from 'lucide-react';
+import type { MetricsGridItem } from '../../components/MetricsGrid/MetricsGrid';
+import { useArrayPersistence } from '../../hooks/usePersistence';
 
 // Define job interface (matching TimeTracking)
 interface Job {
@@ -106,34 +97,52 @@ interface ChatState {
   selectedRecipient: string | null;
 }
 
+const workspaceCardSx = {
+  bgcolor: '#fff',
+  border: '1px solid #f1f5f9',
+  borderRadius: 3,
+  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+  transition: 'box-shadow 0.2s ease',
+} as const;
+
 const ActionCard: React.FC<{
   icon: React.ReactNode;
   title: string;
   description: string;
   onClick?: () => void;
 }> = ({ icon, title, description, onClick }) => (
-  <Card 
-    sx={{ 
-      height: '100%', 
-      borderRadius: 4, 
-      boxShadow: 4,
+  <Card
+    sx={{
+      ...workspaceCardSx,
+      height: '100%',
       cursor: onClick ? 'pointer' : 'default',
-      transition: 'transform 0.2s',
-      '&:hover': onClick ? {
-        transform: 'scale(1.02)',
-      } : {},
+      '&:hover': onClick ? { boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)' } : {},
     }}
     onClick={onClick}
   >
-    <CardContent>
-      <Stack spacing={2} alignItems="center" textAlign="center">
-        <Box sx={{ color: 'primary.main', transform: 'scale(1.5)' }}>{icon}</Box>
-        <Typography variant="h6" gutterBottom>
-          {title}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {description}
-        </Typography>
+    <CardContent sx={{ p: 2.5 }}>
+      <Stack direction="row" spacing={2} alignItems="flex-start">
+        <Box
+          sx={{
+            p: 1.25,
+            borderRadius: 2,
+            bgcolor: '#f8fafc',
+            border: '1px solid #f1f5f9',
+            color: '#475569',
+            display: 'flex',
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: '#1e293b', mb: 0.25 }}>
+            {title}
+          </Typography>
+          <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', lineHeight: 1.45 }}>
+            {description}
+          </Typography>
+        </Box>
       </Stack>
     </CardContent>
   </Card>
@@ -142,15 +151,11 @@ const ActionCard: React.FC<{
 
 
 const Dashboard: React.FC = () => {
-  const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAppSelector((state) => state.auth);
   
   // Call hooks - they should be available via context providers
-  const { currency, formatAmount, getSymbol, detectedCountry } = useCurrency();
-  
-  // Get active jobs from TimeTracking
   const [activeJobs] = useArrayPersistence<Job>('timelymate_active_jobs', []);
   const { employees } = useEmployees();
   const { addNotification } = useNotifications();
@@ -162,17 +167,6 @@ const Dashboard: React.FC = () => {
       employeesCount: employees?.length || 0 
     });
   }, [user, employees]);
-  
-  // If user is not loaded, show loading state
-  if (!user) {
-    return (
-      <DashboardLayout>
-        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography variant="h6">Loading user data...</Typography>
-        </Box>
-      </DashboardLayout>
-    );
-  }
 
   // Add sample notifications on component mount
   useEffect(() => {
@@ -252,31 +246,7 @@ const Dashboard: React.FC = () => {
     selectedRecipient: null,
   });
 
-  // Calculate employee statistics
-  const employeeStats = {
-    totalEmployees: employees.length,
-    departments: [...new Set(employees.map(emp => emp.department))].length,
-    activeEmployees: employees.filter(emp => emp.status === 'active').length,
-    totalSalary: employees.reduce((sum, emp) => sum + emp.salary, 0),
-    avgSalary: employees.length > 0 ? Math.round(employees.reduce((sum, emp) => sum + emp.salary, 0) / employees.length) : 0,
-    employmentTypes: {
-      permanent: employees.filter(emp => emp.employmentType === 'permanent').length,
-      contract: employees.filter(emp => emp.employmentType === 'contract').length,
-      freelancer: employees.filter(emp => emp.employmentType === 'freelancer').length,
-    },
-    seniorityLevels: {
-      junior: employees.filter(emp => emp.level === 'junior').length,
-      mid: employees.filter(emp => emp.level === 'mid').length,
-      senior: employees.filter(emp => emp.level === 'senior').length,
-      lead: employees.filter(emp => emp.level === 'lead').length,
-    }
-  };
-
-  // Get department breakdown
-  const departmentBreakdown = employees.reduce((acc, emp) => {
-    acc[emp.department] = (acc[emp.department] || 0) + 1;
-    return acc;
-  }, {} as { [key: string]: number });
+  const departmentCount = [...new Set(employees.map((emp) => emp.department))].length;
 
   // Mock team members for direct messaging - now using real employees
   const teamMembers = employees.slice(0, 3).map(emp => ({ 
@@ -408,9 +378,11 @@ const Dashboard: React.FC = () => {
 
   // Listen for global clock in/out events (from floating status bar)
   useEffect(() => {
-    const handleExternalClockIn = (e: any) => {
-      console.log('Dashboard received clock-in event:', e.detail);
-      const iso = e?.detail?.clockInISO ? new Date(e.detail.clockInISO) : new Date();
+    type TmClockDetail = { clockInISO?: string; clockOutISO?: string };
+    const handleExternalClockIn = (e: Event) => {
+      const ce = e as CustomEvent<TmClockDetail>;
+      console.log('Dashboard received clock-in event:', ce.detail);
+      const iso = ce.detail?.clockInISO ? new Date(ce.detail.clockInISO) : new Date();
       const newRecord = {
         id: Date.now().toString(),
         clockIn: `${formatDate(iso)} ${formatTime(iso)}`,
@@ -419,10 +391,11 @@ const Dashboard: React.FC = () => {
       } as { id: string; clockIn: string; clockOut: string | null; duration: string | null };
       setClockInRecords(prev => [...prev, newRecord]);
     };
-    const handleExternalClockOut = (e: any) => {
-      console.log('Dashboard received clock-out event:', e.detail);
-      const clockOutISO = e?.detail?.clockOutISO ? new Date(e.detail.clockOutISO) : new Date();
-      const clockInISO = e?.detail?.clockInISO ? new Date(e.detail.clockInISO) : null;
+    const handleExternalClockOut = (e: Event) => {
+      const ce = e as CustomEvent<TmClockDetail>;
+      console.log('Dashboard received clock-out event:', ce.detail);
+      const clockOutISO = ce.detail?.clockOutISO ? new Date(ce.detail.clockOutISO) : new Date();
+      const clockInISO = ce.detail?.clockInISO ? new Date(ce.detail.clockInISO) : null;
       
       setClockInRecords(prev => {
         const updated = [...prev];
@@ -602,7 +575,63 @@ const Dashboard: React.FC = () => {
     },
   ];
 
+  const dashboardMetrics: MetricsGridItem[] = [
+    {
+      title: 'Active workspaces',
+      value: String(activeJobs.length),
+      change: activeJobs.length ? 'Jobs on your timer' : 'None running yet',
+      icon: Briefcase,
+      iconColor: '#3b82f6',
+      iconBg: '#eff6ff',
+    },
+    {
+      title: 'People',
+      value: String(employees.length),
+      change: employees.length ? 'Imported roster' : 'Add people in HR',
+      icon: Users,
+      iconColor: '#10b981',
+      iconBg: '#ecfdf5',
+    },
+    {
+      title: 'Departments',
+      value: String(departmentCount),
+      change: departmentCount ? 'Across org' : 'No departments yet',
+      icon: Building2,
+      iconColor: '#f59e0b',
+      iconBg: '#fffbeb',
+    },
+    {
+      title: 'Session',
+      value: isClockedIn ? elapsedTime : '—',
+      change: isClockedIn ? 'Elapsed today' : 'Clock in to track',
+      icon: Clock,
+      iconColor: '#a855f7',
+      iconBg: '#faf5ff',
+    },
+  ];
 
+  const projectTiles =
+    activeJobs.length > 0
+      ? activeJobs.map((job) => ({
+          id: job.id,
+          title: job.name,
+          department: job.client || 'Workspace',
+          progress: job.progress,
+          dueDate: job.startDate ? job.startDate : 'In progress',
+          teamSize: job.assignedMembers?.length ?? 0,
+        }))
+      : MAIN_DASHBOARD_SAMPLE_PROJECTS;
+
+
+  if (!user) {
+    return (
+      <DashboardLayout>
+        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Typography variant="h6">Loading user data...</Typography>
+        </Box>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -655,40 +684,55 @@ const Dashboard: React.FC = () => {
           </DialogActions>
         </Dialog>
 
-          {/* Header Section */}
-          <Box
-            sx={{
-              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-              color: 'white',
-              py: { xs: 4, md: 6 },
-            }}
-          >
-            <Container maxWidth="lg">
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
-                    Dashboard
-                  </Typography>
-            {/* Floating element replaces inline timer and clock button */}
-          </Stack>
-              <Typography variant="h3" sx={{ mb: 2, fontWeight: 700, fontSize: { xs: '1.75rem', sm: '2.25rem', md: '3rem' } }}>
-                Welcome back, {user?.organizationName || user?.email || 'User'}!
+        {/* Page header — gradient matches Calendar page */}
+        <Box
+          sx={{
+            background: 'linear-gradient(135deg, #2196f3 0%, #e91e63 100%)',
+            pt: { xs: 4, md: 6 },
+            pb: { xs: 3, md: 4 },
+          }}
+        >
+          <Container maxWidth="xl">
+            <Box sx={{ color: 'white' }}>
+              <Typography
+                variant="h2"
+                component="h1"
+                sx={{
+                  fontWeight: 600,
+                  mb: 1,
+                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                }}
+              >
+                Dashboard
               </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 400, mb: 4, opacity: 0.9, fontSize: { xs: '0.875rem', sm: '1rem', md: '1.25rem' } }}>
-                Welcome back! Here's what's happening today.
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 600,
+                  opacity: 0.95,
+                  mb: 1.5,
+                  fontSize: { xs: '1.125rem', sm: '1.35rem', md: '1.5rem' },
+                }}
+              >
+                Welcome back, {user.organizationName || user.email || 'User'}
               </Typography>
-
-
-
-              {/* Metrics Cards */}
-              <Typography variant="h6" sx={{ opacity: 0.9 }}>
-                Let's make today productive
+              <Typography
+                sx={{
+                  fontWeight: 400,
+                  opacity: 0.9,
+                  fontSize: { xs: '0.875rem', md: '1rem' },
+                  maxWidth: 560,
+                }}
+              >
+                Here&apos;s what&apos;s happening today — workspaces on the left, your attendance context on the right.
               </Typography>
-            </Container>
-          </Box>
+            </Box>
+          </Container>
+        </Box>
 
       {/* Clock In Alert */}
       {clockInAlert && (
-        <Container maxWidth="lg" sx={{ mt: 2 }}>
+        <Container maxWidth="xl" sx={{ mt: 2 }}>
           <Alert 
             severity="success" 
             onClose={() => setClockInAlert(false)}
@@ -699,578 +743,124 @@ const Dashboard: React.FC = () => {
         </Container>
       )}
 
-      {/* Employee Summary Section */}
-      {employees.length > 0 && (
-        <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
-          <Typography variant="h4" sx={{ mb: 4 }}>
-            Organization Overview
-          </Typography>
-          <Grid container spacing={{ xs: 2, md: 4 }}>
-            {/* Key Statistics */}
-            <Grid item xs={12} md={8}>
-              <Card 
-                sx={{ 
-                  height: '100%', 
-                  borderRadius: 4, 
-                  boxShadow: 4, 
-                  mb: { xs: 2, md: 0 },
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 6,
-                  },
-                }}
-                onClick={() => navigate('/hr')}
-              >
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Key Metrics
-                  </Typography>
-                  <Grid container spacing={{ xs: 1, sm: 2, md: 3 }}>
-                    <Grid item xs={6} md={3}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <Person sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                        <Typography variant="h4" fontWeight={700} color="primary">
-                          {employeeStats.totalEmployees}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Total Employees
-                        </Typography>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={6} md={3}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <Business sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-                        <Typography variant="h4" fontWeight={700} color="success.main">
-                          {employeeStats.departments}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Departments
-                        </Typography>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={6} md={3}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <TrendingUp sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
-                        <Typography variant="h4" fontWeight={700} color="info.main">
-                          {employeeStats.activeEmployees}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Active Employees
-                        </Typography>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={6} md={3}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <AttachMoney sx={{ fontSize: 40, color: 'warning.main', mb: 1 }} />
-                        <Typography variant="h4" fontWeight={700} color="warning.main">
-                          {getSymbol()}{Math.round(employeeStats.avgSalary / 1000)}k
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Avg Salary
-                        </Typography>
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
 
-            {/* Employment Type Breakdown */}
-            <Grid item xs={12} md={4}>
-              <Card 
-                sx={{ 
-                  height: '100%', 
-                  borderRadius: 4, 
-                  boxShadow: 4, 
-                  mb: { xs: 2, md: 0 },
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 6,
-                  },
-                }}
-                onClick={() => navigate('/hr')}
-              >
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Employment Types
-                  </Typography>
-                  <Stack spacing={2}>
-                    <Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2">Permanent</Typography>
-                        <Typography variant="body2" fontWeight="bold">
-                          {employeeStats.employmentTypes.permanent}
+      <MainDashboardContent
+        displayName={user.organizationName || user.email || 'User'}
+        metrics={dashboardMetrics}
+        projects={projectTiles}
+        attendanceSidebar={
+          <PersonalAttendanceTools
+            isClockedIn={isClockedIn}
+            elapsedTime={elapsedTime}
+            clockInTime={clockInTime || null}
+            records={clockInRecords}
+            onClockIn={handleClockIn}
+            onClockOut={handleClockOut}
+            onOpenTimeTracking={() => navigate('/time-tracking')}
+          />
+        }
+        recentActivity={
+          <>
+            <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: '#1e293b', mt: 4, mb: 2 }}>
+              Recent activity
+            </Typography>
+            <Box sx={{ ...workspaceCardSx, p: 2 }}>
+              <List dense disablePadding>
+                {activities.length === 0 ? (
+                  <ListItem disableGutters sx={{ py: 1 }}>
+                    <ListItemText
+                      primary={
+                        <Typography sx={{ fontWeight: 500, color: '#64748b' }}>No recent activity</Typography>
+                      }
+                      secondary={
+                        <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', mt: 0.25 }}>
+                          Updates will appear here when available.
                         </Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(employeeStats.employmentTypes.permanent / employeeStats.totalEmployees) * 100}
-                        sx={{ height: 8, borderRadius: 4 }}
-                      />
-                    </Box>
-                    <Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2">Contract</Typography>
-                        <Typography variant="body2" fontWeight="bold">
-                          {employeeStats.employmentTypes.contract}
-                        </Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(employeeStats.employmentTypes.contract / employeeStats.totalEmployees) * 100}
-                        sx={{ height: 8, borderRadius: 4 }}
-                        color="secondary"
-                      />
-                    </Box>
-                    <Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2">Freelancer</Typography>
-                        <Typography variant="body2" fontWeight="bold">
-                          {employeeStats.employmentTypes.freelancer}
-                        </Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(employeeStats.employmentTypes.freelancer / employeeStats.totalEmployees) * 100}
-                        sx={{ height: 8, borderRadius: 4 }}
-                        color="success"
-                      />
-                    </Box>
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-
-          {/* Department Breakdown */}
-          <Grid container spacing={{ xs: 2, md: 4 }} sx={{ mt: { xs: 2, md: 2 } }}>
-            <Grid item xs={12} md={6}>
-              <Card 
-                sx={{ 
-                  borderRadius: 4, 
-                  boxShadow: 4, 
-                  height: '100%',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 6,
-                  },
-                }}
-                onClick={() => navigate('/reports')}
-              >
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Department Distribution
-                  </Typography>
-                  <Stack spacing={2}>
-                    {Object.entries(departmentBreakdown).map(([dept, count]) => (
-                      <Box key={dept}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography variant="body2">{dept}</Typography>
-                          <Typography variant="body2" fontWeight="bold">
-                            {count} employees
+                      }
+                    />
+                  </ListItem>
+                ) : (
+                  activities.map((activity) => (
+                    <ListItem
+                      key={activity.id}
+                      disableGutters
+                      sx={{ py: 1.25, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: '#f8fafc' } }}
+                      onClick={() => handleActivityClick(activity.id)}
+                    >
+                      <ListItemIcon sx={{ minWidth: 40 }}>
+                        {activity.type === 'time_track' && <Timer sx={{ fontSize: 20, color: '#64748b' }} />}
+                        {activity.type === 'meeting' && <VideoCall sx={{ fontSize: 20, color: '#64748b' }} />}
+                        {activity.type === 'task' && <CheckCircle sx={{ fontSize: 20, color: '#64748b' }} />}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1e293b' }}>
+                            {activity.description}
                           </Typography>
-                        </Box>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={(count / employeeStats.totalEmployees) * 100}
-                          sx={{ height: 8, borderRadius: 4 }}
-                        />
-                      </Box>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <Card 
-                sx={{ 
-                  borderRadius: 4, 
-                  boxShadow: 4, 
-                  height: '100%',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 6,
-                  },
-                }}
-                onClick={() => navigate('/reports')}
-              >
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Seniority Levels
-                  </Typography>
-                  <Stack spacing={2}>
-                    <Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2">Junior</Typography>
-                        <Typography variant="body2" fontWeight="bold">
-                          {employeeStats.seniorityLevels.junior}
-                        </Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(employeeStats.seniorityLevels.junior / employeeStats.totalEmployees) * 100}
-                        sx={{ height: 8, borderRadius: 4 }}
-                        color="info"
+                        }
+                        secondary={
+                          <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8' }}>{activity.timestamp}</Typography>
+                        }
                       />
-                    </Box>
-                    <Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2">Mid-Level</Typography>
-                        <Typography variant="body2" fontWeight="bold">
-                          {employeeStats.seniorityLevels.mid}
-                        </Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(employeeStats.seniorityLevels.mid / employeeStats.totalEmployees) * 100}
-                        sx={{ height: 8, borderRadius: 4 }}
-                        color="primary"
-                      />
-                    </Box>
-                    <Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2">Senior</Typography>
-                        <Typography variant="body2" fontWeight="bold">
-                          {employeeStats.seniorityLevels.senior}
-                        </Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(employeeStats.seniorityLevels.senior / employeeStats.totalEmployees) * 100}
-                        sx={{ height: 8, borderRadius: 4 }}
-                        color="success"
-                      />
-                    </Box>
-                    <Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2">Lead</Typography>
-                        <Typography variant="body2" fontWeight="bold">
-                          {employeeStats.seniorityLevels.lead}
-                        </Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(employeeStats.seniorityLevels.lead / employeeStats.totalEmployees) * 100}
-                        sx={{ height: 8, borderRadius: 4 }}
-                        color="warning"
-                      />
-                    </Box>
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-
-          {/* Recent Team Members */}
-          <Grid container spacing={{ xs: 2, md: 4 }} sx={{ mt: { xs: 2, md: 2 } }}>
-            <Grid item xs={12}>
-              <Card 
-                sx={{ 
-                  borderRadius: 4, 
-                  boxShadow: 4,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 6,
-                  },
-                }}
-                onClick={() => navigate('/team')}
-              >
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Recent Team Members
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                    <AvatarGroup max={8} sx={{ '& .MuiAvatar-root': { width: 40, height: 40 } }}>
-                      {employees.slice(0, 8).map((employee) => (
-                        <Avatar 
-                          key={employee.id}
-                          src={employee.avatar}
-                          alt={employee.name}
-                          sx={{ width: 40, height: 40 }}
-                        >
-                          {employee.name.charAt(0)}
-                        </Avatar>
-                      ))}
-                    </AvatarGroup>
-                    <Typography variant="body2" color="text.secondary">
-                      {employees.length} total team members
-                    </Typography>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </Container>
-      )}
-
-      {/* Work Summary Section */}
-      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
-        <Typography variant="h4" sx={{ mb: 4 }}>
-          Work Summary
-        </Typography>
-        <Grid container spacing={{ xs: 2, md: 4 }}>
-          {/* Active Jobs with Chat */}
-          <Grid item xs={12} md={8}>
-            <Card 
-              sx={{ 
-                height: '100%', 
-                borderRadius: 4, 
-                boxShadow: 4,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 6,
-                },
-              }}
-              onClick={() => navigate('/time-tracking')}
-            >
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Active Jobs
-                </Typography>
-                <List>
-                  {activeJobs.length === 0 ? (
-                    <ListItem>
-                      <ListItemText 
-                        primary="No Active Jobs"
-                        secondary="Start tracking time on a job to see it here"
-                        sx={{ textAlign: 'center', py: 4 }}
-                      />
+                      <Chip label={activity.status} size="small" sx={{ height: 22, fontSize: '0.6875rem' }} />
                     </ListItem>
-                  ) : (
-                    activeJobs.map((job) => (
-                    <React.Fragment key={job.id}>
-                      <ListItem
-                        button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleJobClick(job);
-                        }}
-                        sx={{
-                          py: 2,
-                          borderRadius: 2,
-                          '&:hover': {
-                            bgcolor: 'action.hover',
-                          }
-                        }}
-                      >
-                        <ListItemIcon>
-                          <Work color="primary" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={job.name}
-                          secondary={`Client: ${job.client} | Started: ${job.startTime}`}
-                        />
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Chip
-                            label={`${job.elapsedTime}`}
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                          />
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenChat(job);
-                            }}
-                          >
-                            <ChatIcon fontSize="small" />
-                          </IconButton>
-                        </Stack>
-                      </ListItem>
-                      <Box sx={{ pl: 9, pr: 2, pb: 2 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          Progress
-                        </Typography>
-                        <LinearProgress
-                          variant="determinate"
-                          value={job.progress}
-                          sx={{ height: 6, borderRadius: 3, mt: 0.5 }}
-                        />
-                      </Box>
-                      <Divider />
-                    </React.Fragment>
-                    ))
-                  )}
-                </List>
-                <Button
-                  fullWidth
-                  variant="text"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleViewAllJobs();
-                  }}
-                  sx={{ mt: 2 }}
-                >
-                  View All Jobs
-                </Button>
-              </CardContent>
-            </Card>
-          </Grid>
+                  ))
+                )}
+              </List>
+              <Button
+                fullWidth
+                variant="text"
+                onClick={handleViewAllActivities}
+                sx={{ mt: 1, fontWeight: 600, textTransform: 'none', color: '#475569' }}
+              >
+                View all activities
+              </Button>
+            </Box>
+          </>
+        }
+        onViewAllProjects={handleViewAllJobs}
+        onProjectCardClick={(id) => {
+          const job = activeJobs.find((j) => j.id === id);
+          if (job) handleJobClick(job);
+        }}
+        onProjectMenuClick={(id) => {
+          const job = activeJobs.find((j) => j.id === id);
+          if (job) handleOpenChat(job);
+        }}
+      />
 
-          {/* Recent Activity */}
-          <Grid item xs={12} md={4}>
-            <Card 
-              sx={{ 
-                height: '100%', 
-                borderRadius: 4, 
-                boxShadow: 4,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 6,
-                },
-              }}
-              onClick={() => navigate('/reports')}
-            >
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Recent Activity
-                </Typography>
-                <List>
-                  {activities.map((activity) => (
-                    <React.Fragment key={activity.id}>
-                      <ListItem
-                        button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleActivityClick(activity.id);
-                        }}
-                        sx={{
-                          py: 2,
-                          borderRadius: 2,
-                          '&:hover': {
-                            bgcolor: 'action.hover',
-                          }
-                        }}
-                      >
-                        <ListItemIcon>
-                          {activity.type === 'time_track' && <Timer color="primary" />}
-                          {activity.type === 'meeting' && <VideoCall color="secondary" />}
-                          {activity.type === 'task' && <CheckCircle color="success" />}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={activity.description}
-                          secondary={activity.timestamp}
-                        />
-                        <Chip
-                          label={activity.status}
-                          size="small"
-                          color={activity.status === 'active' ? 'success' : 'default'}
-                        />
-                      </ListItem>
-                      {activities.length > 3 && (<Divider />)}
-                    </React.Fragment>
-                  ))}
-                </List>
-                <Button
-                  fullWidth
-                  variant="text"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleViewAllActivities();
-                  }}
-                  sx={{ mt: 2 }}
-                >
-                  View All Activities
-                </Button>
-              </CardContent>
-            </Card>
-          </Grid>
+      {/* Quick Actions */}
+      <Container maxWidth="xl" sx={{ py: { xs: 3, md: 5 } }}>
+        <Typography sx={{ fontWeight: 700, fontSize: '1.125rem', color: '#1e293b', mb: 0.5 }}>
+          Quick actions
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#94a3b8', mb: 3 }}>
+          Shortcuts for everyday work.
+        </Typography>
+        <Grid container spacing={{ xs: 2, sm: 2 }}>
+          {quickActions.map((action) => (
+            <Grid item xs={12} sm={6} md={3} key={action.title}>
+              <ActionCard {...action} />
+            </Grid>
+          ))}
         </Grid>
       </Container>
 
-        {/* Quick Actions Section */}
-          <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
-            <Typography variant="h4" sx={{ mb: 4 }}>
-              Quick Actions
-            </Typography>
-          <Grid container spacing={{ xs: 2, sm: 3 }}>
-              {quickActions.map((action) => (
-                <Grid item xs={12} sm={6} md={3} key={action.title}>
-                  <ActionCard {...action} />
-                </Grid>
-              ))}
-            </Grid>
-          </Container>
-
-        {/* Management Tools Section */}
-        <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
-              <Typography variant="h4" sx={{ mb: 4 }}>
-                Management Tools
-              </Typography>
-          <Grid container spacing={{ xs: 2, sm: 3 }}>
-                {managementTools.map((tool) => (
-                  <Grid item xs={12} sm={6} md={4} key={tool.title}>
-                    <ActionCard {...tool} />
-                  </Grid>
-                ))}
-              </Grid>
-            </Container>
-
-      {/* Attendance History */}
-      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
-        <Typography variant="h4" sx={{ mb: 4 }}>
-          Your Attendance
+      {/* Management Tools */}
+      <Container maxWidth="xl" sx={{ py: { xs: 3, md: 5 }, pb: { xs: 6, md: 8 } }}>
+        <Typography sx={{ fontWeight: 700, fontSize: '1.125rem', color: '#1e293b', mb: 0.5 }}>
+          Management tools
         </Typography>
-        <Card 
-          sx={{ 
-            borderRadius: 4, 
-            boxShadow: 4,
-            cursor: 'pointer',
-            transition: 'all 0.2s ease-in-out',
-            '&:hover': {
-              transform: 'translateY(-4px)',
-              boxShadow: 6,
-            },
-          }}
-          onClick={() => navigate('/time-tracking')}
-        >
-          <CardContent>
-            <List>
-              {clockInRecords.map((record) => (
-                <ListItem key={record.id} sx={{ py: 2 }}>
-                  <ListItemIcon>
-                    <AccessTime color="primary" />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={`Clock In: ${record.clockIn}`}
-                    secondary={record.clockOut ? `Clock Out: ${record.clockOut}` : 'Currently Working'}
-                  />
-                  {record.duration && (
-                    <Chip 
-                      label={`Duration: ${record.duration}`}
-                      color="primary"
-                      variant="outlined"
-                    />
-                  )}
-                </ListItem>
-              ))}
-              {clockInRecords.length === 0 && (
-                <ListItem>
-                  <ListItemText
-                    primary="No clock-in records yet"
-                    secondary="Your clock-in/out history will appear here"
-                  />
-                </ListItem>
-              )}
-            </List>
-          </CardContent>
-        </Card>
+        <Typography sx={{ fontSize: '0.875rem', color: '#94a3b8', mb: 3 }}>
+          Administration and workspace controls.
+        </Typography>
+        <Grid container spacing={{ xs: 2, sm: 2 }}>
+          {managementTools.map((tool) => (
+            <Grid item xs={12} sm={6} md={4} key={tool.title}>
+              <ActionCard {...tool} />
+            </Grid>
+          ))}
+        </Grid>
       </Container>
 
       {/* Job Details Dialog */}

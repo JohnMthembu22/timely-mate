@@ -413,7 +413,7 @@ const IndustryModules: React.FC = () => {
             mb: 4,
           }}
         >
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Typography variant="h1" sx={{ fontSize: '3rem', fontWeight: 500, mb: 1 }}>
               Industry Modules
             </Typography>
@@ -521,7 +521,7 @@ const IndustryModules: React.FC = () => {
           </Container>
         </Box>
 
-        <Container maxWidth="lg" sx={{ mt: -4 }}>
+        <Container maxWidth="xl" sx={{ mt: -4 }}>
           <Paper sx={{ borderRadius: 2, mb: 4 }}>
             <Tabs
               value={currentTab}

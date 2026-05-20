@@ -1,14 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { 
-  SubscriptionPlan, 
-  UserSubscription, 
-  CompanyProfile, 
+import {
+  SubscriptionPlan,
+  UserSubscription,
+  CompanyProfile,
+  CompanySize,
   SUBSCRIPTION_PLANS,
   getRequiredPlanForEmployeeCount,
   getCompanyTier,
-  PlanFeatures
+  PlanFeatures,
 } from '../types/subscription';
 import { useAppSelector } from '../store';
+import { TESTING_MODE_UNLOCK_ALL } from '../config/testingMode';
 
 interface SubscriptionContextType {
   currentPlan: SubscriptionPlan | null;
@@ -66,36 +68,46 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
       };
 
       const requiredPlan = getRequiredPlanForEmployeeCount(mockCompanyProfile.employeeCount);
-      
+      const enterprisePlan =
+        SUBSCRIPTION_PLANS.find((p) => p.id === 'enterprise') ?? SUBSCRIPTION_PLANS[SUBSCRIPTION_PLANS.length - 1];
+      const effectivePlan = TESTING_MODE_UNLOCK_ALL ? enterprisePlan : requiredPlan;
+
       const mockSubscription: UserSubscription = {
         id: '1',
         userId: 'user1',
-        planId: requiredPlan.id,
+        planId: effectivePlan.id,
         status: 'active',
         startDate: new Date().toISOString(),
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         companySize: {
           employees: mockCompanyProfile.employeeCount,
-          tier: getCompanyTier(mockCompanyProfile.employeeCount),
-          requiredPlan: requiredPlan.id as any
-        }
+          tier: TESTING_MODE_UNLOCK_ALL ? 'enterprise' : getCompanyTier(mockCompanyProfile.employeeCount),
+          requiredPlan: effectivePlan.id as CompanySize['requiredPlan'],
+        },
       };
 
       setCompanyProfile(mockCompanyProfile);
       setSubscription(mockSubscription);
-      setCurrentPlan(requiredPlan);
+      setCurrentPlan(effectivePlan);
       
     } catch (error) {
       console.error('Failed to load subscription data:', error);
-      // Set default free plan
-      setCurrentPlan(SUBSCRIPTION_PLANS[0]);
+      const fallbackPlan =
+        TESTING_MODE_UNLOCK_ALL
+          ? SUBSCRIPTION_PLANS.find((p) => p.id === 'enterprise') ?? SUBSCRIPTION_PLANS[0]
+          : SUBSCRIPTION_PLANS[0];
+      setCurrentPlan(fallbackPlan);
     } finally {
       setIsLoading(false);
     }
   };
 
   const hasFeature = (feature: keyof PlanFeatures): boolean => {
+    if (TESTING_MODE_UNLOCK_ALL) {
+      return true;
+    }
+
     // Admin users have access to all features
     if (user?.role === 'admin') {
       return true;
@@ -165,6 +177,9 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
   };
 
   const checkEmployeeLimit = (newEmployeeCount: number): boolean => {
+    if (TESTING_MODE_UNLOCK_ALL) {
+      return true;
+    }
     if (!currentPlan) return false;
     if (currentPlan.maxEmployees === -1) return true; // unlimited
     return newEmployeeCount <= currentPlan.maxEmployees;

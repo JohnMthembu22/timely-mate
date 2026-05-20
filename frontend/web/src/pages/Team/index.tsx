@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Container,
@@ -49,6 +49,10 @@ import {
 } from '@mui/icons-material';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import DashboardLayout from '../../components/DashboardLayout';
+import TeamDirectoryConsole, {
+  type TeamDirectoryRow,
+  type TeamMemberStatusLabel,
+} from '../../components/TeamDirectoryConsole';
 import TeamMemberStatus from '../../components/TeamMemberStatus';
 import FeatureGuard from '../../components/FeatureGuard';
 import { UserStatus } from '../../contexts/UserStatusContext';
@@ -109,6 +113,25 @@ const yearlyStats: YearlyStats[] = [];
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
+const AVATAR_COLORS = ['#2563eb', '#f59e0b', '#4f46e5', '#64748b', '#059669', '#db2777'];
+
+const getInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+const mapMemberStatus = (status: UserStatus, isOnline: boolean): TeamMemberStatusLabel => {
+  if (!isOnline || status === 'offline') return 'Offline';
+  if (status === 'away' || status === 'doNotDisturb' || status === 'inMeeting' || status === 'busy') {
+    return 'On Break';
+  }
+  return 'Active Live';
+};
+
 const Team: React.FC = () => {
   const { employees, getEmployeesByDepartment } = useEmployees();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -124,7 +147,8 @@ const Team: React.FC = () => {
   const [messageText, setMessageText] = useState<string>('');
   const [recommendationsDialogOpen, setRecommendationsDialogOpen] = useState<boolean>(false);
   const [selectedMemberForRecommendations, setSelectedMemberForRecommendations] = useState<TeamMember | null>(null);
-  
+  const [directorySelectedId, setDirectorySelectedId] = useState<string | null>(null);
+
   // Form state for new member
   const [newMemberForm, setNewMemberForm] = useState({
     name: '',
@@ -171,6 +195,37 @@ const Team: React.FC = () => {
     
     setTeamMembers(convertedTeamMembers);
   }, [employees]);
+
+  useEffect(() => {
+    if (teamMembers.length === 0) {
+      setDirectorySelectedId(null);
+      return;
+    }
+    if (!directorySelectedId || !teamMembers.some((m) => m.id === directorySelectedId)) {
+      setDirectorySelectedId(teamMembers[0].id);
+    }
+  }, [teamMembers, directorySelectedId]);
+
+  const directoryRows: TeamDirectoryRow[] = useMemo(() => {
+    return teamMembers.map((member, index) => {
+      const employee = employees.find((e) => e.id === member.id);
+      return {
+        id: member.id,
+        name: member.name,
+        role: member.role,
+        dept: employee?.department || 'General',
+        email: member.email,
+        performance: member.performance,
+        utilization: member.workload,
+        hoursLogged: `${member.hoursWorked}h`,
+        status: mapMemberStatus(member.status, member.isOnline),
+        initials: getInitials(member.name),
+        avatarColor: AVATAR_COLORS[index % AVATAR_COLORS.length],
+      };
+    });
+  }, [teamMembers, employees]);
+
+  const getMemberById = (id: string) => teamMembers.find((m) => m.id === id);
 
   const currentYearStats = yearlyStats.find(stat => stat.year === selectedYear) || {
     year: selectedYear,
@@ -906,283 +961,24 @@ const Team: React.FC = () => {
           )}
 
           <Box sx={{ mt: 4 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h5" fontWeight="medium">
-                Team Members
-              </Typography>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <Select
-                  value={workLocationFilter}
-                  onChange={(e) => setWorkLocationFilter(e.target.value as typeof workLocationFilter)}
-                  sx={{ borderRadius: 2 }}
-                >
-                  <MenuItem value="all">All Locations</MenuItem>
-                  <MenuItem value="office">Office</MenuItem>
-                  <MenuItem value="remote">Remote</MenuItem>
-                  <MenuItem value="hybrid">Hybrid</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-            <Grid container spacing={3}>
-              {filteredMembers.length === 0 ? (
-                <Grid item xs={12}>
-                  <Card 
-                    sx={{ 
-                      borderRadius: 4,
-                      textAlign: 'center',
-                      py: 8,
-                      bgcolor: 'background.paper',
-                    }}
-                  >
-                    <CardContent>
-                      <Stack spacing={3} alignItems="center">
-                        <Group sx={{ fontSize: 80, color: 'text.secondary' }} />
-                        <Typography variant="h5" color="text.secondary">
-                          No Team Members Yet
-                        </Typography>
-                        <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400 }}>
-                          Get started by adding your first team member. You can track their performance, workload, and collaboration all in one place.
-                        </Typography>
-                        <Button
-                          variant="contained"
-                          startIcon={<Add />}
-                          size="large"
-                          onClick={handleNewMember}
-                          sx={{ borderRadius: 2, mt: 2 }}
-                        >
-                          Add Your First Team Member
-                        </Button>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ) : (
-                filteredMembers.map((member) => (
-                <Grid item xs={12} md={6} lg={4} key={member.id}>
-                  <Card
-                    sx={{
-                      borderRadius: 4,
-                      background: 'linear-gradient(145deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))',
-                      backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
-                      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                      '&::before': {
-                        content: '""',
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: '4px',
-                        background: member.isOnline 
-                          ? 'linear-gradient(90deg, #4caf50, #66bb6a)' 
-                          : 'linear-gradient(90deg, #9e9e9e, #bdbdbd)',
-                      },
-                      '&::after': {
-                        content: '""',
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: member.isOnline
-                          ? 'linear-gradient(135deg, rgba(76,175,80,0.08), rgba(102,187,106,0.04))'
-                          : 'linear-gradient(135deg, rgba(158,158,158,0.08), rgba(189,189,189,0.04))',
-                        pointerEvents: 'none',
-                        zIndex: 0
-                      },
-                      '&:hover': {
-                        transform: 'translateY(-8px) scale(1.02)',
-                        boxShadow: '0 20px 40px rgba(0,0,0,0.12)',
-                        borderColor: member.isOnline ? 'rgba(76,175,80,0.3)' : 'rgba(158,158,158,0.3)',
-                      }
-                    }}
-                    onClick={() => handleMemberDetails(member)}
-                  >
-                    <CardContent sx={{ position: 'relative', zIndex: 1, p: 3, textAlign: 'center' }}>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
-                        <Box sx={{ position: 'relative', mb: 1 }}>
-                          <TeamMemberStatus 
-                            status={member.status}
-                            name={member.name}
-                            avatar={member.avatar.length > 2 ? member.avatar : ''}
-                            lastActiveTime={new Date(member.lastActive)}
-                            showLastActive={false}
-                          />
-                          <IconButton
-                            size="small"
-                            onClick={handleToggleOnlineStatus(member.id)}
-                            sx={{ 
-                              position: 'absolute',
-                              top: 0,
-                              right: 0,
-                              bgcolor: 'background.paper',
-                              boxShadow: 1
-                            }}
-                          >
-                            {member.isOnline ? <Wifi /> : <WifiOff />}
-                          </IconButton>
-                        </Box>
-                        <Box sx={{ textAlign: 'center', width: '100%' }}>
-                          <Typography variant="h6" fontWeight="medium" sx={{ mb: 0.5 }}>
-                            {member.name}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                            {member.role}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {member.workLocation.charAt(0).toUpperCase() + member.workLocation.slice(1)} • 
-                            Last active: {new Date(member.lastActive).toLocaleTimeString()}
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <Box sx={{ display: 'flex', gap: 1, mb: 1, justifyContent: 'center' }}>
-                          <IconButton 
-                            size="small" 
-                            href={`mailto:${member.email}`}
-                            onClick={handleMessageClick(member)}
-                          >
-                            <Email fontSize="small" />
-                          </IconButton>
-                          {member.linkedIn && (
-                            <IconButton 
-                              size="small" 
-                              href={member.linkedIn} 
-                              target="_blank"
-                              onClick={handleMessageClick(member)}
-                            >
-                              <LinkedIn fontSize="small" />
-                            </IconButton>
-                          )}
-                          {member.github && (
-                            <IconButton 
-                              size="small" 
-                              href={member.github} 
-                              target="_blank"
-                              onClick={handleMessageClick(member)}
-                            >
-                              <GitHub fontSize="small" />
-                            </IconButton>
-                          )}
-                        </Box>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center' }}>
-                          {member.skills.map((skill) => (
-                            <Chip
-                              key={skill}
-                              label={skill}
-                              size="small"
-                              sx={{ borderRadius: 2, bgcolor: 'action.hover' }}
-                            />
-                          ))}
-                        </Box>
-                      </Box>
-
-                      <Box sx={{ mb: 2, width: '100%' }}>
-                        <Typography variant="body2" color="text.secondary" gutterBottom sx={{ textAlign: 'center' }}>
-                          Workload
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ flexGrow: 1 }}>
-                            <LinearProgress
-                              variant="determinate"
-                              value={member.workload}
-                              color={member.workload > 90 ? 'error' : 'primary'}
-                              sx={{
-                                height: 6,
-                                borderRadius: 3,
-                                bgcolor: 'action.hover',
-                                '& .MuiLinearProgress-bar': {
-                                  borderRadius: 3,
-                                },
-                              }}
-                            />
-                          </Box>
-                          <Typography variant="body2" color={member.workload > 90 ? 'error.main' : 'text.secondary'} sx={{ minWidth: 45, textAlign: 'right' }}>
-                            {member.workload}%
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <Box sx={{ mb: 2, width: '100%' }}>
-                        <Typography variant="body2" color="text.secondary" gutterBottom sx={{ textAlign: 'center' }}>
-                          Performance
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ flexGrow: 1 }}>
-                            <LinearProgress
-                              variant="determinate"
-                              value={member.performance}
-                              sx={{
-                                height: 6,
-                                borderRadius: 3,
-                                bgcolor: 'action.hover',
-                                '& .MuiLinearProgress-bar': {
-                                  borderRadius: 3,
-                                },
-                              }}
-                            />
-                          </Box>
-                          <Typography variant="body2" color="text.secondary" sx={{ minWidth: 45, textAlign: 'right' }}>
-                            {member.performance}%
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <Box sx={{ mb: 2, width: '100%' }}>
-                        <Typography variant="body2" color="text.secondary" gutterBottom sx={{ textAlign: 'center' }}>
-                          Hours Worked
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ flexGrow: 1 }}>
-                            <LinearProgress
-                              variant="determinate"
-                              value={(member.hoursWorked / 2080) * 100}
-                              sx={{
-                                height: 6,
-                                borderRadius: 3,
-                                bgcolor: 'action.hover',
-                                '& .MuiLinearProgress-bar': {
-                                  borderRadius: 3,
-                                },
-                              }}
-                            />
-                          </Box>
-                          <Typography variant="body2" color="text.secondary" sx={{ minWidth: 50, textAlign: 'right' }}>
-                            {member.hoursWorked}h
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 2 }}>
-                        <Button
-                          startIcon={<Message />}
-                          sx={{ borderRadius: 2, textTransform: 'none' }}
-                          onClick={handleMessageClick(member)}
-                        >
-                          Message
-                        </Button>
-                        <Button
-                          startIcon={<Edit />}
-                          sx={{ borderRadius: 2, textTransform: 'none' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMemberDetails(member);
-                          }}
-                        >
-                          Details
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                ))
-              )}
-            </Grid>
+            <TeamDirectoryConsole
+              members={directoryRows}
+              selectedMemberId={directorySelectedId}
+              onSelectMember={setDirectorySelectedId}
+              onInvite={handleNewMember}
+              onModifyAllocation={(id) => {
+                const member = getMemberById(id);
+                if (member) handleOpenMessageDialog(member);
+              }}
+              onViewAudit={(id) => {
+                const member = getMemberById(id);
+                if (member) handleMemberDetails(member);
+              }}
+              onMemberMenu={(_e, id) => {
+                const member = getMemberById(id);
+                if (member) handleMemberDetails(member);
+              }}
+            />
           </Box>
         </Paper>
       </Container>
@@ -1204,22 +1000,7 @@ const Team: React.FC = () => {
           }
         }}
       >
-        <DialogTitle sx={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-          px: 4,
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-          }
-        }}>
+        <DialogTitle sx={{ position: 'relative' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ 
               p: 1.5, 
@@ -1358,22 +1139,7 @@ const Team: React.FC = () => {
       >
         {selectedMember && (
           <>
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              py: 3,
-              px: 4,
-              position: 'relative',
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '4px',
-                background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-              }
-            }}>
+            <DialogTitle sx={{ position: 'relative' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box sx={{ 
                   p: 1.5, 

@@ -321,7 +321,7 @@ const Activities: React.FC = () => {
               py: { xs: 4, md: 6 },
             }}
           >
-            <Container maxWidth="lg">
+            <Container maxWidth="xl">
               <Button 
                 startIcon={<ArrowBack />}
                 onClick={handleBackToList}
@@ -366,7 +366,7 @@ const Activities: React.FC = () => {
             </Container>
           </Box>
 
-          <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+          <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
             <Paper sx={{ p: 3, borderRadius: 4, boxShadow: 4 }}>
               <Grid container spacing={3}>
                 <Grid item xs={12} md={6}>
@@ -437,17 +437,7 @@ const Activities: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2
-          }}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
             <Box sx={{ 
               background: 'rgba(255, 255, 255, 0.2)', 
               borderRadius: 2, 
@@ -532,17 +522,7 @@ const Activities: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2
-          }}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
             <Box sx={{ 
               background: 'rgba(255, 255, 255, 0.2)', 
               borderRadius: 2, 
@@ -627,17 +607,7 @@ const Activities: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2
-          }}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
             <Box sx={{ 
               background: 'rgba(255, 255, 255, 0.2)', 
               borderRadius: 2, 
@@ -722,17 +692,7 @@ const Activities: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2
-          }}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
             <Box sx={{ 
               background: 'rgba(255, 255, 255, 0.2)', 
               borderRadius: 2, 
@@ -831,7 +791,7 @@ const Activities: React.FC = () => {
             py: { xs: 4, md: 6 },
           }}
         >
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
               <Typography variant="h4" sx={{ fontWeight: 700 }}>
                 Activity Log
@@ -867,7 +827,7 @@ const Activities: React.FC = () => {
           </Container>
         </Box>
 
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
           <Paper sx={{ mb: 3, p: 3, borderRadius: 2, boxShadow: 2 }}>
             <Grid container spacing={2}>
               <Grid item xs={12}>

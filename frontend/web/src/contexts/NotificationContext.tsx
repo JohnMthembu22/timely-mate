@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useMemo } from 'react';
+import { useAppSelector } from '../store';
+import { getManagerRecipientId } from '../utils/managerReview';
 
 // Notification type definition
 export interface NotificationItem {
@@ -12,12 +14,21 @@ export interface NotificationItem {
   icon?: React.ReactNode;
   actionUrl?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  /** When set, only this recipient sees the notification */
+  recipientId?: string;
+  jobId?: string;
 }
+
+const NOTIFICATIONS_STORAGE_KEY = 'timelymate_notifications';
 
 interface NotificationContextType {
   notifications: NotificationItem[];
   unreadCount: number;
   addNotification: (notification: Omit<NotificationItem, 'id' | 'read'>) => void;
+  addNotificationForRecipient: (
+    recipientId: string,
+    notification: Omit<NotificationItem, 'id' | 'read' | 'recipientId'>
+  ) => void;
   markAsRead: (id: number) => void;
   markAllAsRead: () => void;
   removeNotification: (id: number) => void;
@@ -31,11 +42,51 @@ interface NotificationProviderProps {
   children: ReactNode;
 }
 
-export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [nextId, setNextId] = useState(1);
+const loadStoredNotifications = (): NotificationItem[] => {
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as NotificationItem[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+const persistNotifications = (items: NotificationItem[]) => {
+  try {
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    /* ignore quota errors */
+  }
+};
+
+export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
+  const { user } = useAppSelector((state) => state.auth);
+  const [allNotifications, setAllNotifications] = useState<NotificationItem[]>(() => loadStoredNotifications());
+  const [nextId, setNextId] = useState(() => {
+    const stored = loadStoredNotifications();
+    if (stored.length === 0) return 1;
+    return Math.max(...stored.map((n) => n.id), 0) + 1;
+  });
+
+  const currentRecipientId = useMemo(() => {
+    if (!user) return null;
+    const id = getManagerRecipientId(user);
+    return id || null;
+  }, [user]);
+
+  const notifications = useMemo(() => {
+    return allNotifications.filter(
+      (n) => !n.recipientId || (currentRecipientId && n.recipientId === currentRecipientId)
+    );
+  }, [allNotifications, currentRecipientId]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  useEffect(() => {
+    persistNotifications(allNotifications);
+  }, [allNotifications]);
 
   const addNotification = useCallback((notification: Omit<NotificationItem, 'id' | 'read'>) => {
     const newNotification: NotificationItem = {
@@ -43,45 +94,68 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       id: nextId,
       read: false,
     };
-    
-    setNotifications(prev => [newNotification, ...prev]);
-    setNextId(prev => prev + 1);
+
+    setAllNotifications((prev) => [newNotification, ...prev]);
+    setNextId((prev) => prev + 1);
   }, [nextId]);
 
+  const addNotificationForRecipient = useCallback(
+    (recipientId: string, notification: Omit<NotificationItem, 'id' | 'read' | 'recipientId'>) => {
+      const newNotification: NotificationItem = {
+        ...notification,
+        recipientId,
+        id: nextId,
+        read: false,
+      };
+
+      setAllNotifications((prev) => [newNotification, ...prev]);
+      setNextId((prev) => prev + 1);
+    },
+    [nextId]
+  );
+
   const markAsRead = useCallback((id: number) => {
-    setNotifications(prev => 
-      prev.map(notification => 
-        notification.id === id 
-          ? { ...notification, read: true } 
-          : notification
+    setAllNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === id ? { ...notification, read: true } : notification
       )
     );
   }, []);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications(prev => 
-      prev.map(notification => ({ ...notification, read: true }))
+    setAllNotifications((prev) =>
+      prev.map((notification) => {
+        const isVisible =
+          !notification.recipientId ||
+          (currentRecipientId && notification.recipientId === currentRecipientId);
+        return isVisible ? { ...notification, read: true } : notification;
+      })
     );
-  }, []);
+  }, [currentRecipientId]);
 
   const removeNotification = useCallback((id: number) => {
-    setNotifications(prev => 
-      prev.filter(notification => notification.id !== id)
-    );
+    setAllNotifications((prev) => prev.filter((notification) => notification.id !== id));
   }, []);
 
   const clearAllNotifications = useCallback(() => {
-    setNotifications([]);
-  }, []);
+    if (!currentRecipientId) {
+      setAllNotifications([]);
+      return;
+    }
+    setAllNotifications((prev) =>
+      prev.filter((n) => n.recipientId && n.recipientId !== currentRecipientId)
+    );
+  }, [currentRecipientId]);
 
   const getUnreadCountByType = useCallback((type: NotificationItem['type']) => {
-    return notifications.filter(n => !n.read && n.type === type).length;
+    return notifications.filter((n) => !n.read && n.type === type).length;
   }, [notifications]);
 
   const value: NotificationContextType = {
     notifications,
     unreadCount,
     addNotification,
+    addNotificationForRecipient,
     markAsRead,
     markAllAsRead,
     removeNotification,
@@ -170,12 +244,14 @@ export const createNotification = {
     actionUrl: '/hr',
   }),
 
-  job: (title: string, description: string) => ({
+  job: (title: string, description: string, jobId?: string) => ({
     type: 'job' as const,
     title,
     description,
     time: new Date().toLocaleTimeString(),
-    actionUrl: '/time-tracking',
+    actionUrl: '/time-tracking?tab=jobs-to-review',
+    jobId,
+    priority: 'high' as const,
   }),
 
   meeting: (title: string, description: string) => ({

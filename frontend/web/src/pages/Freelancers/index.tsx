@@ -1023,7 +1023,7 @@ const Freelancers: React.FC = () => {
             py: { xs: 4, md: 6 },
           }}
         >
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h3" sx={{ fontWeight: 700 }}>
                 Freelancer Management
@@ -1074,7 +1074,7 @@ const Freelancers: React.FC = () => {
         </Box>
 
         {/* Filters and Search */}
-        <Container maxWidth="lg" sx={{ mt: -4, mb: 4 }}>
+        <Container maxWidth="xl" sx={{ mt: -4, mb: 4 }}>
           <Card sx={{ borderRadius: 4, boxShadow: 4 }}>
             <CardContent>
               <Grid container spacing={2} alignItems="center">
@@ -1131,7 +1131,7 @@ const Freelancers: React.FC = () => {
         </Container>
 
         {/* Freelancers List */}
-        <Container maxWidth="lg" sx={{ mb: 6 }}>
+        <Container maxWidth="xl" sx={{ mb: 6 }}>
           <Typography variant="h4" sx={{ mb: 3 }}>
             Freelancers ({filteredFreelancers.length})
           </Typography>
@@ -1220,7 +1220,7 @@ const Freelancers: React.FC = () => {
         </Container>
 
         {/* Quick Actions */}
-        <Container maxWidth="lg" sx={{ py: 6 }}>
+        <Container maxWidth="xl" sx={{ py: 6 }}>
           <Typography variant="h4" sx={{ mb: 3 }}>
             Quick Actions
           </Typography>
@@ -1309,7 +1309,7 @@ const Freelancers: React.FC = () => {
 
         {/* Stats */}
         <Box sx={{ bgcolor: 'background.paper', py: 6 }}>
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Typography variant="h4" sx={{ mb: 4 }}>
               Freelancer Metrics
             </Typography>
@@ -1397,22 +1397,7 @@ const Freelancers: React.FC = () => {
         >
           {selectedFreelancer && (
             <>
-              <DialogTitle sx={{ 
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                py: 3,
-                px: 4,
-                position: 'relative',
-                '&::after': {
-                  content: '""',
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: '4px',
-                  background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-                }
-              }}>
+              <DialogTitle sx={{ position: 'relative' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Box sx={{ 
@@ -1753,22 +1738,7 @@ const Freelancers: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-            }
-          }}>
+          <DialogTitle sx={{ position: 'relative' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
@@ -1938,22 +1908,7 @@ const Freelancers: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-            }
-          }}>
+          <DialogTitle sx={{ position: 'relative' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
@@ -2130,22 +2085,7 @@ const Freelancers: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-            }
-          }}>
+          <DialogTitle sx={{ position: 'relative' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
@@ -2289,22 +2229,7 @@ const Freelancers: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-            }
-          }}>
+          <DialogTitle sx={{ position: 'relative' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 

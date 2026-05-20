@@ -160,7 +160,7 @@ export const Tasks: React.FC = () => {
     : tasks.filter(task => isAssignedToUser(task));
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
           Tasks

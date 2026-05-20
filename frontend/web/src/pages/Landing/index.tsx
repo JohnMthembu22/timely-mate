@@ -213,7 +213,7 @@ const Landing: React.FC = () => {
             ))}
           </Box>
 
-          <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 2 }}>
+          <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 2 }}>
             <Grid container spacing={{ xs: 4, md: 8 }} alignItems="center">
               <Grid item xs={12} md={6}>
                 <Fade in={isVisible} timeout={1000}>
@@ -429,7 +429,7 @@ const Landing: React.FC = () => {
             borderColor: 'divider',
           }}
         >
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Grid container spacing={3} justifyContent="center">
               {[
                 { number: '10K+', label: 'Active Users' },
@@ -475,7 +475,7 @@ const Landing: React.FC = () => {
         </Box>
 
         {/* Features Section */}
-        <Container id="features" maxWidth="lg" sx={{ py: { xs: 8, sm: 10, md: 12 } }}>
+        <Container id="features" maxWidth="xl" sx={{ py: { xs: 8, sm: 10, md: 12 } }}>
           <Box sx={{ textAlign: 'center', mb: { xs: 6, md: 8 } }}>
           <Typography
               variant="overline"
@@ -627,7 +627,7 @@ const Landing: React.FC = () => {
               zIndex: 1,
             }}
           />
-          <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 2 }}>
+          <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 2 }}>
             <Box sx={{ textAlign: 'center', mb: { xs: 6, md: 8 } }}>
               <Typography
                 variant="overline"
@@ -786,7 +786,7 @@ const Landing: React.FC = () => {
         </Box>
 
         {/* Testimonials Section */}
-        <Container id="testimonials" maxWidth="lg" sx={{ py: { xs: 8, sm: 10, md: 12 } }}>
+        <Container id="testimonials" maxWidth="xl" sx={{ py: { xs: 8, sm: 10, md: 12 } }}>
           <Box sx={{ textAlign: 'center', mb: { xs: 6, md: 8 } }}>
             <Typography
               variant="overline"
@@ -938,7 +938,7 @@ const Landing: React.FC = () => {
           bgcolor: 'background.paper',
           py: { xs: 4, md: 6 }
         }}>
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Grid container spacing={{ xs: 3, md: 4 }}>
               <Grid item xs={12} md={4}>
                 <Typography 

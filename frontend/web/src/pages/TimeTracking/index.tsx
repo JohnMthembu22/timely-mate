@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -78,8 +79,24 @@ import {
   CloudUpload,
   Storage,
   VideoCall,
+  RateReview,
 } from '@mui/icons-material';
 import DashboardLayout from '../../components/DashboardLayout';
+import TimeTrackingConsole from '../../components/TimeTrackingConsole';
+import TimesheetsConsole, {
+  type LedgerFilterStatus,
+  type TimesheetLedgerGroup,
+} from '../../components/TimesheetsConsole';
+import JobReviewConsole from '../../components/JobReviewConsole';
+import { useAppSelector } from '../../store';
+import {
+  buildManagerOptions,
+  getAuthUserLabel,
+  getManagerDisplayName,
+  getManagerRecipientId,
+  managerMatchesUser,
+} from '../../utils/managerReview';
+import { format, parseISO, isToday, isYesterday } from 'date-fns';
 import { useEmployees } from '../../contexts/EmployeeContext';
 import { useArrayPersistence } from '../../hooks/usePersistence';
 import { useNotifications, createNotification } from '../../contexts/NotificationContext';
@@ -91,6 +108,7 @@ import { saveAs } from 'file-saver';
 enum MainTab {
   TIME_TRACKING = 'time-tracking',
   TIMESHEETS = 'timesheets',
+  JOBS_TO_REVIEW = 'jobs-to-review',
 }
 
 // Define the job interface type
@@ -115,6 +133,10 @@ interface Job {
   isOnBreak?: boolean; // Whether currently on break
   totalBreakTime?: number; // Total break time in minutes
   assignedToManager?: string; // Manager assigned for review
+  reviewNotes?: string;
+  submittedBy?: string;
+  submittedById?: string;
+  submittedForReviewAt?: string;
 }
 
 // Define timesheet entry interface with enhanced fields
@@ -224,12 +246,21 @@ const pauseConditions = [
 
 const TimeTracking: React.FC = () => {
   const theme = useTheme();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAppSelector((state) => state.auth);
   const { employees } = useEmployees();
-  const { addNotification } = useNotifications();
+  const { addNotification, addNotificationForRecipient } = useNotifications();
   const { isAdmin, isTeamLeader, isEmployee } = usePermissions();
   
   // Tab state
-  const [activeMainTab, setActiveMainTab] = useState<MainTab>(MainTab.TIME_TRACKING);
+  const [activeMainTab, setActiveMainTab] = useState<MainTab>(() => {
+    const tab = searchParams.get('tab');
+    if (tab === MainTab.JOBS_TO_REVIEW) return MainTab.JOBS_TO_REVIEW;
+    if (tab === MainTab.TIMESHEETS) return MainTab.TIMESHEETS;
+    return MainTab.TIME_TRACKING;
+  });
+
+  const managerOptions = useMemo(() => buildManagerOptions(employees), [employees]);
   
   // Convert employees to team members for time tracking - dynamically update when employees change
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; role: string }[]>([]);
@@ -448,6 +479,7 @@ const TimeTracking: React.FC = () => {
   const [automationEnabled, setAutomationEnabled] = useState(true);
   const [bulkActionsDialogOpen, setBulkActionsDialogOpen] = useState(false);
   const [selectedTimesheets, setSelectedTimesheets] = useState<string[]>([]);
+  const [ledgerFilterStatus, setLedgerFilterStatus] = useState<LedgerFilterStatus>('All');
 
   const [newTimesheet, setNewTimesheet] = useState<Partial<TimesheetEntry>>({
     date: new Date().toISOString().split('T')[0],
@@ -734,8 +766,9 @@ const TimeTracking: React.FC = () => {
     if (!jobTimeComplete) return;
 
     setTimeAllocationCompleteDialogOpen(false);
-    setJobForReview(jobTimeComplete);
-    setReviewSubmissionDialogOpen(true);
+    setJobToStop(jobTimeComplete);
+    setStopWorkflowStep('review');
+    setStopWorkflowDialogOpen(true);
     setJobTimeComplete(null);
   };
 
@@ -843,8 +876,44 @@ const TimeTracking: React.FC = () => {
     setStopWorkflowStep('options');
   };
 
+  const notifyManagerOfJobReview = (job: Job, managerId: string) => {
+    const submitterName = getAuthUserLabel(user);
+    const managerName = getManagerDisplayName(managerId, employees, managerOptions);
+
+    addNotificationForRecipient(
+      managerId,
+      createNotification.job(
+        'Job submitted for your review',
+        `${submitterName} submitted "${job.name}" (${job.client}) for your review.`,
+        job.id
+      )
+    );
+
+    const submitterRecipient = user ? getManagerRecipientId(user) : undefined;
+    if (submitterRecipient) {
+      addNotificationForRecipient(
+        submitterRecipient,
+        createNotification.timesheet(
+          'Submitted for Review',
+          `"${job.name}" was sent to ${managerName} for review.`
+        )
+      );
+    } else {
+      addNotification(
+        createNotification.timesheet(
+          'Submitted for Review',
+          `"${job.name}" was sent to ${managerName} for review.`
+        )
+      );
+    }
+  };
+
   const handleManagerSelection = () => {
     if (!jobToStop || !selectedManager) return;
+
+    const submittedAt = new Date().toISOString();
+    const submitterName = getAuthUserLabel(user);
+    const submitterId = user ? getManagerRecipientId(user) : undefined;
 
     // Update timesheet status to pending
     setTimesheetEntries((prev: TimesheetEntry[]) => 
@@ -868,12 +937,18 @@ const TimeTracking: React.FC = () => {
             ...job, 
             status: 'pending_review',
             isTracking: false,
-            assignedToManager: selectedManager
+            assignedToManager: selectedManager,
+            reviewNotes: reviewNotes || job.reviewNotes,
+            submittedBy: submitterName,
+            submittedById: submitterId,
+            submittedForReviewAt: submittedAt,
           };
         }
         return job;
       })
     );
+
+    notifyManagerOfJobReview(jobToStop, selectedManager);
 
     // Close dialog
     setStopWorkflowDialogOpen(false);
@@ -881,11 +956,86 @@ const TimeTracking: React.FC = () => {
     setStopWorkflowStep('options');
     setSelectedManager('');
     setReviewNotes('');
+  };
 
-    addNotification(createNotification.timesheet(
-      "Submitted for Review",
-      `${jobToStop.name} has been submitted for review to ${selectedManager}.`
-    ));
+  const handleApproveJobReview = (jobId: string) => {
+    const job = activeJobs.find((j) => j.id === jobId);
+    if (!job) return;
+
+    setActiveJobs((prevJobs: Job[]) =>
+      prevJobs.map((j) =>
+        j.id === jobId
+          ? {
+              ...j,
+              status: 'completed',
+              isTracking: false,
+              assignedToManager: undefined,
+              reviewNotes: undefined,
+            }
+          : j
+      )
+    );
+
+    setTimesheetEntries((prev: TimesheetEntry[]) =>
+      prev.map((entry) =>
+        entry.projectId === jobId ? { ...entry, status: 'approved' as const } : entry
+      )
+    );
+
+    if (job.submittedById) {
+      addNotificationForRecipient(
+        job.submittedById,
+        createNotification.job(
+          'Work approved',
+          `Your submission for "${job.name}" was approved.`,
+          job.id
+        )
+      );
+    }
+
+    addNotification(
+      createNotification.system(
+        'Review complete',
+        `"${job.name}" has been marked as approved.`
+      )
+    );
+  };
+
+  const handleRequestChangesJobReview = (jobId: string) => {
+    const job = activeJobs.find((j) => j.id === jobId);
+    if (!job) return;
+
+    setActiveJobs((prevJobs: Job[]) =>
+      prevJobs.map((j) =>
+        j.id === jobId
+          ? {
+              ...j,
+              status: 'active',
+              isTracking: false,
+              assignedToManager: undefined,
+              progress: Math.min(j.progress, 85),
+            }
+          : j
+      )
+    );
+
+    if (job.submittedById) {
+      addNotificationForRecipient(
+        job.submittedById,
+        createNotification.job(
+          'Changes requested',
+          `Your manager requested changes on "${job.name}". You can resume work on this assignment.`,
+          job.id
+        )
+      );
+    }
+
+    addNotification(
+      createNotification.system(
+        'Changes requested',
+        `"${job.name}" was returned to the assignee for updates.`
+      )
+    );
   };
 
   const handleStopWorkflowCancel = () => {
@@ -908,6 +1058,11 @@ const TimeTracking: React.FC = () => {
   const handleEditTimesheet = (timesheet: TimesheetEntry) => {
     setEditingTimesheet(timesheet);
     setEditTimesheetDialogOpen(true);
+  };
+
+  const handleLedgerEntryAction = (entryId: string) => {
+    const entry = timesheetEntries.find((e) => e.id === entryId);
+    if (entry) handleEditTimesheet(entry);
   };
 
   const handleSaveTimesheetEdit = () => {
@@ -1176,6 +1331,110 @@ const TimeTracking: React.FC = () => {
       : 0,
     overtime: filteredTimesheets.reduce((sum, entry) => sum + (entry.overtime || 0), 0),
   };
+
+  const formatLedgerDuration = (hours: number) => {
+    const h = Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
+    return `${h} hrs`;
+  };
+
+  const formatLedgerStatus = (
+    status: TimesheetEntry['status']
+  ): TimesheetLedgerGroup['entries'][0]['status'] => {
+    switch (status) {
+      case 'approved':
+        return 'Approved';
+      case 'pending':
+        return 'Pending';
+      case 'rejected':
+        return 'Rejected';
+      default:
+        return 'Draft';
+    }
+  };
+
+  const formatTaskCode = (entry: TimesheetEntry) => {
+    if (entry.projectId) {
+      const slug = entry.projectId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const prefix = slug.slice(0, 3) || 'TS';
+      return `${prefix}-${entry.id.replace(/\D/g, '').slice(-3).padStart(3, '0')}`;
+    }
+    const initials = entry.project
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 3)
+      .toUpperCase();
+    return `${initials || 'TS'}-${entry.id.replace(/\D/g, '').slice(-3).padStart(3, '0')}`;
+  };
+
+  const getDateGroupLabel = (dateStr: string) => {
+    const d = parseISO(dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`);
+    const dayLabel = format(d, 'EEEE, d MMMM yyyy');
+    if (isToday(d)) return `Today • ${dayLabel}`;
+    if (isYesterday(d)) return `Yesterday • ${dayLabel}`;
+    return dayLabel;
+  };
+
+  const ledgerFilteredEntries = useMemo(() => {
+    let entries = [...filteredTimesheets];
+    if (ledgerFilterStatus === 'Approved') {
+      entries = entries.filter((e) => e.status === 'approved');
+    } else if (ledgerFilterStatus === 'Pending') {
+      entries = entries.filter((e) => e.status === 'pending');
+    }
+    return entries.sort((a, b) => b.date.localeCompare(a.date));
+  }, [filteredTimesheets, ledgerFilterStatus]);
+
+  const ledgerGroups = useMemo((): TimesheetLedgerGroup[] => {
+    const byDate = new Map<string, TimesheetEntry[]>();
+    ledgerFilteredEntries.forEach((entry) => {
+      const key = entry.date;
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key)!.push(entry);
+    });
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([date, entries]) => {
+        const total = entries.reduce((sum, e) => sum + e.hoursWorked, 0);
+        return {
+          date: getDateGroupLabel(date),
+          totalHours: formatLedgerDuration(total),
+          entries: entries.map((e) => ({
+            id: e.id,
+            code: formatTaskCode(e),
+            project: e.project,
+            description: e.description,
+            duration: formatLedgerDuration(e.hoursWorked),
+            status: formatLedgerStatus(e.status),
+          })),
+        };
+      });
+  }, [ledgerFilteredEntries]);
+
+  const payCycleLabel = useMemo(() => {
+    const start = timesheetFilters.dateRange.start
+      ? parseISO(`${timesheetFilters.dateRange.start}T12:00:00`)
+      : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const end = timesheetFilters.dateRange.end
+      ? parseISO(`${timesheetFilters.dateRange.end}T12:00:00`)
+      : new Date();
+    return `${format(start, 'd MMM')} — ${format(end, 'd MMM')} Cycle`;
+  }, [timesheetFilters.dateRange.start, timesheetFilters.dateRange.end]);
+
+  const ledgerApprovedHours = useMemo(() => {
+    const total = filteredTimesheets
+      .filter((e) => e.status === 'approved')
+      .reduce((sum, e) => sum + e.hoursWorked, 0);
+    return formatLedgerDuration(total);
+  }, [filteredTimesheets]);
+
+  const ledgerPendingHours = useMemo(() => {
+    const total = filteredTimesheets
+      .filter((e) => e.status === 'pending')
+      .reduce((sum, e) => sum + e.hoursWorked, 0);
+    return formatLedgerDuration(total);
+  }, [filteredTimesheets]);
 
   // Convert employees to team members
   useEffect(() => {
@@ -1602,9 +1861,90 @@ const TimeTracking: React.FC = () => {
     generateDailyCode();
   };
 
+  const handleDirectClockOut = () => {
+    localStorage.removeItem('clockInToday');
+    localStorage.removeItem('clockInTime');
+    setIsCheckedIn(false);
+    setCheckInTime(null);
+    setDailyCode('');
+    addNotification(createNotification.timesheet(
+      'Shift Ended',
+      'You have ended your shift for today.'
+    ));
+  };
+
+  const handleToggleShift = () => {
+    if (isCheckedIn) {
+      handleDirectClockOut();
+    } else {
+      handleDirectClockIn();
+    }
+  };
+
+  const handleConsoleJobToggle = (jobId: string, isRunning: boolean) => {
+    handleJobAction(jobId, isRunning ? 'stop' : 'start');
+  };
+
+  const handleConsoleBreak = () => {
+    const trackingJob = activeJobs.find((job) => job.isTracking);
+    if (trackingJob) {
+      handleJobAction(trackingJob.id, 'pause');
+    }
+  };
+
+  const consoleJobRows = activeJobs.map((job) => ({
+    id: job.id,
+    name: job.name,
+    team: job.client || 'Internal Team',
+    progress: job.progress,
+    timeSpent: job.elapsedTime || job.totalTime || '0h 0m',
+    isRunning: Boolean(job.isTracking && job.status === 'active'),
+  }));
+
+  const jobsPendingReview = useMemo(
+    () => activeJobs.filter((job) => job.status === 'pending_review'),
+    [activeJobs]
+  );
+
+  const jobsToReview = useMemo(() => {
+    return jobsPendingReview.filter((job) => {
+      if (isAdmin()) return true;
+      return managerMatchesUser(job.assignedToManager, user, employees);
+    });
+  }, [jobsPendingReview, user, employees]);
+
+  const showReviewTab = isAdmin() || isTeamLeader() || jobsToReview.length > 0;
+
+  const jobReviewRows = useMemo(
+    () =>
+      jobsToReview.map((job) => ({
+        id: job.id,
+        name: job.name,
+        client: job.client,
+        elapsedTime: job.elapsedTime || job.totalTime || '0h',
+        progress: job.progress,
+        submittedBy: job.submittedBy,
+        submittedForReviewAt: job.submittedForReviewAt,
+        reviewNotes: job.reviewNotes,
+        assignedToManager: job.assignedToManager,
+        managerDisplayName: getManagerDisplayName(
+          job.assignedToManager,
+          employees,
+          managerOptions
+        ),
+      })),
+    [jobsToReview, employees, managerOptions]
+  );
+
   // Tab change handler
   const handleMainTabChange = (_: React.SyntheticEvent, newValue: MainTab) => {
     setActiveMainTab(newValue);
+    if (newValue === MainTab.TIME_TRACKING) {
+      searchParams.delete('tab');
+    } else {
+      searchParams.set('tab', newValue);
+    }
+    setSearchParams(searchParams, { replace: true });
   };
 
   // Timesheet handlers
@@ -1658,39 +1998,11 @@ const TimeTracking: React.FC = () => {
             py: { xs: 4, md: 6 },
           }}
         >
-          <Container maxWidth="lg">
+          <Container maxWidth="xl">
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h3" sx={{ fontWeight: 700 }}>
                 Time Management
               </Typography>
-              {activeMainTab === MainTab.TIME_TRACKING && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', mt: '45px' }}>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="large"
-                  onClick={() => setDialogOpen(true)}
-                  sx={{ 
-                    borderRadius: 2,
-                    px: 4,
-                    py: 1.5,
-                    bgcolor: 'white',
-                    color: 'primary.main',
-                    mb: 1,
-                    '&:hover': {
-                      bgcolor: 'grey.100',
-                    },
-                  }}
-                >
-                  {isCheckedIn ? 'Checked In' : 'Check In'}
-                </Button>
-                {isCheckedIn && checkInTime && (
-                  <Typography variant="body2" sx={{ opacity: 0.9, mt: '6px' }}>
-                    Checked in at {checkInTime}
-                  </Typography>
-                )}
-              </Box>
-              )}
             </Box>
             <Typography variant="h6" sx={{ opacity: 0.9 }}>
               {activeMainTab === MainTab.TIME_TRACKING 
@@ -1701,7 +2013,7 @@ const TimeTracking: React.FC = () => {
         </Box>
 
         {/* Main Content */}
-        <Container maxWidth="lg" sx={{ mt: -4 }}>
+        <Container maxWidth="xl" sx={{ mt: -4 }}>
           <Card sx={{ borderRadius: 4, boxShadow: 4, overflow: 'visible' }}>
             {/* Main Tabs */}
             <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3, pt: 3 }}>
@@ -1729,903 +2041,57 @@ const TimeTracking: React.FC = () => {
                   icon={<Assignment />}
                   iconPosition="start"
                 />
+                {showReviewTab && (
+                  <Tab
+                    label={
+                      jobsToReview.length > 0
+                        ? `Jobs to Review (${jobsToReview.length})`
+                        : 'Jobs to Review'
+                    }
+                    value={MainTab.JOBS_TO_REVIEW}
+                    icon={<RateReview />}
+                    iconPosition="start"
+                  />
+                )}
               </Tabs>
             </Box>
 
             {/* Tab Content */}
             {activeMainTab === MainTab.TIME_TRACKING ? (
-              // Time Tracking Content (existing implementation)
-              <Box>
-                {/* Status Card */}
-            <CardContent>
-              <Grid container spacing={3} alignItems="center">
-                <Grid item xs={12} md={6}>
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <Timer sx={{ fontSize: 40, color: 'primary.main' }} />
-                    <Box>
-                      <Typography variant="h6">Current Status</Typography>
-                      <Typography color={isCheckedIn ? 'success.main' : 'text.secondary'}>
-                        {isCheckedIn ? 'Checked In' : 'Not Checked In'}
-                      </Typography>
-                      {isCheckedIn && checkInTime && (
-                        <Typography variant="body2" color="text.secondary">
-                          Since {checkInTime}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Stack>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Stack direction="row" spacing={2} alignItems="center" justifyContent="flex-end">
-                    {isCheckedIn && (
-                      <>
-                        <Typography variant="body1">Daily Code:</Typography>
-                        <Chip
-                          label={dailyCode}
-                          color="primary"
-                          onDelete={() => generateDailyCode()}
-                          deleteIcon={<Refresh />}
-                        />
-                      </>
-                    )}
-                  </Stack>
-                </Grid>
-              </Grid>
-            </CardContent>
-
-        {/* Active Jobs Section */}
-        <Container maxWidth="lg" sx={{ py: 6 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-            <Typography variant="h4">
-              Active Jobs
-            </Typography>
-            <Button 
-              variant="contained" 
-              startIcon={<Work />}
-              sx={{ borderRadius: 2 }}
-              onClick={() => setNewJobDialogOpen(true)}
-            >
-              Add New Job
-            </Button>
-          </Box>
-          
-          {/* Team Member Summary */}
-          {teamMembers.length > 0 && (
-            <Card sx={{ mb: 4, borderRadius: 4 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Team Overview
-                </Typography>
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" color="primary" fontWeight={700}>
-                        {teamMembers.length}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Total Team Members
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" color="success.main" fontWeight={700}>
-                        {activeJobs.filter(job => job.status === 'active').length}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Active Jobs
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" color="info.main" fontWeight={700}>
-                        {[...new Set(activeJobs.flatMap(job => job.assignedMembers))].length}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Assigned Members
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" color="warning.main" fontWeight={700}>
-                        {Math.round(activeJobs.reduce((sum, job) => sum + job.progress, 0) / activeJobs.length || 0)}%
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Average Progress
-                      </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-          )}
-          
-          <Paper sx={{ borderRadius: 4, overflow: 'hidden' }}>
-            <List>
-              {activeJobs.map((job, index) => (
-                <React.Fragment key={job.id}>
-                  <ListItem 
-                    sx={{ 
-                      py: 2,
-                      bgcolor: job.status === 'active' ? 'rgba(33, 150, 243, 0.05)' : 'inherit',
-                      '&:hover': {
-                        bgcolor: 'rgba(0, 0, 0, 0.02)',
-                      },
-                    }}
-                  >
-                    <ListItemIcon>
-                      <Work sx={{ color: job.status === 'active' ? 'primary.main' : 'text.secondary' }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="subtitle1" fontWeight="medium">
-                            {job.name}
-                          </Typography>
-                          <Chip 
-                            label={job.status} 
-                            size="small" 
-                            color={job.status === 'active' ? 'success' : job.status === 'paused' ? 'warning' : 'default'}
-                            sx={{ height: 20 }}
-                          />
-                          {job.isTracking && (
-                            <Chip 
-                              label="Tracking" 
-                              size="small" 
-                              color="info"
-                              sx={{ height: 20 }}
-                            />
-                          )}
-                          {job.isOnBreak && (
-                            <Chip 
-                              label="On Break" 
-                              size="small" 
-                              color="warning"
-                              sx={{ height: 20 }}
-                            />
-                          )}
-                          {job.status === 'pending_review' && (
-                            <Chip 
-                              label="Pending Review" 
-                              size="small" 
-                              color="secondary"
-                              sx={{ height: 20 }}
-                            />
-                          )}
-                          {job.assignedToManager && (
-                            <Chip 
-                              label={`Assigned to ${job.assignedToManager}`} 
-                              size="small" 
-                              color="info"
-                              sx={{ height: 20 }}
-                            />
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Box sx={{ mt: 1 }}>
-                          <span style={{ color: 'text.secondary' }}>
-                            Client: {job.client}
-                          </span>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <CalendarToday sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <span style={{ fontSize: '0.875rem', color: 'rgba(0, 0, 0, 0.6)' }}>
-                                {job.startDate} at {job.startTime}
-                                {job.endTime && ` - ${job.endTime}`}
-                              </span>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Timer sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <span style={{ fontSize: '0.875rem', color: 'rgba(0, 0, 0, 0.6)' }}>
-                                {job.elapsedTime} / {job.totalTime}
-                                {job.allocatedHours && ` (${job.allocatedHours}h allocated)`}
-                              </span>
-                            </Box>
-                            {job.totalBreakTime && job.totalBreakTime > 0 && (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Pause sx={{ fontSize: 16, color: 'text.secondary' }} />
-                                <span style={{ fontSize: '0.875rem', color: 'rgba(0, 0, 0, 0.6)' }}>
-                                  Break: {Math.floor(job.totalBreakTime / 60)}h {job.totalBreakTime % 60}m
-                                </span>
-                              </Box>
-                            )}
-                          </Box>
-                          {job.status === 'paused' && job.pauseTask && (
-                            <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 0, 0, 0.03)', borderRadius: 1 }}>
-                              <span style={{ fontSize: '0.875rem', color: 'rgba(0, 0, 0, 0.6)' }}>
-                                <strong>Task:</strong> {job.pauseTask}
-                              </span>
-                            </Box>
-                          )}
-                          {job.assignedMembers && job.assignedMembers.length > 0 && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                              <Group sx={{ fontSize: 16, color: 'text.secondary' }} />
-                              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                                {job.assignedMembers.map(memberId => {
-                                  // Try to find in teamMembers first, then fallback to employees
-                                  let member = teamMembers.find(m => m.id === memberId);
-                                  if (!member) {
-                                    // Fallback: try to find in employees directly
-                                    const employee = employees.find(emp => emp.id === memberId);
-                                    if (employee) {
-                                      member = {
-                                        id: employee.id,
-                                        name: employee.name,
-                                        role: employee.position || 'Team Member',
-                                      };
-                                    }
-                                  }
-                                  return member ? (
-                                    <Chip 
-                                      key={member.id} 
-                                      label={member.name} 
-                                      size="small" 
-                                      icon={<Person />}
-                                      sx={{ height: 24 }}
-                                    />
-                                  ) : (
-                                    // Show member ID if member not found (for debugging)
-                                    <Chip 
-                                      key={memberId} 
-                                      label={`Member ${memberId}`} 
-                                      size="small" 
-                                      color="default"
-                                      sx={{ height: 24 }}
-                                    />
-                                  );
-                                })}
-                              </Box>
-                            </Box>
-                          )}
-                        </Box>
-                      }
-                    />
-                    <Box sx={{ width: '200px', mr: 2 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          Progress
-                        </Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={job.progress} 
-                        sx={{ 
-                          height: 8, 
-                          borderRadius: 4,
-                          bgcolor: 'rgba(0, 0, 0, 0.05)',
-                        }}
-                      />
-                    </Box>
-                    <ListItemSecondaryAction>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Tooltip title="Edit">
-                          <IconButton 
-                            edge="end" 
-                            onClick={() => handleEditJob(job)}
-                            color="primary"
-                          >
-                            <Edit />
-                          </IconButton>
-                        </Tooltip>
-                        {job.status === 'active' && job.isTracking && !job.isOnBreak ? (
-                          <Tooltip title="Start Break">
-                            <IconButton 
-                              edge="end" 
-                              onClick={() => handleJobAction(job.id, 'pause')}
-                              color="warning"
-                            >
-                              <Pause />
-                            </IconButton>
-                          </Tooltip>
-                        ) : job.isOnBreak ? (
-                          <Tooltip title="End Break">
-                            <IconButton 
-                              edge="end" 
-                              onClick={() => handleEndBreak(job.id)}
-                              color="success"
-                            >
-                              <PlayArrow />
-                            </IconButton>
-                          </Tooltip>
-                        ) : job.status === 'active' ? (
-                          <Tooltip title="Pause">
-                            <IconButton 
-                              edge="end" 
-                              onClick={() => handleJobAction(job.id, 'pause')}
-                              color="primary"
-                            >
-                              <Pause />
-                            </IconButton>
-                          </Tooltip>
-                        ) : job.status === 'paused' ? (
-                          <Tooltip title="Resume">
-                            <IconButton 
-                              edge="end" 
-                              onClick={() => handleJobAction(job.id, 'start')}
-                              color="primary"
-                            >
-                              <PlayArrow />
-                            </IconButton>
-                          </Tooltip>
-                        ) : job.status === 'pending' || job.status === 'assigned' ? (
-                          <Tooltip title="Start">
-                            <IconButton 
-                              edge="end" 
-                              onClick={() => handleJobAction(job.id, 'start')}
-                              color="primary"
-                            >
-                              <PlayArrow />
-                            </IconButton>
-                          </Tooltip>
-                        ) : null}
-                        <Tooltip title="Stop">
-                          <IconButton 
-                            edge="end" 
-                            onClick={() => handleJobAction(job.id, 'stop')}
-                            color="error"
-                          >
-                            <Stop />
-                          </IconButton>
-                        </Tooltip>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            fontWeight: 'medium',
-                            color: job.progress >= 75 ? 'success.main' : job.progress >= 50 ? 'warning.main' : 'text.secondary',
-                            minWidth: '40px',
-                            textAlign: 'center'
-                          }}
-                        >
-                          {job.progress}%
-                        </Typography>
-                      </Stack>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                  {index < activeJobs.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </List>
-          </Paper>
-        </Container>
-              </Box>
+              <TimeTrackingConsole
+                isCheckedIn={isCheckedIn}
+                checkInTime={checkInTime}
+                dailyCode={dailyCode}
+                activeJobs={consoleJobRows}
+                onToggleShift={handleToggleShift}
+                onTakeBreak={handleConsoleBreak}
+                onJobToggle={handleConsoleJobToggle}
+              />
+            ) : activeMainTab === MainTab.JOBS_TO_REVIEW ? (
+              <JobReviewConsole
+                jobs={jobReviewRows}
+                onApprove={handleApproveJobReview}
+                onRequestChanges={handleRequestChangesJobReview}
+                isAdminView={isAdmin()}
+              />
             ) : (
-              // Timesheets Content
-              <Box sx={{ p: 3 }}>
-                {/* Enhanced Timesheets Header */}
-                <Box sx={{ mb: 3 }}>
-                  {/* Main Header Row */}
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Box>
-                      <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                        Smart Timesheets
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        AI-powered time tracking with automated entries and intelligent suggestions
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                      <Button 
-                        variant="outlined" 
-                        startIcon={<Download />}
-                        onClick={() => setExportDialogOpen(true)}
-                        sx={{ borderRadius: 2 }}
-                      >
-                        Export
-                      </Button>
-                      {isEmployee() && (
-                      <Button 
-                        variant="contained" 
-                        startIcon={<Add />}
-                        onClick={() => setNewTimesheetDialogOpen(true)}
-                        sx={{ borderRadius: 2 }}
-                      >
-                        Add Timesheet
-                      </Button>
-                      )}
-                    </Box>
-                  </Box>
-                  
-                  {/* Import Actions Section */}
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CloudUpload color="primary" />
-                        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
-                          Import Data
-          </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Upload timesheet data from files or offline sources
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                        <Button 
-                          variant="outlined" 
-                          startIcon={<Upload />}
-                          onClick={() => setImportDialogOpen(true)}
-                          sx={{ borderRadius: 2 }}
-                        >
-                          Import Timesheets
-                        </Button>
-                        <Button 
-                          variant="outlined" 
-                          startIcon={<Storage />}
-                          onClick={() => setImportOfflineDialogOpen(true)}
-                          sx={{ borderRadius: 2 }}
-                        >
-                          Import Offline Data
-                        </Button>
-                      </Box>
-                    </Box>
-                  </Paper>
-                </Box>
-
-                {/* Automation Control */}
-                <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <SmartToy color="primary" />
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="h6">Smart Automation</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Automatically generate timesheet entries from active project work
-                      </Typography>
-                    </Box>
-                    <FormControl component="fieldset">
-                      <Button
-                        variant={automationEnabled ? "contained" : "outlined"}
-                        color={automationEnabled ? "success" : "primary"}
-                        onClick={() => setAutomationEnabled(!automationEnabled)}
-                        startIcon={automationEnabled ? <CheckCircle /> : <Schedule />}
-                      >
-                        {automationEnabled ? 'Enabled' : 'Enable'}
-                      </Button>
-                    </FormControl>
-                  </Box>
-                </Box>
-
-                {/* Enhanced Statistics Cards */}
-                <Grid container spacing={3} sx={{ mb: 4 }}>
-                  <Grid item xs={12} sm={6} md={2.4}>
-                    <Card sx={{ borderRadius: 2, height: '100%' }}>
-                  <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Assignment color="primary" />
-                          <Typography variant="subtitle2" color="text.secondary">
-                            Total Entries
-                          </Typography>
-                      </Box>
-                        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                          {timesheetStats.totalEntries}
-                      </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {timesheetStats.automatedEntries} automated
-                      </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-                  <Grid item xs={12} sm={6} md={2.4}>
-                    <Card sx={{ borderRadius: 2, height: '100%' }}>
-                      <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <HourglassEmpty color="warning" />
-                          <Typography variant="subtitle2" color="text.secondary">
-                            Pending Review
-                          </Typography>
-                        </Box>
-                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
-                          {timesheetStats.pendingReview}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Awaiting approval
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={2.4}>
-                    <Card sx={{ borderRadius: 2, height: '100%' }}>
-                      <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <AccessTimeFilled color="success" />
-                          <Typography variant="subtitle2" color="text.secondary">
-                            Total Hours
-                          </Typography>
-                        </Box>
-                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                          {timesheetStats.totalHours}h
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Avg {timesheetStats.averageHoursPerDay}h/day
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={2.4}>
-                    <Card sx={{ borderRadius: 2, height: '100%' }}>
-                      <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <AttachMoney color="success" />
-                          <Typography variant="subtitle2" color="text.secondary">
-                            Total Value
-                          </Typography>
-                        </Box>
-                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                          ${timesheetStats.totalAmount.toLocaleString()}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Billable amount
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={2.4}>
-                    <Card sx={{ borderRadius: 2, height: '100%' }}>
-                      <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <TrendingUp color="primary" />
-                          <Typography variant="subtitle2" color="text.secondary">
-                            Overtime
-                          </Typography>
-                        </Box>
-                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                          {timesheetStats.overtime}h
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Extra hours
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                </Grid>
-
-                {/* Advanced Filters and Search */}
-                <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                    <FilterList color="primary" />
-                    <Typography variant="h6">Filters & Search</Typography>
-                  </Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={3}>
-                      <TextField
-                        fullWidth
-                        placeholder="Search timesheets..."
-                        value={timesheetFilters.searchTerm}
-                        onChange={(e) => setTimesheetFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
-                        InputProps={{
-                          startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} />
-                        }}
-                        size="small"
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={2}>
-                      <TextField
-                        fullWidth
-                        label="Start Date"
-                        type="date"
-                        size="small"
-                        value={timesheetFilters.dateRange.start}
-                        onChange={(e) => setTimesheetFilters(prev => ({ 
-                          ...prev, 
-                          dateRange: { ...prev.dateRange, start: e.target.value }
-                        }))}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={2}>
-                      <TextField
-                        fullWidth
-                        label="End Date"
-                        type="date"
-                        size="small"
-                        value={timesheetFilters.dateRange.end}
-                        onChange={(e) => setTimesheetFilters(prev => ({ 
-                          ...prev, 
-                          dateRange: { ...prev.dateRange, end: e.target.value }
-                        }))}
-                        InputLabelProps={{ shrink: true }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={2}>
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Status</InputLabel>
-                        <Select
-                          multiple
-                          value={timesheetFilters.status}
-                          onChange={(e) => setTimesheetFilters(prev => ({ 
-                            ...prev, 
-                            status: typeof e.target.value === 'string' ? [e.target.value] : e.target.value
-                          }))}
-                          renderValue={(selected) => selected.join(', ')}
-                        >
-                          {['pending', 'approved', 'rejected', 'draft'].map(status => (
-                            <MenuItem key={status} value={status}>
-                              <Checkbox checked={timesheetFilters.status.indexOf(status) > -1} />
-                              <ListItemText primary={status.charAt(0).toUpperCase() + status.slice(1)} />
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-          </Grid>
-                    <Grid item xs={12} md={3}>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button
-                          variant={timesheetFilters.isAutomated === true ? "contained" : "outlined"}
-                          size="small"
-                          onClick={() => setTimesheetFilters(prev => ({ 
-                            ...prev, 
-                            isAutomated: prev.isAutomated === true ? undefined : true
-                          }))}
-                          startIcon={<SmartToy />}
-                        >
-                          Auto
-                        </Button>
-                        <Button
-                          variant={timesheetFilters.isAutomated === false ? "contained" : "outlined"}
-                          size="small"
-                          onClick={() => setTimesheetFilters(prev => ({ 
-                            ...prev, 
-                            isAutomated: prev.isAutomated === false ? undefined : false
-                          }))}
-                          startIcon={<Person />}
-                        >
-                          Manual
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={() => setTimesheetFilters({
-                            dateRange: { 
-                              start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-                              end: new Date().toISOString().split('T')[0] 
-                            },
-                            status: [],
-                            employees: [],
-                            projects: [],
-                            categories: [],
-                            searchTerm: '',
-                          })}
-                        >
-                          Clear
-                        </Button>
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Paper>
-
-                {/* Bulk Actions */}
-                {selectedTimesheets.length > 0 && (
-                  <Paper sx={{ p: 2, mb: 3, bgcolor: 'primary.light', borderRadius: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Typography variant="h6" color="primary.contrastText">
-                        {selectedTimesheets.length} timesheet(s) selected
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button
-                          variant="contained"
-                          color="success"
-                          size="small"
-                          onClick={handleBulkApprove}
-                          startIcon={<CheckCircle />}
-                        >
-                          Approve All
-                        </Button>
-                        <Button
-                          variant="contained"
-                          color="error"
-                          size="small"
-                          onClick={handleBulkReject}
-                          startIcon={<Close />}
-                        >
-                          Reject All
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={() => setSelectedTimesheets([])}
-                        >
-                          Clear Selection
-                        </Button>
-                      </Box>
-                    </Box>
-                  </Paper>
-                )}
-
-                {/* Enhanced Timesheets Table */}
-                <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
-                  <Table>
-                    <TableHead>
-                      <TableRow sx={{ bgcolor: 'grey.50' }}>
-                        <TableCell padding="checkbox">
-                          <Checkbox
-                            indeterminate={selectedTimesheets.length > 0 && selectedTimesheets.length < filteredTimesheets.length}
-                            checked={filteredTimesheets.length > 0 && selectedTimesheets.length === filteredTimesheets.length}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedTimesheets(filteredTimesheets.map(t => t.id));
-                              } else {
-                                setSelectedTimesheets([]);
-                              }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Employee</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Project</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Hours</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Value</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>AI Score</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {filteredTimesheets.map((entry) => (
-                        <TableRow key={entry.id} hover>
-                          <TableCell padding="checkbox">
-                            <Checkbox
-                              checked={selectedTimesheets.includes(entry.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedTimesheets(prev => [...prev, entry.id]);
-                                } else {
-                                  setSelectedTimesheets(prev => prev.filter(id => id !== entry.id));
-                                }
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {entry.isAutomated ? <SmartToy sx={{ fontSize: 16, color: 'primary.main' }} /> : <Person sx={{ fontSize: 16, color: 'text.secondary' }} />}
-                              {entry.employeeName}
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            {new Date(entry.date).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell>
-                            <Box>
-                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                {entry.project}
-                              </Typography>
-                              {entry.tags && entry.tags.length > 0 && (
-                                <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                                  {entry.tags.slice(0, 2).map(tag => (
-                                    <Chip key={tag} label={tag} size="small" sx={{ height: 16, fontSize: '0.7rem' }} />
-                                  ))}
-                                  {entry.tags.length > 2 && (
-                                    <Chip label={`+${entry.tags.length - 2}`} size="small" sx={{ height: 16, fontSize: '0.7rem' }} />
-                                  )}
-                                </Box>
-                              )}
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box>
-                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                {entry.hoursWorked}h
-                              </Typography>
-                              {entry.overtime && entry.overtime > 0 && (
-                                <Typography variant="caption" color="warning.main">
-                                  +{entry.overtime}h OT
-                                </Typography>
-                              )}
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={entry.category}
-                              size="small"
-                              color={entry.category === 'development' ? 'primary' : entry.category === 'meeting' ? 'info' : 'default'}
-                              sx={{ borderRadius: 1 }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              ${entry.totalAmount?.toLocaleString() || 0}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={getStatusText(entry.status)}
-                              color={getStatusColor(entry.status)}
-                              size="small"
-                              sx={{ borderRadius: 1 }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {entry.aiSuggestions && (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Psychology sx={{ fontSize: 16, color: 'primary.main' }} />
-                                <Typography variant="caption" color="primary.main">
-                                  {entry.aiSuggestions.confidence}%
-                                </Typography>
-                              </Box>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', gap: 0.5 }}>
-                              {(isAdmin() || isTeamLeader()) && entry.status === 'pending' && (
-                                <>
-                                  <Tooltip title="Approve">
-                                    <IconButton 
-                                      size="small" 
-                                      color="success"
-                                      onClick={() => handleApproveTimesheet(entry.id)}
-                                    >
-                                      <CheckCircle fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Object / Reject">
-                                    <IconButton 
-                                      size="small" 
-                                      color="error"
-                                      onClick={() => handleRejectTimesheet(entry.id)}
-                                    >
-                                      <Close fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                </>
-                              )}
-                              <Tooltip title="Edit">
-                                <IconButton 
-                                  size="small" 
-                                  color="primary"
-                                  onClick={() => handleEditTimesheet(entry)}
-                                >
-                                  <Edit fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              {entry.aiSuggestions && (
-                                <Tooltip title="Apply AI Suggestions">
-                                  <IconButton 
-                                    size="small" 
-                                    color="secondary"
-                                    onClick={() => applyAISuggestions(entry.id)}
-                                  >
-                                    <AutoAwesome fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              )}
-                            </Box>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-
-                {filteredTimesheets.length === 0 && (
-                  <Box sx={{ 
-                    py: 8, 
-                    textAlign: 'center', 
-                    bgcolor: 'background.paper',
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    mt: 3
-                  }}>
-                    <Assignment sx={{ fontSize: 48, color: 'text.secondary', mb: 2, opacity: 0.3 }} />
-                    <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 'normal' }}>
-                      No timesheets found
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {timesheetFilters.searchTerm || timesheetFilters.status.length > 0 
-                        ? 'Try adjusting your filters or search terms'
-                        : 'Create your first timesheet entry or enable automation to get started'
-                      }
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      startIcon={<Add />}
-                      onClick={() => setNewTimesheetDialogOpen(true)}
-                    >
-                      Add Timesheet
-                    </Button>
-                  </Box>
-                )}
-              </Box>
+              <TimesheetsConsole
+                groups={ledgerGroups}
+                filterStatus={ledgerFilterStatus}
+                onFilterStatusChange={setLedgerFilterStatus}
+                onExport={() => setExportDialogOpen(true)}
+                onEntryAction={handleLedgerEntryAction}
+                onCompileReport={() => handleExportTimesheets('csv')}
+                onSync={generateAutomatedTimesheets}
+                payCycleLabel={payCycleLabel}
+                approvedHours={ledgerApprovedHours}
+                pendingHours={ledgerPendingHours}
+                emptyMessage={
+                  ledgerFilterStatus !== 'All' || timesheetFilters.searchTerm
+                    ? 'No entries match the current filter.'
+                    : 'Create a timesheet entry or sync from active projects to populate the ledger.'
+                }
+              />
             )}
           </Card>
         </Container>
@@ -2751,22 +2217,7 @@ const TimeTracking: React.FC = () => {
             }
           }}
         >
-          <DialogTitle sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            py: 3,
-            px: 4,
-            position: 'relative',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-            }
-          }}>
+          <DialogTitle sx={{ position: 'relative' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
@@ -3184,7 +2635,7 @@ const TimeTracking: React.FC = () => {
         </Dialog>
 
         {/* Check-in Methods */}
-        <Container maxWidth="lg" sx={{ py: 6 }}>
+        <Container maxWidth="xl" sx={{ py: 6 }}>
           <Typography variant="h4" sx={{ mb: 4 }}>
             Check-in Methods
           </Typography>
@@ -3224,7 +2675,7 @@ const TimeTracking: React.FC = () => {
         </Container>
 
         {/* Team Time Management Section */}
-        <Container maxWidth="lg" sx={{ mt: 6 }}>
+        <Container maxWidth="xl" sx={{ mt: 6 }}>
           <Paper 
             sx={{ 
               p: 3, 
@@ -3426,7 +2877,7 @@ const TimeTracking: React.FC = () => {
         
         {/* Check-in Method Selection Dialog */}
         <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle sx={{ background: 'linear-gradient(45deg, #2196F3, #f50057)', color: 'white' }}>
+          <DialogTitle>
             Select Check-in Method
           </DialogTitle>
           <DialogContent>
@@ -3591,7 +3042,7 @@ const TimeTracking: React.FC = () => {
             sx: { minHeight: '80vh' }
           }}
         >
-          <DialogTitle sx={{ background: 'linear-gradient(45deg, #2196F3, #f50057)', color: 'white' }}>
+          <DialogTitle>
             Team Progress Overview
           </DialogTitle>
           <DialogContent dividers>
@@ -4586,6 +4037,9 @@ const TimeTracking: React.FC = () => {
               <Typography variant="body2">
                 <strong>Ready for Review:</strong> Your work is complete and ready to be submitted for review.
               </Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                <strong>Next:</strong> You&apos;ll select a manager to review this work.
+              </Typography>
             </Alert>
           </DialogContent>
           <DialogActions>
@@ -4628,8 +4082,10 @@ const TimeTracking: React.FC = () => {
             </Typography>
             <Alert severity="info" sx={{ mt: 2 }}>
               <Typography variant="body2">
-                <strong>Review Process:</strong> Your work will be reviewed by your manager. 
-                If changes are needed, the job will be reassigned to you.
+                <strong>Next:</strong> You&apos;ll select a manager to review this work.
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                If changes are needed after review, the job can be reassigned to you.
               </Typography>
             </Alert>
           </DialogContent>
@@ -4778,6 +4234,9 @@ const TimeTracking: React.FC = () => {
                       <Typography variant="body2" color="text.secondary">
                         Submit completed work for manager review
                       </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        Next: You&apos;ll select a manager to review this work.
+                      </Typography>
                     </Box>
                   </Button>
                 </Stack>
@@ -4827,36 +4286,16 @@ const TimeTracking: React.FC = () => {
                     onChange={(e) => setSelectedManager(e.target.value)}
                     label="Select Manager"
                   >
-                    <MenuItem value="sarah-johnson">
-                      <Box>
-                        <Typography variant="subtitle2">Sarah Johnson</Typography>
-                        <Typography variant="body2" color="text.secondary">Line Manager</Typography>
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value="mike-chen">
-                      <Box>
-                        <Typography variant="subtitle2">Mike Chen</Typography>
-                        <Typography variant="body2" color="text.secondary">Traffic Manager</Typography>
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value="emma-wilson">
-                      <Box>
-                        <Typography variant="subtitle2">Emma Wilson</Typography>
-                        <Typography variant="body2" color="text.secondary">Line Manager</Typography>
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value="david-brown">
-                      <Box>
-                        <Typography variant="subtitle2">David Brown</Typography>
-                        <Typography variant="body2" color="text.secondary">Traffic Manager</Typography>
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value="lisa-garcia">
-                      <Box>
-                        <Typography variant="subtitle2">Lisa Garcia</Typography>
-                        <Typography variant="body2" color="text.secondary">Line Manager</Typography>
-                      </Box>
-                    </MenuItem>
+                    {managerOptions.map((manager) => (
+                      <MenuItem key={manager.id} value={manager.id}>
+                        <Box>
+                          <Typography variant="subtitle2">{manager.name}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {manager.role}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
                 
@@ -4882,9 +4321,17 @@ const TimeTracking: React.FC = () => {
             </Button>
             
             {stopWorkflowStep === 'review' && (
-              <Button onClick={handleStopWorkflowBack}>
-                Back
-              </Button>
+              <>
+                <Button onClick={handleStopWorkflowBack}>
+                  Back
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={() => setStopWorkflowStep('manager')}
+                >
+                  Continue
+                </Button>
+              </>
             )}
             
             {stopWorkflowStep === 'manager' && (

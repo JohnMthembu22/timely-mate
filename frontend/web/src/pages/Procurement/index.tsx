@@ -1583,7 +1583,7 @@ const Procurement: React.FC = () => {
               mb: 4,
             }}
           >
-            <Container maxWidth="lg">
+            <Container maxWidth="xl">
               <Typography variant="h1" sx={{ fontSize: '3rem', fontWeight: 700, mb: 1 }}>
                 Procurement
               </Typography>
@@ -1638,7 +1638,7 @@ const Procurement: React.FC = () => {
           </Box>
 
           {/* Main Content */}
-          <Container maxWidth="lg" sx={{ mt: -4 }}>
+          <Container maxWidth="xl" sx={{ mt: -4 }}>
             <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, mb: 4 }}>
               <Tabs
                 value={currentTab}
@@ -2285,14 +2285,7 @@ const Procurement: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 
@@ -2433,14 +2426,7 @@ const Procurement: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 
@@ -2703,14 +2689,7 @@ const Procurement: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 
@@ -2869,14 +2848,7 @@ const Procurement: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 
@@ -3534,14 +3506,7 @@ const Procurement: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 
@@ -3743,14 +3708,7 @@ const Procurement: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 
@@ -3948,14 +3906,7 @@ const Procurement: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 
@@ -4088,14 +4039,7 @@ const Procurement: React.FC = () => {
               }
             }}
           >
-            <DialogTitle sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              p: 3,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ 
                 p: 1.5, 
                 borderRadius: 2, 

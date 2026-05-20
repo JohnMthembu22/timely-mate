@@ -805,23 +805,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ roomId, onClose, isOpen }) => {
         },
       }}
     >
-      <DialogTitle sx={{ 
-        pb: 1,
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: 'white',
-        py: 3,
-        px: 4,
-        position: 'relative',
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: '4px',
-          background: 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1), rgba(255,255,255,0.3))'
-        }
-      }}>
+      <DialogTitle sx={{ position: 'relative' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ 
@@ -1598,14 +1582,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ roomId, onClose, isOpen }) => {
           }
         }}
       >
-        <DialogTitle sx={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          py: 3,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2
-        }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box sx={{ 
             p: 1, 
             borderRadius: 2, 

@@ -73,7 +73,7 @@ const SessionPersistenceTest: React.FC = () => {
   return (
     <DashboardLayout>
       <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-        <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+        <Container maxWidth="xl" sx={{ py: { xs: 4, md: 6 } }}>
           <Typography variant="h4" sx={{ mb: 4, fontWeight: 700 }}>
             Session Persistence Test
           </Typography>

@@ -1,7 +1,8 @@
 import { createTheme, Theme } from '@mui/material/styles';
+import { getPopupSurfaceComponentOverrides } from './theme/popupSurfaces';
 
 export const createAppTheme = (mode: 'light' | 'dark'): Theme => {
-  return createTheme({
+  const base = createTheme({
     palette: {
       mode,
       primary: {
@@ -60,5 +61,9 @@ export const createAppTheme = (mode: 'light' | 'dark'): Theme => {
         },
       },
     },
+  });
+
+  return createTheme(base, {
+    components: getPopupSurfaceComponentOverrides(base),
   });
 };

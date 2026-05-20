@@ -70,7 +70,7 @@ const LandingLayout: React.FC<LandingLayoutProps> = ({ children }) => {
           transition: 'all 0.3s',
         }}
       >
-        <Container maxWidth="lg">
+        <Container maxWidth="xl">
           <Toolbar disableGutters sx={{ py: { xs: 1, md: 1 } }}>
             <Typography 
               variant="h6" 

@@ -41,6 +41,7 @@ import {
 import { SUBSCRIPTION_PLANS, SubscriptionPlan } from '../../types/subscription';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
+import { TESTING_MODE_UNLOCK_ALL } from '../../config/testingMode';
 
 const PricingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -57,8 +58,11 @@ const PricingPage: React.FC = () => {
 
   // Check if user came from landing page
   useEffect(() => {
+    if (TESTING_MODE_UNLOCK_ALL) {
+      return;
+    }
     const fromLandingPage = location.state?.fromLandingPage;
-    
+
     // If no state indicating they came from landing page, redirect
     if (!fromLandingPage) {
       navigate('/', { replace: true });
@@ -105,6 +109,22 @@ const PricingPage: React.FC = () => {
     }
   };
 
+  if (TESTING_MODE_UNLOCK_ALL) {
+    return (
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: { xs: 6, md: 10 } }}>
+        <Container maxWidth="md">
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/')} sx={{ mb: 3 }}>
+            Back to Home
+          </Button>
+          <Alert severity="info">
+            <AlertTitle>Pricing tiers are off during testing</AlertTitle>
+            All workspace pages are available after you sign in. Use the sidebar to navigate anywhere.
+          </Alert>
+        </Container>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ 
       minHeight: '100vh', 
@@ -125,7 +145,7 @@ const PricingPage: React.FC = () => {
         }}
       />
 
-      <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1, py: { xs: 4, md: 6 } }}>
+      <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 1, py: { xs: 4, md: 6 } }}>
         {/* Back Button */}
         <Fade in={isVisible} timeout={500}>
           <Box mb={3}>

@@ -39,9 +39,9 @@ import {
   getRequiredPlanForEmployeeCount, 
   getCompanyTier, 
   SubscriptionPlan,
-  CompanyProfile 
+  CompanyProfile,
+  SUBSCRIPTION_PLANS,
 } from '../types/subscription';
-import { useSubscription } from '../contexts/SubscriptionContext';
 
 interface ConditionalRegistrationProps {
   open: boolean;
@@ -72,7 +72,9 @@ const ConditionalRegistration: React.FC<ConditionalRegistrationProps> = ({
       if (activeStep === 0) {
         // Auto-select required plan based on employee count
         const requiredPlan = getRequiredPlanForEmployeeCount(companyData.employeeCount);
-        setSelectedPlan(requiredPlan);
+        const enterprisePlan =
+          SUBSCRIPTION_PLANS.find((p) => p.id === 'enterprise') ?? requiredPlan;
+        setSelectedPlan(TESTING_MODE_UNLOCK_ALL ? enterprisePlan : requiredPlan);
       }
       setActiveStep((prevActiveStep) => prevActiveStep + 1);
     }
@@ -227,17 +229,38 @@ const ConditionalRegistration: React.FC<ConditionalRegistrationProps> = ({
             </Grid>
 
             {/* Live Preview */}
-            {companyData.employeeCount > 0 && (
+            {companyData.employeeCount > 0 && !TESTING_MODE_UNLOCK_ALL && (
               <Alert severity="info" sx={{ mt: 3 }}>
                 <AlertTitle>Plan Recommendation</AlertTitle>
                 Based on {companyData.employeeCount} employees, we recommend the{' '}
                 <strong>{getRequiredPlanForEmployeeCount(companyData.employeeCount).name}</strong> plan.
               </Alert>
             )}
+            {companyData.employeeCount > 0 && TESTING_MODE_UNLOCK_ALL && (
+              <Alert severity="success" sx={{ mt: 3 }}>
+                <AlertTitle>Testing mode</AlertTitle>
+                Subscription tiers are off — your workspace will have full access after signup.
+              </Alert>
+            )}
           </Box>
         );
 
       case 1:
+        if (TESTING_MODE_UNLOCK_ALL) {
+          return (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Confirm workspace setup
+              </Typography>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Pricing tiers are disabled while you&apos;re testing the app. Continue to finish registration — every page stays unlocked.
+              </Typography>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                Enterprise-equivalent access is applied automatically during testing.
+              </Alert>
+            </Box>
+          );
+        }
         return (
           <Box>
             <Typography variant="h6" gutterBottom>
@@ -333,14 +356,16 @@ const ConditionalRegistration: React.FC<ConditionalRegistrationProps> = ({
               </Card>
             )}
 
-            <Paper sx={{ p: 2, mt: 3, bgcolor: 'grey.50' }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Company Tier: <strong>{getCompanyTier(companyData.employeeCount).toUpperCase()}</strong>
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                As your team grows, you can easily upgrade to access more features and higher limits.
-              </Typography>
-            </Paper>
+            {!TESTING_MODE_UNLOCK_ALL && (
+              <Paper sx={{ p: 2, mt: 3, bgcolor: 'grey.50' }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Company Tier: <strong>{getCompanyTier(companyData.employeeCount).toUpperCase()}</strong>
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  As your team grows, you can easily upgrade to access more features and higher limits.
+                </Typography>
+              </Paper>
+            )}
           </Box>
         );
 
