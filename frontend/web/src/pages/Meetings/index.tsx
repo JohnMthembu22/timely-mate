@@ -91,13 +91,19 @@ function FieldLabelWithIcon({
   icon,
   label,
   required,
+  fieldId,
 }: {
   icon: React.ReactNode;
   label: string;
   required?: boolean;
+  fieldId: string;
 }) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+    <Box
+      component="label"
+      htmlFor={fieldId}
+      sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, cursor: 'pointer' }}
+    >
       {icon}
       <Typography component="span" sx={{ ...popupFormLabelSx, mb: 0 }}>
         {label}
@@ -791,6 +797,7 @@ const Meetings: React.FC = () => {
                 <Grid container spacing={3}>
                   <Grid item xs={12}>
                     <FieldLabelWithIcon
+                      fieldId="new-meeting-title"
                       required
                       label="Meeting Title"
                       icon={
@@ -806,6 +813,7 @@ const Meetings: React.FC = () => {
                       }
                     />
                     <TextField
+                      id="new-meeting-title"
                       fullWidth
                       placeholder="Enter meeting title"
                       value={newMeeting.title}
@@ -818,6 +826,7 @@ const Meetings: React.FC = () => {
                   
                   <Grid item xs={12}>
                     <FieldLabelWithIcon
+                      fieldId="new-meeting-description"
                       label="Description"
                       icon={
                         <Box
@@ -832,6 +841,7 @@ const Meetings: React.FC = () => {
                       }
                     />
                     <TextField
+                      id="new-meeting-description"
                       fullWidth
                       multiline
                       rows={3}
@@ -935,6 +945,7 @@ const Meetings: React.FC = () => {
 
                   <Grid item xs={12}>
                     <FieldLabelWithIcon
+                      fieldId="new-meeting-location"
                       label={newMeeting.isVirtual ? 'Meeting URL' : 'Physical Location'}
                       icon={
                         <Box
@@ -959,6 +970,7 @@ const Meetings: React.FC = () => {
                       alignItems={{ xs: 'stretch', sm: 'flex-start' }}
                     >
                       <TextField
+                        id="new-meeting-location"
                         fullWidth
                         value={newMeeting.location}
                         onChange={(e) => setNewMeeting({ ...newMeeting, location: e.target.value })}
@@ -1039,6 +1051,7 @@ const Meetings: React.FC = () => {
                 <Grid container spacing={3}>
                   <Grid item xs={12} md={6}>
                     <FieldLabelWithIcon
+                      fieldId="new-meeting-date"
                       required
                       label="Date"
                       icon={
@@ -1054,6 +1067,7 @@ const Meetings: React.FC = () => {
                       }
                     />
                     <TextField
+                      id="new-meeting-date"
                       type="date"
                       fullWidth
                       value={newMeeting.date}
@@ -1066,6 +1080,7 @@ const Meetings: React.FC = () => {
 
                   <Grid item xs={12} md={3}>
                     <FieldLabelWithIcon
+                      fieldId="new-meeting-start-time"
                       required
                       label="Start Time"
                       icon={
@@ -1081,6 +1096,7 @@ const Meetings: React.FC = () => {
                       }
                     />
                     <TextField
+                      id="new-meeting-start-time"
                       type="time"
                       fullWidth
                       value={newMeeting.startTime}
@@ -1093,6 +1109,7 @@ const Meetings: React.FC = () => {
 
                   <Grid item xs={12} md={3}>
                     <FieldLabelWithIcon
+                      fieldId="new-meeting-end-time"
                       label="End Time"
                       icon={
                         <Box
@@ -1107,6 +1124,7 @@ const Meetings: React.FC = () => {
                       }
                     />
                     <TextField
+                      id="new-meeting-end-time"
                       type="time"
                       fullWidth
                       value={newMeeting.endTime}
@@ -1273,6 +1291,7 @@ const Meetings: React.FC = () => {
                   <Grid container spacing={3}>
                     <Grid item xs={12}>
                       <FieldLabelWithIcon
+                        fieldId="new-meeting-agenda"
                         label="Meeting Agenda"
                         icon={
                           <Box
@@ -1287,6 +1306,7 @@ const Meetings: React.FC = () => {
                         }
                       />
                       <TextField
+                        id="new-meeting-agenda"
                         fullWidth
                         multiline
                         rows={3}
@@ -1300,8 +1320,10 @@ const Meetings: React.FC = () => {
                     
                     <Grid item xs={12} md={6}>
                       <FormControl fullWidth>
-                        <InputLabel>Priority</InputLabel>
+                        <InputLabel id="new-meeting-priority-label">Priority</InputLabel>
                         <Select
+                          id="new-meeting-priority"
+                          labelId="new-meeting-priority-label"
                           value={newMeeting.priority}
                           label="Priority"
                           onChange={(e) => setNewMeeting({ ...newMeeting, priority: e.target.value as string })}
@@ -1579,8 +1601,10 @@ const Meetings: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <FormControl fullWidth>
-                    <InputLabel>Meeting Type</InputLabel>
+                    <InputLabel id="edit-meeting-type-label">Meeting Type</InputLabel>
                     <Select
+                      id="edit-meeting-type"
+                      labelId="edit-meeting-type-label"
                       value={editingMeeting?.isVirtual ? 'virtual' : 'in-person'}
                       label="Meeting Type"
                       onChange={(e) => setEditingMeeting(prev => prev ? { ...prev, isVirtual: e.target.value === 'virtual' } : null)}

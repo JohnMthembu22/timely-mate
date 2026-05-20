@@ -128,7 +128,7 @@ export function MainDashboardContent({
         px: { xs: 2, sm: 3, md: 4 },
       }}
     >
-      <Box sx={{ maxWidth: theme.breakpoints.values.xl, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <Box sx={{ width: '100%', maxWidth: theme.breakpoints.values.xl, display: 'flex', flexDirection: 'column', gap: 4 }}>
         {/* Profile header */}
         <Box
           sx={{

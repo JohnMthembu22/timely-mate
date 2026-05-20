@@ -184,6 +184,8 @@ interface TabPanelProps {
   value: number;
 }
 
+const FREELANCER_TAB_PREFIX = 'freelancer';
+
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
@@ -191,8 +193,7 @@ function TabPanel(props: TabPanelProps) {
     <div
       role="tabpanel"
       hidden={value !== index}
-      id={`freelancer-tabpanel-${index}`}
-      aria-labelledby={`freelancer-tab-${index}`}
+      {...tabPanelA11yProps(index, FREELANCER_TAB_PREFIX)}
       {...other}
     >
       {value === index && (
@@ -1443,10 +1444,10 @@ const Freelancers: React.FC = () => {
                 <Box>
                   <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                     <Tabs value={tabValue} onChange={handleTabChange} aria-label="freelancer details tabs">
-                      <Tab label="Overview" />
-                      <Tab label="Projects" />
-                      <Tab label="Payments" />
-                      <Tab label="Contract" />
+                      <Tab label="Overview" {...tabA11yProps(0, FREELANCER_TAB_PREFIX)} />
+                      <Tab label="Projects" {...tabA11yProps(1, FREELANCER_TAB_PREFIX)} />
+                      <Tab label="Payments" {...tabA11yProps(2, FREELANCER_TAB_PREFIX)} />
+                      <Tab label="Contract" {...tabA11yProps(3, FREELANCER_TAB_PREFIX)} />
                     </Tabs>
                   </Box>
                   

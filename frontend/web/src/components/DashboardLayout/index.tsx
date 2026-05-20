@@ -389,48 +389,55 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   );
 
   const drawerPaperSx = {
-    boxSizing: 'border-box',
+    boxSizing: 'border-box' as const,
     width: DRAWER_WIDTH,
     bgcolor: SLATE.bg,
     borderRight: `1px solid ${SLATE.border}`,
   };
 
+  /** Permanent drawer in document flow (not fixed) so we don't double-offset main content. */
+  const permanentDrawerPaperSx = {
+    ...drawerPaperSx,
+    position: 'relative' as const,
+    height: '100dvh',
+  };
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100dvh', width: '100%', maxWidth: '100vw', overflowX: 'hidden' }}>
-      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={handleDrawerToggle}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            display: { xs: 'block', md: 'none' },
-            '& .MuiDrawer-paper': drawerPaperSx,
-            zIndex: (t) => t.zIndex.drawer + 2,
-          }}
-        >
-          {drawer}
-        </Drawer>
-        <Drawer
-          variant="permanent"
-          sx={{
-            display: { xs: 'none', md: 'block' },
-            '& .MuiDrawer-paper': drawerPaperSx,
-          }}
-          open
-        >
-          {drawer}
-        </Drawer>
-      </Box>
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={handleDrawerToggle}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          '& .MuiDrawer-paper': drawerPaperSx,
+          zIndex: (t) => t.zIndex.drawer + 2,
+        }}
+      >
+        {drawer}
+      </Drawer>
+      <Drawer
+        variant="permanent"
+        aria-label="Main navigation"
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          width: DRAWER_WIDTH,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': permanentDrawerPaperSx,
+        }}
+        open
+      >
+        {drawer}
+      </Drawer>
 
       <Box
         sx={{
           flexGrow: 1,
           display: 'flex',
           flexDirection: 'column',
-          width: { xs: '100%', md: `calc(100% - ${DRAWER_WIDTH}px)` },
-          ml: { md: `${DRAWER_WIDTH}px` },
           minWidth: 0,
+          width: { xs: '100%', md: `calc(100% - ${DRAWER_WIDTH}px)` },
         }}
       >
         {/* Mobile top bar — blue hamburger on light background */}

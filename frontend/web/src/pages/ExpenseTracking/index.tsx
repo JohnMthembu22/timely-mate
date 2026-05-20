@@ -77,6 +77,7 @@ import {
   Print,
 } from '@mui/icons-material';
 import DashboardLayout from '../../components/DashboardLayout';
+import { tabA11yProps, tabPanelA11yProps } from '../../utils/tabA11y';
 import FeatureGuard from '../../components/FeatureGuard';
 import { formatZAR } from '../../utils/currency';
 import { useNotifications, createNotification } from '../../contexts/NotificationContext';
@@ -220,6 +221,8 @@ interface TabPanelProps {
   value: number;
 }
 
+const EXPENSE_TAB_PREFIX = 'expense';
+
 function CustomTabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
 
@@ -227,8 +230,7 @@ function CustomTabPanel(props: TabPanelProps) {
     <div
       role="tabpanel"
       hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
+      {...tabPanelA11yProps(index, EXPENSE_TAB_PREFIX)}
       {...other}
     >
       {value === index && (
@@ -241,10 +243,7 @@ function CustomTabPanel(props: TabPanelProps) {
 }
 
 function a11yProps(index: number) {
-  return {
-    id: `simple-tab-${index}`,
-    'aria-controls': `simple-tabpanel-${index}`,
-  };
+  return tabA11yProps(index, EXPENSE_TAB_PREFIX);
 }
 
 const ExpenseTracking: React.FC = () => {

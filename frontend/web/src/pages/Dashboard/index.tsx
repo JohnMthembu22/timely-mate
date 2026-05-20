@@ -656,7 +656,7 @@ const Dashboard: React.FC = () => {
           fullWidth
           disableEscapeKeyDown
         >
-          <DialogTitle sx={{ textAlign: 'center', py: 3 }}>
+          <DialogTitle id="clock-in-dialog-title" sx={{ textAlign: 'center', py: 3 }}>
             <Typography variant="h5" component="div" sx={{ fontWeight: 700 }}>
               {redirectPath ? 'Clock In Required' : 'Start Your Workday'}
             </Typography>
@@ -700,7 +700,7 @@ const Dashboard: React.FC = () => {
             pb: { xs: 3, md: 4 },
           }}
         >
-          <Container maxWidth="xl">
+          <Container maxWidth="xl" disableGutters sx={{ px: { xs: 2, sm: 3, md: 4 } }}>
             <Box sx={{ color: 'white' }}>
               <Typography
                 variant="h2"
@@ -740,7 +740,7 @@ const Dashboard: React.FC = () => {
 
       {/* Clock In Alert */}
       {clockInAlert && (
-        <Container maxWidth="xl" sx={{ mt: 2 }}>
+        <Container maxWidth="xl" disableGutters sx={{ mt: 2, px: { xs: 2, sm: 3, md: 4 } }}>
           <Alert 
             severity="success" 
             onClose={() => setClockInAlert(false)}
@@ -832,7 +832,7 @@ const Dashboard: React.FC = () => {
       />
 
       {/* Quick Actions */}
-      <Container maxWidth="xl" sx={{ py: { xs: 3, md: 5 } }}>
+      <Container maxWidth="xl" disableGutters sx={{ py: { xs: 3, md: 5 }, px: { xs: 2, sm: 3, md: 4 } }}>
         <Typography sx={{ fontWeight: 700, fontSize: '1.125rem', color: '#1e293b', mb: 0.5 }}>
           Quick actions
         </Typography>
@@ -849,7 +849,7 @@ const Dashboard: React.FC = () => {
       </Container>
 
       {/* Management Tools */}
-      <Container maxWidth="xl" sx={{ py: { xs: 3, md: 5 }, pb: { xs: 6, md: 8 } }}>
+      <Container maxWidth="xl" disableGutters sx={{ py: { xs: 3, md: 5 }, pb: { xs: 6, md: 8 }, px: { xs: 2, sm: 3, md: 4 } }}>
         <Typography sx={{ fontWeight: 700, fontSize: '1.125rem', color: '#1e293b', mb: 0.5 }}>
           Management tools
         </Typography>
