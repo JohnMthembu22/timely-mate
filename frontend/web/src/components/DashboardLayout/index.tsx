@@ -388,26 +388,18 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     </Box>
   );
 
-  const drawerPaperSx = {
+  const sidebarSurfaceSx = {
     boxSizing: 'border-box' as const,
     width: DRAWER_WIDTH,
     bgcolor: SLATE.bg,
     borderRight: `1px solid ${SLATE.border}`,
-  };
-
-  /** Fixed sidebar: paper stays on screen while main content scrolls. Drawer width is the only horizontal offset. */
-  const permanentDrawerPaperSx = {
-    ...drawerPaperSx,
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    height: '100dvh',
-    overflowY: 'auto',
-    overflowX: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const,
   };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100dvh', width: '100%', maxWidth: '100vw', overflowX: 'hidden' }}>
+    <Box sx={{ minHeight: '100dvh', width: '100%', maxWidth: '100vw' }}>
+      {/* Mobile: overlay drawer */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
@@ -415,34 +407,44 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': drawerPaperSx,
+          '& .MuiDrawer-paper': {
+            ...sidebarSurfaceSx,
+            overflowY: 'auto',
+          },
           zIndex: (t) => t.zIndex.drawer + 2,
         }}
       >
         {drawer}
       </Drawer>
-      {/* Spacer reserves drawer width; paper is position:fixed and does not scroll away */}
-      <Drawer
-        variant="permanent"
+
+      {/* Desktop: fixed nav — stays on screen while page content scrolls */}
+      <Box
+        component="nav"
         aria-label="Main navigation"
         sx={{
-          display: { xs: 'none', md: 'block' },
-          width: DRAWER_WIDTH,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': permanentDrawerPaperSx,
+          ...sidebarSurfaceSx,
+          display: { xs: 'none', md: 'flex' },
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          zIndex: theme.zIndex.drawer,
+          height: '100dvh',
+          maxHeight: '100dvh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
         }}
-        open
       >
         {drawer}
-      </Drawer>
+      </Box>
 
       <Box
         sx={{
-          flexGrow: 1,
           display: 'flex',
           flexDirection: 'column',
+          minHeight: '100dvh',
           minWidth: 0,
-          width: { xs: '100%', md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          width: '100%',
+          ml: { xs: 0, md: `${DRAWER_WIDTH}px` },
         }}
       >
         {/* Mobile top bar — blue hamburger on light background */}
