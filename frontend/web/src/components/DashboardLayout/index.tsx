@@ -395,11 +395,15 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     borderRight: `1px solid ${SLATE.border}`,
   };
 
-  /** Permanent drawer in document flow (not fixed) so we don't double-offset main content. */
+  /** Fixed sidebar: paper stays on screen while main content scrolls. Drawer width is the only horizontal offset. */
   const permanentDrawerPaperSx = {
     ...drawerPaperSx,
-    position: 'relative' as const,
+    position: 'fixed',
+    top: 0,
+    left: 0,
     height: '100dvh',
+    overflowY: 'auto',
+    overflowX: 'hidden',
   };
 
   return (
@@ -417,6 +421,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       >
         {drawer}
       </Drawer>
+      {/* Spacer reserves drawer width; paper is position:fixed and does not scroll away */}
       <Drawer
         variant="permanent"
         aria-label="Main navigation"
