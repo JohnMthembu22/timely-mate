@@ -210,9 +210,6 @@ const authService = {
       }
     }
 
-    // Save session data before logout
-    sessionPersistence.saveSessionData();
-    
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   },

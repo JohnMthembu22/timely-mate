@@ -13,6 +13,7 @@ const SessionRestoreProvider: React.FC<SessionRestoreProviderProps> = ({ childre
   useEffect(() => {
     const restoreSession = async () => {
       try {
+        sessionPersistence.pruneLegacySessionKeys();
         setRestoreStatus('Checking for saved session data...');
         
         // Always ensure registered users are preserved (they never expire)

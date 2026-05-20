@@ -11,6 +11,32 @@ if (import.meta.env.DEV) {
   void import('./utils/devWelcome')
 }
 
+/** After a new deploy, old cached bundles may request missing chunks (HTML 404 → MIME error). */
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault()
+  const reloaded = sessionStorage.getItem('timelymate_chunk_reload')
+  if (!reloaded) {
+    sessionStorage.setItem('timelymate_chunk_reload', '1')
+    window.location.reload()
+  }
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason
+  const msg = reason instanceof Error ? reason.message : String(reason ?? '')
+  if (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed')
+  ) {
+    event.preventDefault()
+    const reloaded = sessionStorage.getItem('timelymate_chunk_reload')
+    if (!reloaded) {
+      sessionStorage.setItem('timelymate_chunk_reload', '1')
+      window.location.reload()
+    }
+  }
+})
+
 const rootEl = document.getElementById('root');
 if (!rootEl) {
   document.body.innerHTML =
