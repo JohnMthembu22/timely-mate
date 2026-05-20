@@ -40,21 +40,19 @@ const SessionRestoreProvider: React.FC<SessionRestoreProviderProps> = ({ childre
         // Ensure registered users persist (they're stored separately)
         // This ensures users don't lose their registered accounts
         
-        // Small delay to show the status message
-        setTimeout(() => {
-          setIsRestoring(false);
-        }, 800); // Reduced delay for faster navigation
-        
+        setIsRestoring(false);
       } catch (error) {
         console.error('Error during session restoration:', error);
         setRestoreStatus('Error restoring session data');
-        setTimeout(() => {
-          setIsRestoring(false);
-        }, 1000);
+        setIsRestoring(false);
       }
     };
 
     restoreSession();
+
+    // Never block the UI indefinitely (slow mobile networks / storage errors)
+    const failSafe = window.setTimeout(() => setIsRestoring(false), 2500);
+    return () => window.clearTimeout(failSafe);
   }, []);
 
   if (isRestoring) {

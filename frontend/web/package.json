@@ -23,8 +23,8 @@
     "fresh-start": "npm run clear-demo && npm run dev",
     "electron": "electron .",
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron-build": "npm run build && electron-builder",
-    "electron-dist": "npm run build && electron-builder --publish=never",
+    "electron-build": "VITE_BASE_PATH=./ npm run build && electron-builder",
+    "electron-dist": "VITE_BASE_PATH=./ npm run build && electron-builder --publish=never",
     "electron-pack": "electron-builder --dir",
     "electron-pack-all": "electron-builder --mac --win --linux"
   },

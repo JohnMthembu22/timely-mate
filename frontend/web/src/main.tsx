@@ -11,7 +11,12 @@ if (import.meta.env.DEV) {
   void import('./utils/devWelcome')
 }
 
-createRoot(document.getElementById('root')!).render(
+const rootEl = document.getElementById('root');
+if (!rootEl) {
+  document.body.innerHTML =
+    '<p style="font-family:system-ui;padding:24px;text-align:center">Timely Mate failed to start. Please refresh the page.</p>';
+} else {
+createRoot(rootEl).render(
   <StrictMode>
     <Provider store={store}>
       <BrowserRouter 
@@ -24,4 +29,5 @@ createRoot(document.getElementById('root')!).render(
       </BrowserRouter>
     </Provider>
   </StrictMode>,
-)
+);
+}

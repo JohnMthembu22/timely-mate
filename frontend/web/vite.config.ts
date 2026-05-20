@@ -3,7 +3,10 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
 // https://vitejs.dev/config/
+// Web deploys must use "/" so assets load on /login, /dashboard, etc.
+// Electron builds set VITE_BASE_PATH=./ (see package.json electron-build).
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [react()],
   resolve: {
     alias: {
@@ -38,7 +41,6 @@ export default defineConfig({
       },
     },
   },
-  base: './', // Use relative paths for Electron compatibility
   server: {
     port: 3000,
     host: true,

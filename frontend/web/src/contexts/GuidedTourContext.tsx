@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { driver, type Driver } from 'driver.js';
-import 'driver.js/dist/driver.css';
+import type { Driver } from 'driver.js';
 import {
   guidedTourSteps,
   TOUR_AUTO_START_KEY,
@@ -24,15 +23,27 @@ export function useGuidedTour(): GuidedTourContextValue {
   return ctx;
 }
 
+async function loadDriverModule() {
+  await import('driver.js/dist/driver.css');
+  const mod = await import('driver.js');
+  return mod.driver;
+}
+
 export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const driverRef = useRef<Driver | null>(null);
+  const driverLoaderRef = useRef<ReturnType<typeof loadDriverModule> | null>(null);
 
-  const ensureDriver = useCallback(() => {
+  const ensureDriver = useCallback(async () => {
     if (driverRef.current) return driverRef.current;
 
-    driverRef.current = driver({
+    if (!driverLoaderRef.current) {
+      driverLoaderRef.current = loadDriverModule();
+    }
+    const createDriver = await driverLoaderRef.current;
+
+    driverRef.current = createDriver({
       showProgress: true,
       animate: true,
       smoothScroll: true,
@@ -63,17 +74,20 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const completed = localStorage.getItem(TOUR_COMPLETED_KEY) === 'true';
       if (completed && !options?.force) return;
 
-      const run = () => {
-        const d = ensureDriver();
-        d.drive();
+      const run = async () => {
+        try {
+          const d = await ensureDriver();
+          d.drive();
+        } catch (err) {
+          console.error('Guided tour failed to start:', err);
+        }
       };
 
-      // Tour steps span dashboard + projects + messages — land on dashboard first
       if (location.pathname !== '/dashboard') {
         navigate('/dashboard');
-        window.setTimeout(run, 400);
+        window.setTimeout(() => void run(), 400);
       } else {
-        window.setTimeout(run, 200);
+        window.setTimeout(() => void run(), 200);
       }
     },
     [ensureDriver, location.pathname, navigate]

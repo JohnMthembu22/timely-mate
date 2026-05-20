@@ -1,4 +1,5 @@
 import AppRoutes from './routes';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserStatusProvider } from './contexts/UserStatusContext';
@@ -49,23 +50,25 @@ const AppContent = () => {
 
 const App = () => {
   return (
-    <SessionRestoreProvider>
-      <ThemeProvider>
-        <CurrencyProvider>
-          <UserStatusProvider>
-            <SubscriptionProvider>
-              <EmployeeProvider>
-                <NotificationProvider>
-                  <GuidedTourProvider>
-                    <AppContent />
-                  </GuidedTourProvider>
-                </NotificationProvider>
-              </EmployeeProvider>
-            </SubscriptionProvider>
-          </UserStatusProvider>
-        </CurrencyProvider>
-      </ThemeProvider>
-    </SessionRestoreProvider>
+    <ErrorBoundary>
+      <SessionRestoreProvider>
+        <ThemeProvider>
+          <CurrencyProvider>
+            <UserStatusProvider>
+              <SubscriptionProvider>
+                <EmployeeProvider>
+                  <NotificationProvider>
+                    <GuidedTourProvider>
+                      <AppContent />
+                    </GuidedTourProvider>
+                  </NotificationProvider>
+                </EmployeeProvider>
+              </SubscriptionProvider>
+            </UserStatusProvider>
+          </CurrencyProvider>
+        </ThemeProvider>
+      </SessionRestoreProvider>
+    </ErrorBoundary>
   );
 };
 
