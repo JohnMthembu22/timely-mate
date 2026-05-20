@@ -42,6 +42,7 @@ import {
   CompanyProfile,
   SUBSCRIPTION_PLANS,
 } from '../types/subscription';
+import { TESTING_MODE_UNLOCK_ALL } from '../config/testingMode';
 
 interface ConditionalRegistrationProps {
   open: boolean;
