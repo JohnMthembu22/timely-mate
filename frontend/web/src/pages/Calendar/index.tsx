@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Paper,
@@ -76,11 +76,27 @@ import DashboardLayout from '../../components/DashboardLayout';
 import PopupHoverCard from '../../components/PopupHoverCard';
 import { useEmployees } from '../../contexts/EmployeeContext';
 import { popupFormLabelSx, popupNestedPanelSx } from '../../theme/popupSurfaces';
+import { buildOperationalMockEvents } from './calendarOpsMockData';
+import type { OpsRiskLevel, OpsTimelineCategory } from './calendarOpsTypes';
+import { OperationalTimelineView } from './components/OperationalTimelineView';
+import type { TimelineEventCardData } from './components/TimelineEventCard';
+import { WeekRunwaySidePanel } from './components/WeekRunwaySidePanel';
+import { AssignScheduleDialog } from './components/AssignScheduleDialog';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { useAppSelector } from '../../store';
+import {
+  notifyTaskSubmittedToBriefedBy,
+} from '../../utils/taskReview';
+import { getAuthUserLabel } from '../../utils/managerReview';
+
+type TaskWorkflowStatus = 'todo' | 'in_progress' | 'completed' | 'pending_review';
 
 interface TeamMember {
   name: string;
   avatar: string;
   role: string;
+  email?: string;
+  id?: string;
 }
 
 interface Task {
@@ -88,11 +104,14 @@ interface Task {
   title: string;
   description: string;
   assignee: TeamMember | null;
-  status: 'todo' | 'in_progress' | 'completed';
+  assignedBy: TeamMember | null;
+  assignedByEmail?: string;
+  status: TaskWorkflowStatus;
   dueDate: string;
   priority: 'low' | 'medium' | 'high';
   isProjectTask: boolean;
   projectId?: string;
+  projectName?: string;
   createdAt: string;
   progress: number;
 }
@@ -105,13 +124,24 @@ interface CalendarEvent {
   endDate: string;
   type: 'meeting' | 'task' | 'production';
   priority: 'low' | 'medium' | 'high';
-  status: 'todo' | 'in_progress' | 'completed';
+  status: TaskWorkflowStatus;
   projectId?: string;
+  projectName?: string;
   attendees?: { name: string; avatar: string }[];
+  assignedByEmail?: string;
+  assignedByName?: string;
+  linkedTaskId?: string;
   progress?: number;
   location?: string;
   isVirtual?: boolean;
   meetingLink?: string;
+  opsCategory?: OpsTimelineCategory;
+  riskLevel?: OpsRiskLevel;
+}
+
+interface PendingScheduleRequest {
+  item: BacklogItem;
+  day: Date;
 }
 
 const SAMPLE_OPERATIONAL_BACKLOG: {
@@ -213,6 +243,8 @@ const meetingPanelFieldSx = {
 };
 
 const Calendar: React.FC = () => {
+  const { user } = useAppSelector((state) => state.auth);
+  const { addNotification, addNotificationForRecipient } = useNotifications();
   const [selectedDate, setSelectedDate] = useState(new Date());
   /** Month shown in the operational grid (independent of selected day). */
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
@@ -223,6 +255,8 @@ const Calendar: React.FC = () => {
   const [newEventDialogOpen, setNewEventDialogOpen] = useState(false);
   const { employees } = useEmployees();
   const [newEvent, setNewEvent] = useState<Partial<CalendarEvent>>(defaultNewEventState);
+  const [assignScheduleOpen, setAssignScheduleOpen] = useState(false);
+  const [pendingSchedule, setPendingSchedule] = useState<PendingScheduleRequest | null>(null);
 
   const openNewEventDialog = (preset?: Partial<CalendarEvent>) => {
     setNewEvent({ ...defaultNewEventState(), ...preset });
@@ -241,10 +275,12 @@ const Calendar: React.FC = () => {
         const deptEmployees = employees.filter(emp => emp.department === dept);
         
         // Create team members from employees
-        const team: TeamMember[] = deptEmployees.map(emp => ({
+        const team: TeamMember[] = deptEmployees.map((emp) => ({
+          id: emp.id,
           name: emp.name,
           avatar: emp.avatar || `https://i.pravatar.cc/150?u=${emp.id}`,
           role: emp.position,
+          email: emp.email,
         }));
 
         // Generate tasks for each department
@@ -262,20 +298,24 @@ const Calendar: React.FC = () => {
         ];
 
         taskTemplates.forEach((template, taskIndex) => {
-          const statuses: ('todo' | 'in_progress' | 'completed')[] = ['todo', 'in_progress', 'completed'];
+          const statuses: TaskWorkflowStatus[] = ['todo', 'in_progress', 'completed'];
           const status = statuses[taskIndex % 3];
           const assignee = team[taskIndex % team.length] || null;
-          
+          const assignedBy = team[(taskIndex + 1) % team.length] || team[0] || null;
+
           const task: Task = {
             id: `${deptIndex}-${taskIndex}`,
             title: `${template.title} - ${dept}`,
             description: template.description,
             assignee,
+            assignedBy,
+            assignedByEmail: assignedBy?.email ?? deptEmployees[(taskIndex + 1) % deptEmployees.length]?.email,
             status,
             dueDate: new Date(Date.now() + Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             priority: template.priority,
             isProjectTask: true,
             projectId: deptIndex.toString(),
+            projectName: dept,
             createdAt: new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000).toISOString(),
             progress: status === 'completed' ? 100 : status === 'in_progress' ? Math.floor(Math.random() * 80) + 20 : 0,
           };
@@ -287,6 +327,36 @@ const Calendar: React.FC = () => {
       setTasks(mockTasks);
     }
   }, [employees]);
+
+  useEffect(() => {
+    const seeds = buildOperationalMockEvents();
+    setEvents((prev) => {
+      const existing = new Set(prev.map((e) => e.id));
+      const additions: CalendarEvent[] = seeds
+        .filter((s) => !existing.has(s.id))
+        .map((s) => ({
+          id: s.id,
+          title: s.title,
+          description: s.description,
+          startDate: s.startDate,
+          endDate: s.endDate,
+          type:
+            s.opsCategory === 'meeting'
+              ? 'meeting'
+              : s.opsCategory === 'production'
+                ? 'production'
+                : 'task',
+          priority: s.priority,
+          status: s.status,
+          projectId: s.projectId,
+          location: s.location,
+          opsCategory: s.opsCategory,
+          riskLevel: s.riskLevel,
+        }));
+      return additions.length ? [...prev, ...additions] : prev;
+    });
+  }, []);
+
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [view, setView] = useState('month');
@@ -307,10 +377,14 @@ const Calendar: React.FC = () => {
       endDate: newEvent.endDate || newEvent.startDate!,
       type: newEvent.type as CalendarEvent['type'],
       priority: newEvent.priority as 'low' | 'medium' | 'high',
-      status: newEvent.status as 'todo' | 'in_progress' | 'completed',
+      status: (newEvent.status ?? 'todo') as TaskWorkflowStatus,
       progress: newEvent.type === 'meeting' ? undefined : 0,
       projectId: newEvent.projectId,
-      attendees: newEvent.type === 'meeting' ? [] : undefined,
+      projectName: newEvent.projectName,
+      linkedTaskId: newEvent.linkedTaskId,
+      assignedByEmail: newEvent.assignedByEmail,
+      assignedByName: newEvent.assignedByName,
+      attendees: newEvent.attendees ?? (newEvent.type === 'meeting' ? [] : undefined),
       location: newEvent.location,
       isVirtual: newEvent.isVirtual,
       meetingLink: newEvent.meetingLink,
@@ -336,6 +410,10 @@ const Calendar: React.FC = () => {
         priority: task.priority,
         status: task.status,
         projectId: task.projectId,
+        projectName: task.projectName,
+        linkedTaskId: task.id,
+        assignedByEmail: task.assignedByEmail ?? task.assignedBy?.email,
+        assignedByName: task.assignedBy?.name,
         attendees: task.assignee ? [{ name: task.assignee.name, avatar: task.assignee.avatar }] : undefined,
         progress: task.progress,
       }));
@@ -358,17 +436,71 @@ const Calendar: React.FC = () => {
     setHoverAnchorEl(null);
   };
 
-  const handleStatusChange = (event: CalendarEvent, newStatus: 'todo' | 'in_progress' | 'completed') => {
-    setEvents(prev => prev.map(e => {
-      if (e.id === event.id) {
+  const syncLinkedTaskStatus = (event: CalendarEvent, newStatus: TaskWorkflowStatus) => {
+    if (!event.linkedTaskId && !event.id.startsWith('task-')) return;
+    const taskId = event.linkedTaskId ?? event.id.replace(/^task-/, '');
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              status: newStatus,
+              progress:
+                newStatus === 'completed' || newStatus === 'pending_review'
+                  ? 100
+                  : newStatus === 'in_progress'
+                    ? Math.max(t.progress, 20)
+                    : 0,
+            }
+          : t
+      )
+    );
+  };
+
+  const patchEventStatus = (eventId: string, newStatus: TaskWorkflowStatus) => {
+    setEvents((prev) =>
+      prev.map((e) => {
+        if (e.id !== eventId) return e;
         return {
           ...e,
           status: newStatus,
-          progress: newStatus === 'completed' ? 100 : e.progress,
+          progress:
+            newStatus === 'completed' || newStatus === 'pending_review'
+              ? 100
+              : newStatus === 'in_progress'
+                ? Math.max(e.progress ?? 0, 20)
+                : e.progress,
         };
-      }
-      return e;
-    }));
+      })
+    );
+  };
+
+  const handleStatusChange = (event: CalendarEvent, newStatus: TaskWorkflowStatus) => {
+    patchEventStatus(event.id, newStatus);
+    syncLinkedTaskStatus(event, newStatus);
+    setSelectedEvent((prev) => (prev?.id === event.id ? { ...prev, status: newStatus } : prev));
+  };
+
+  const handleSubmitForReview = (event: CalendarEvent) => {
+    const submitterLabel = getAuthUserLabel(user ?? undefined);
+    const briefedByEmail = event.assignedByEmail ?? user?.email;
+
+    handleStatusChange(event, 'pending_review');
+
+    notifyTaskSubmittedToBriefedBy({
+      briefedByEmail,
+      briefedByName: event.assignedByName,
+      taskTitle: event.title,
+      submitterLabel,
+      submitterEmail: user?.email,
+      actionUrl: '/calendar',
+      employees,
+      addNotificationForRecipient,
+      addNotification,
+    });
+
+    setEventDialogOpen(false);
+    setSelectedEvent(null);
   };
 
   const handleProgressChange = (event: CalendarEvent, newProgress: number) => {
@@ -385,6 +517,7 @@ const Calendar: React.FC = () => {
   };
 
   const eventStatusLabel = (s: CalendarEvent['status']) => {
+    if (s === 'pending_review') return 'Pending review';
     if (s === 'in_progress') return 'In-Progress';
     if (s === 'completed') return 'Done';
     return 'To-Do';
@@ -416,13 +549,64 @@ const Calendar: React.FC = () => {
     return `${day}T${h}:00`;
   };
 
-  const handleBacklogItemClick = (item: BacklogItem) => {
-    const day = item.sourceTask?.dueDate || format(selectedDate, 'yyyy-MM-dd');
-    const startDate = scheduleDayToDatetimeLocal(day, 9);
-    const endDate = scheduleDayToDatetimeLocal(day, 10);
+  const projectNameOptions = useMemo(() => {
+    const names = new Set<string>();
+    tasks.forEach((t) => {
+      if (t.projectName) names.add(t.projectName);
+      else if (t.projectId) names.add(`Project ${t.projectId}`);
+    });
+    employees.forEach((e) => names.add(e.department));
+    return [...names].sort();
+  }, [tasks, employees]);
+
+  const openAssignScheduleForBacklog = (item: BacklogItem, day: Date) => {
+    setPendingSchedule({ item, day });
+    setAssignScheduleOpen(true);
+  };
+
+  const completeBacklogSchedule = (assigneeId: string, projectName: string) => {
+    if (!pendingSchedule) return;
+    const { item, day } = pendingSchedule;
+    const dayStr = format(day, 'yyyy-MM-dd');
+    const startDate = scheduleDayToDatetimeLocal(dayStr, 9);
+    const endDate = scheduleDayToDatetimeLocal(dayStr, 10);
+    const employee = employees.find((e) => e.id === assigneeId);
+    const assigneeMember: TeamMember | null = employee
+      ? {
+          id: employee.id,
+          name: employee.name,
+          avatar: employee.avatar || `https://i.pravatar.cc/150?u=${employee.id}`,
+          role: employee.position,
+          email: employee.email,
+        }
+      : null;
+    const assignerEmail = user?.email;
+    const assignerName = getAuthUserLabel(user ?? undefined);
 
     if (item.sourceTask) {
       const t = item.sourceTask;
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === t.id
+            ? {
+                ...task,
+                assignee: assigneeMember,
+                assignedBy: assigneeMember
+                  ? {
+                      name: assignerName,
+                      avatar: '',
+                      role: 'Scheduler',
+                      email: assignerEmail,
+                    }
+                  : task.assignedBy,
+                assignedByEmail: assignerEmail,
+                dueDate: dayStr,
+                projectName,
+                projectId: t.projectId ?? projectName,
+              }
+            : task
+        )
+      );
       openNewEventDialog({
         title: item.title,
         description: t.description,
@@ -430,23 +614,58 @@ const Calendar: React.FC = () => {
         endDate,
         type: 'task',
         priority: t.priority,
-        status: t.status,
+        status: t.status === 'completed' ? 'todo' : t.status,
         projectId: t.projectId,
+        projectName,
+        linkedTaskId: t.id,
+        assignedByEmail: assignerEmail,
+        assignedByName: assignerName,
+        attendees: assigneeMember
+          ? [{ name: assigneeMember.name, avatar: assigneeMember.avatar }]
+          : undefined,
       });
     } else {
       const blockType: CalendarEvent['type'] =
         item.dept === 'Production' ? 'production' : 'task';
       openNewEventDialog({
         title: item.title,
-        description: `${item.dept} · ${item.duration}`,
+        description: `${item.dept} · ${item.duration} · ${projectName}`,
         startDate,
         endDate,
         type: blockType,
         priority: 'medium',
         status: 'todo',
+        projectName,
+        assignedByEmail: assignerEmail,
+        assignedByName: assignerName,
+        attendees: assigneeMember
+          ? [{ name: assigneeMember.name, avatar: assigneeMember.avatar }]
+          : undefined,
       });
     }
+
+    setAssignScheduleOpen(false);
+    setPendingSchedule(null);
   };
+
+  const handleBacklogItemClick = (item: BacklogItem) => {
+    const day = item.sourceTask?.dueDate || format(selectedDate, 'yyyy-MM-dd');
+    openAssignScheduleForBacklog(item, new Date(day.includes('T') ? day : `${day}T12:00:00`));
+  };
+
+  const toTimelineCard = (ev: CalendarEvent): TimelineEventCardData => ({
+    id: ev.id,
+    title: ev.title,
+    description: ev.description,
+    startDate: ev.startDate,
+    endDate: ev.endDate,
+    type: ev.type,
+    opsCategory: ev.opsCategory,
+    priority: ev.priority,
+    status: ev.status,
+    riskLevel: ev.riskLevel,
+    location: ev.location,
+  });
 
   const getMergedTimelineEvents = (): CalendarEvent[] => {
     const taskEvents: CalendarEvent[] = tasks.map((task) => ({
@@ -459,6 +678,10 @@ const Calendar: React.FC = () => {
       priority: task.priority,
       status: task.status,
       projectId: task.projectId,
+      projectName: task.projectName,
+      linkedTaskId: task.id,
+      assignedByEmail: task.assignedByEmail ?? task.assignedBy?.email,
+      assignedByName: task.assignedBy?.name,
       attendees: task.assignee ? [{ name: task.assignee.name, avatar: task.assignee.avatar }] : undefined,
       progress: task.progress,
     }));
@@ -681,7 +904,7 @@ const Calendar: React.FC = () => {
     </Box>
   );
 
-  const renderOperationalRightColumn = () => {
+  const renderWeekRunwaySidePanelContent = () => {
     const backlogItems = getBacklogItems();
     const selectedDayEvents = getEventsByDate(selectedDate);
     const rosterCount =
@@ -689,177 +912,32 @@ const Calendar: React.FC = () => {
     const estHours = Math.round((12 + selectedDayEvents.length * 2.3) * 10) / 10;
 
     return (
-      <Grid item xs={12} lg={3}>
-        <Stack spacing={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0f172a' }}>
-              Unassigned backlog
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5, mb: 2 }}>
-              Click a card to schedule it on the selected day and open the operational block form.
-            </Typography>
-            <Stack spacing={1.25}>
-              {backlogItems.map((task) => (
-                <Paper
-                  key={task.id}
-                  component="button"
-                  type="button"
-                  elevation={0}
-                  onClick={() => handleBacklogItemClick(task)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleBacklogItemClick(task);
-                    }
-                  }}
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderLeftWidth: 4,
-                    borderLeftColor: task.borderColor,
-                    cursor: 'pointer',
-                    width: '100%',
-                    textAlign: 'left',
-                    bgcolor: '#fff',
-                    transition: 'background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
-                    '&:hover': {
-                      bgcolor: '#f8fafc',
-                      borderColor: '#cbd5e1',
-                      boxShadow: '0 2px 8px rgba(15, 23, 42, 0.06)',
-                    },
-                    '&:focus-visible': {
-                      outline: '2px solid #0f172a',
-                      outlineOffset: 2,
-                    },
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#334155', display: 'block' }}>
-                    {task.title}
-                  </Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, alignItems: 'center' }}>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
-                      Dept: {task.dept}
-                    </Typography>
-                    <Chip
-                      label={task.duration}
-                      size="small"
-                      sx={{
-                        height: 22,
-                        fontSize: '0.65rem',
-                        fontWeight: 600,
-                        bgcolor: '#f8fafc',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                      }}
-                    />
-                  </Box>
-                </Paper>
-              ))}
-            </Stack>
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                pb: 2,
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-              }}
-            >
-              <Box>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    fontWeight: 700,
-                    color: 'text.secondary',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                  }}
-                >
-                  Focus target
-                </Typography>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0f172a', mt: 0.5 }}>
-                  Metrics for {format(selectedDate, 'MMMM d, yyyy')}
-                </Typography>
-              </Box>
-              <Tooltip title="Generate smart QR token">
-                <IconButton size="small" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                  <QrCode size={18} />
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <Stack spacing={1.5} sx={{ mt: 2 }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  p: 1.5,
-                  bgcolor: '#f8fafc',
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                <ClockLucide size={18} color="#64748b" />
-                <Box>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                    Estimated allocation
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {estHours} tracking hours
-                  </Typography>
-                </Box>
-              </Box>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  p: 1.5,
-                  bgcolor: '#f8fafc',
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                <UsersLucide size={18} color="#64748b" />
-                <Box>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                    Staff rostered
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {Math.min(rosterCount, 12)} active personnel
-                  </Typography>
-                </Box>
-              </Box>
-            </Stack>
-          </Paper>
-        </Stack>
-      </Grid>
+      <WeekRunwaySidePanel
+        backlogItems={backlogItems.map((task) => ({
+          id: task.id,
+          title: task.title,
+          duration: task.duration,
+          dept: task.dept,
+          borderColor: task.borderColor,
+          priority: task.sourceTask?.priority,
+        }))}
+        selectedDate={selectedDate}
+        estHours={estHours}
+        rosterCount={rosterCount}
+        enableDrag={view === 'timeline'}
+        onBacklogClick={(item) => {
+          const match = backlogItems.find((b) => b.id === item.id);
+          if (match) handleBacklogItemClick(match);
+        }}
+      />
     );
   };
+
+  const renderOperationalRightColumn = () => (
+    <Grid item xs={12} lg={3}>
+      {renderWeekRunwaySidePanelContent()}
+    </Grid>
+  );
 
   const renderCalendarView = () => {
     const monthStart = startOfMonth(calendarMonth);
@@ -1300,60 +1378,40 @@ const Calendar: React.FC = () => {
 
   const renderTimelineView = () => {
     const items = getMergedTimelineEvents();
+    const backlogItems = getBacklogItems();
 
     return (
-      <Grid container spacing={3}>
-        {renderOperationalTopBar(
+      <OperationalTimelineView
+        events={items.map(toTimelineCard)}
+        backlogItems={backlogItems.map((b) => ({
+          id: b.id,
+          title: b.title,
+          duration: b.duration,
+          dept: b.dept,
+          borderColor: b.borderColor,
+        }))}
+        selectedDate={selectedDate}
+        onSelectDate={setSelectedDate}
+        onEventClick={(ev) => {
+          const full = items.find((e) => e.id === ev.id);
+          if (full) handleEventClick(full);
+        }}
+        onBacklogClick={(b) => {
+          const match = backlogItems.find((x) => x.id === b.id);
+          if (match) handleBacklogItemClick(match);
+        }}
+        onBacklogDrop={(b, day) => {
+          const match = backlogItems.find((x) => x.id === b.id);
+          if (match) openAssignScheduleForBacklog(match, day);
+        }}
+        rightColumn={renderWeekRunwaySidePanelContent()}
+        topBarExtras={
           <>
             {renderSegmentMonthTimeline()}
             {renderNewOperationalBlockButton()}
           </>
-        )}
-
-        <Grid item xs={12} lg={9}>
-          <Paper
-            elevation={0}
-            sx={{
-              borderRadius: 3,
-              border: '1px solid',
-              borderColor: 'divider',
-              overflow: 'hidden',
-            }}
-          >
-            <Box sx={{ px: 2, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="overline" sx={{ fontWeight: 700, color: 'text.secondary', letterSpacing: '0.08em' }}>
-                Chronological runway
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
-                All meetings and due tasks merged on one timeline axis.
-              </Typography>
-            </Box>
-            <Stack spacing={2} sx={{ p: 2, maxHeight: { xs: 'none', md: '70vh' }, overflowY: 'auto' }}>
-              {items.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No operational blocks yet.
-                </Typography>
-              ) : (
-                items.map((ev) => (
-                  <Box key={ev.id} sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
-                    <Box sx={{ width: 88, flexShrink: 0, pt: 0.35 }}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: '#0f172a' }}>
-                        {format(new Date(ev.startDate), 'MMM d')}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
-                        {format(new Date(ev.startDate), 'yyyy')}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>{renderMiniDarkEventCard(ev)}</Box>
-                  </Box>
-                ))
-              )}
-            </Stack>
-          </Paper>
-        </Grid>
-
-        {renderOperationalRightColumn()}
-      </Grid>
+        }
+      />
     );
   };
 
@@ -1391,18 +1449,22 @@ const Calendar: React.FC = () => {
           </Container>
         </Box>
 
-        <Container maxWidth="xl" sx={{ mt: -4, pb: 6, minHeight: '100vh' }}>
+        <Container
+          maxWidth="xl"
+          sx={{ mt: -4, pb: 6, minHeight: '100vh', width: '100%', maxWidth: '100%', overflowX: 'hidden' }}
+        >
           <Paper 
             elevation={0} 
             sx={{ 
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 4,
               bgcolor: 'background.paper',
               mb: 3,
               boxShadow: 2,
               minHeight: 'auto',
               height: 'auto',
-              overflow: 'visible',
+              overflow: view === 'timeline' ? 'hidden' : 'visible',
+              maxWidth: '100%',
             }}
           >
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -1435,7 +1497,7 @@ const Calendar: React.FC = () => {
                   />
                   <Tab 
                     icon={<CalendarViewDay />} 
-                    label="Timeline" 
+                    label="Ops timeline" 
                     value="timeline"
                   />
                 </Tabs>
@@ -1903,6 +1965,18 @@ const Calendar: React.FC = () => {
                           }}
                         />
                       </Box>
+                      {selectedEvent.assignedByName && (
+                        <Box>
+                          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#64748b', display: 'block', mb: 1 }}>
+                            Assigned by
+                          </Typography>
+                          <Chip
+                            label={selectedEvent.assignedByName}
+                            size="small"
+                            sx={{ borderRadius: 2, fontWeight: 600 }}
+                          />
+                        </Box>
+                      )}
                       {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
                         <Box>
                           <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#64748b', display: 'block', mb: 1 }}>
@@ -1934,13 +2008,27 @@ const Calendar: React.FC = () => {
                     {isTaskLike(selectedEvent.type) && (
                       <Button
                         variant="contained"
-                        className={selectedEvent.status === 'completed' ? 'popup-submit-dark' : undefined}
-                        onClick={() => handleStatusChange(
-                          selectedEvent,
-                          selectedEvent.status === 'completed' ? 'todo' : 'completed'
-                        )}
+                        className={
+                          selectedEvent.status === 'completed' || selectedEvent.status === 'pending_review'
+                            ? 'popup-submit-dark'
+                            : undefined
+                        }
+                        onClick={() => {
+                          if (
+                            selectedEvent.status === 'completed' ||
+                            selectedEvent.status === 'pending_review'
+                          ) {
+                            handleStatusChange(selectedEvent, 'todo');
+                            setEventDialogOpen(false);
+                            setSelectedEvent(null);
+                          } else {
+                            handleSubmitForReview(selectedEvent);
+                          }
+                        }}
                       >
-                        {selectedEvent.status === 'completed' ? 'Reopen' : 'Mark Complete'}
+                        {selectedEvent.status === 'completed' || selectedEvent.status === 'pending_review'
+                          ? 'Reopen task'
+                          : 'Mark complete & send for review'}
                       </Button>
                     )}
                 {selectedEvent.type === 'meeting' && (
@@ -2130,6 +2218,20 @@ const Calendar: React.FC = () => {
             </PopupHoverCard>
           )}
         </Popper>
+
+        <AssignScheduleDialog
+          open={assignScheduleOpen}
+          taskTitle={pendingSchedule?.item.title ?? 'Task'}
+          scheduleDay={pendingSchedule?.day ?? selectedDate}
+          employees={employees}
+          projectOptions={projectNameOptions}
+          defaultProject={pendingSchedule?.item.dept}
+          onClose={() => {
+            setAssignScheduleOpen(false);
+            setPendingSchedule(null);
+          }}
+          onConfirm={completeBacklogSchedule}
+        />
     </DashboardLayout>
   );
 };

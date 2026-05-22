@@ -1,10 +1,11 @@
 import type { Components, SxProps, Theme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
+import { tmColors, tmGradients, tmShadows, tmShape } from './designTokens';
 
 /** Brand hero gradient — dialogs, primary popup actions */
-export const POPUP_BRAND_GRADIENT = 'linear-gradient(135deg, #2196f3 0%, #e91e63 100%)';
-export const POPUP_BRAND_GRADIENT_HOVER =
-  'linear-gradient(135deg, #1976d2 0%, #c2185b 100%)';
-export const POPUP_ACCENT_GRADIENT = 'linear-gradient(90deg, #2196f3, #e91e63)';
+export const POPUP_BRAND_GRADIENT = tmGradients.dialogTitle;
+export const POPUP_BRAND_GRADIENT_HOVER = tmGradients.buttonPrimaryHover;
+export const POPUP_ACCENT_GRADIENT = tmGradients.heroAccent;
 
 const roundedLg = '8px';
 
@@ -12,17 +13,17 @@ const roundedLg = '8px';
 export const popupPrimaryButtonSx = {
   textTransform: 'none' as const,
   fontWeight: 700,
-  borderRadius: 2,
+  borderRadius: tmShape.borderRadiusSm,
   px: 3,
   py: 1.25,
-  background: POPUP_BRAND_GRADIENT,
-  boxShadow: '0 8px 24px rgba(33, 150, 243, 0.35)',
+  background: tmGradients.buttonPrimary,
+  boxShadow: `0 8px 24px ${tmColors.neonBlueGlow}`,
   '&:hover': {
     background: POPUP_BRAND_GRADIENT_HOVER,
-    boxShadow: '0 12px 28px rgba(233, 30, 99, 0.28)',
+    boxShadow: `0 12px 28px ${alpha(tmColors.neonBlue, 0.4)}`,
   },
   '&:disabled': {
-    background: 'linear-gradient(135deg, rgba(33,150,243,0.35), rgba(233,30,99,0.35))',
+    background: `linear-gradient(135deg, ${alpha(tmColors.neonBlueDeep, 0.35)}, ${alpha(tmColors.emeraldDeep, 0.35)})`,
     color: 'rgba(255,255,255,0.85)',
   },
 };
@@ -34,13 +35,13 @@ export const popupSubmitButtonSx = {
   fontSize: '0.75rem',
   lineHeight: 1,
   color: '#fff',
-  bgcolor: '#0f172a',
+  bgcolor: tmColors.charcoal850,
   borderRadius: roundedLg,
   px: 2.5,
   py: 1,
   boxShadow: 'none',
-  '&:hover': { bgcolor: '#1e293b', boxShadow: 'none' },
-  '&:disabled': { bgcolor: '#94a3b8', color: 'rgba(255,255,255,0.95)' },
+  '&:hover': { bgcolor: tmColors.charcoal750, boxShadow: 'none' },
+  '&:disabled': { bgcolor: tmColors.textMuted, color: 'rgba(255,255,255,0.95)' },
 };
 
 /** Secondary / cancel in popup footers (outlined) */
@@ -102,7 +103,7 @@ export const popupAccentBarSx = {
 /** Nested panel inside dialog body (e.g. meeting specifics) */
 export const popupNestedPanelSx = {
   p: 2,
-  borderRadius: '12px',
+  borderRadius: '3px',
   bgcolor: 'rgba(248, 250, 252, 0.6)',
   border: '1px solid #f1f5f9',
 };
@@ -190,20 +191,24 @@ export const popupMultilineFieldSx = {
  */
 export function getPopupSurfaceComponentOverrides(theme: Theme): Components {
   const isLight = theme.palette.mode === 'light';
-  const borderSubtle = isLight ? '#e2e8f0' : theme.palette.divider;
-  const borderFaint = isLight ? '#f1f5f9' : theme.palette.divider;
+  const borderSubtle = isLight ? tmColors.lightBorder : tmColors.borderSubtle;
+  const borderFaint = isLight ? '#f1f5f9' : tmColors.borderSubtle;
 
   const dialogPaper = {
-    borderRadius: 3,
+    borderRadius: `${tmShape.cardRadius}px`,
     overflow: 'hidden',
     border: '1px solid',
     borderColor: borderSubtle,
-    boxShadow: isLight
-      ? '0 25px 50px -12px rgba(15, 23, 42, 0.22)'
-      : '0 25px 50px -12px rgba(0, 0, 0, 0.55)',
+    boxShadow: isLight ? '0 25px 50px -12px rgba(15, 23, 42, 0.22)' : tmShadows.modal,
     background: isLight
       ? 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)'
-      : `linear-gradient(180deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
+      : `linear-gradient(180deg, ${alpha(tmColors.charcoal800, 0.95)} 0%, ${alpha(tmColors.charcoal900, 0.98)} 100%)`,
+    ...(isLight
+      ? {}
+      : {
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }),
   };
 
   const dialogTitle = {
@@ -225,14 +230,14 @@ export function getPopupSurfaceComponentOverrides(theme: Theme): Components {
     px: theme.spacing(3),
     pt: theme.spacing(3.5),
     pb: theme.spacing(3),
-    bgcolor: isLight ? '#fff' : theme.palette.background.default,
+    bgcolor: isLight ? '#fff' : alpha(tmColors.charcoal850, 0.6),
     borderTop: `1px solid ${borderFaint}`,
   };
 
   const dialogActions = {
     px: theme.spacing(3),
     py: theme.spacing(2),
-    bgcolor: isLight ? '#fff' : theme.palette.background.paper,
+    bgcolor: isLight ? '#fff' : alpha(tmColors.charcoal800, 0.85),
     borderTop: `1px solid ${borderFaint}`,
     gap: theme.spacing(1.5),
     justifyContent: 'flex-end' as const,

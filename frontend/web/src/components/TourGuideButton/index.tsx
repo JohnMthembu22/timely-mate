@@ -43,9 +43,14 @@ const TourGuideButton: React.FC<TourGuideButtonProps> = ({ variant = 'button', s
         fontWeight: 600,
         borderColor: 'rgba(255,255,255,0.85)',
         color: '#fff',
+        borderRadius: 2,
+        px: 1.5,
+        background: 'linear-gradient(135deg, rgba(33,150,243,0.25) 0%, rgba(52,211,153,0.2) 100%)',
+        backdropFilter: 'blur(6px)',
         '&:hover': {
           borderColor: '#fff',
-          bgcolor: 'rgba(255,255,255,0.12)',
+          bgcolor: 'rgba(255,255,255,0.18)',
+          boxShadow: '0 4px 14px rgba(33, 150, 243, 0.35)',
         },
       }}
     >

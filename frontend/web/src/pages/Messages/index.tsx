@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, startTransition } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -62,7 +63,9 @@ import {
 } from '@mui/icons-material';
 import DashboardLayout from '../../components/DashboardLayout';
 import FeatureGuard from '../../components/FeatureGuard';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useNotifications, type NotificationItem } from '../../contexts/NotificationContext';
+import { getNotificationRoute } from '../../utils/notificationNavigation';
+import { compareNotifications } from '../../utils/notificationStorage';
 import { messagingService, ChatMessage, ChatConversation } from '../../services/messagingService';
 import { useEmployees } from '../../contexts/EmployeeContext';
 import { useAppSelector } from '../../store';
@@ -103,6 +106,7 @@ interface User {
 }
 
 const Messages: React.FC = () => {
+  const navigate = useNavigate();
   const currentUser = useAppSelector((state) => state.auth.user);
   const { employees } = useEmployees();
   const [userSearchOpen, setUserSearchOpen] = useState(false);
@@ -125,12 +129,14 @@ const Messages: React.FC = () => {
   const [selectedNotification, setSelectedNotification] = useState<any>(null);
   const [notificationDetailOpen, setNotificationDetailOpen] = useState(false);
 
-  const { 
-    notifications, 
-    unreadCount, 
-    markAsRead, 
-    markAllAsRead, 
-    removeNotification 
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markManyAsRead,
+    markAllAsRead,
+    removeNotification,
+    removeManyNotifications,
   } = useNotifications();
 
   // Get available users from employees and registered users
@@ -173,6 +179,12 @@ const Messages: React.FC = () => {
       (user.department && user.department.toLowerCase().includes(searchQuery.toLowerCase())) ||
       user.email.toLowerCase().includes(searchQuery.toLowerCase())
     ), [searchQuery, availableUsers]);
+
+  useEffect(() => {
+    const onTourMessagesTab = () => setActiveMainTab(MainTab.MESSAGES);
+    window.addEventListener('tm:tour:messages-tab', onTourMessagesTab);
+    return () => window.removeEventListener('tm:tour:messages-tab', onTourMessagesTab);
+  }, []);
 
   // Load conversations
   useEffect(() => {
@@ -259,24 +271,18 @@ const Messages: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeMessages]);
 
-  const filteredNotifications = notifications
-    .filter(notification => {
-      if (activeNotificationTab === NotificationTab.UNREAD) return !notification.read;
-      if (activeNotificationTab === NotificationTab.READ) return notification.read;
-      return true;
-    })
-    .filter(notification => 
-      filterType.length === 0 || filterType.includes(notification.type)
-    )
-    .sort((a, b) => {
-      const timeA = new Date(a.time).getTime();
-      const timeB = new Date(b.time).getTime();
-      if (sortOrder === 'newest') {
-        return timeB - timeA;
-      } else {
-        return timeA - timeB;
-      }
-    });
+  const filteredNotifications = useMemo(() => {
+    return notifications
+      .filter((notification) => {
+        if (activeNotificationTab === NotificationTab.UNREAD) return !notification.read;
+        if (activeNotificationTab === NotificationTab.READ) return notification.read;
+        return true;
+      })
+      .filter(
+        (notification) => filterType.length === 0 || filterType.includes(notification.type)
+      )
+      .sort((a, b) => compareNotifications(a, b, sortOrder));
+  }, [notifications, activeNotificationTab, filterType, sortOrder]);
 
   const handleStartConversation = async (user: User) => {
     // Find existing conversation
@@ -343,87 +349,47 @@ const Messages: React.FC = () => {
     setActiveNotificationTab(newValue);
   };
 
-  const handleNotificationClick = (notification: any) => {
-    try {
-      // Safety check to prevent crashes
-      if (!notification) {
-        console.error('Notification is null or undefined');
-        return;
-      }
-      
-      // Mark as read if not already read
+  const handleNotificationClick = useCallback(
+    (notification: NotificationItem) => {
+      if (!notification?.id) return;
+
+      const route = getNotificationRoute(notification);
+
       if (!notification.read) {
         markAsRead(notification.id);
       }
-      
-      // Set the selected notification and open detail view
+
+      if (route) {
+        if (route === '/messages' || route.startsWith('/messages')) {
+          setActiveMainTab(MainTab.MESSAGES);
+          return;
+        }
+        startTransition(() => navigate(route));
+        return;
+      }
+
       setSelectedNotification(notification);
       setNotificationDetailOpen(true);
-    } catch (error) {
-      console.error('Error handling notification click:', error);
-    }
-  };
+    },
+    [markAsRead, navigate]
+  );
 
   const handleNotificationDetailClose = () => {
     setNotificationDetailOpen(false);
     setSelectedNotification(null);
   };
 
-  const handleNavigateFromNotification = (notification: any) => {
-    // Close the detail view first
+  const handleNavigateFromNotification = (notification: NotificationItem) => {
     handleNotificationDetailClose();
-    
-    // Navigate based on actionUrl or notification type
-    if (notification.actionUrl) {
-      // Navigate to specific URL if provided
-      window.location.href = notification.actionUrl;
-    } else {
-      // Navigate based on notification type
-      switch(notification.type) {
-        case 'message':
-          setActiveMainTab(MainTab.MESSAGES);
-          break;
-        case 'task':
-          window.location.href = '/projects';
-          break;
-        case 'calendar':
-          window.location.href = '/calendar';
-          break;
-        case 'timesheet':
-          window.location.href = '/time-tracking';
-          break;
-        case 'procurement':
-          window.location.href = '/procurement';
-          break;
-        case 'hr':
-          window.location.href = '/hr';
-          break;
-        case 'employee':
-          window.location.href = '/team';
-          break;
-        case 'job':
-          window.location.href = '/projects';
-          break;
-        case 'meeting':
-          window.location.href = '/meetings';
-          break;
-        case 'freelancer':
-          window.location.href = '/freelancers';
-          break;
-        case 'leave':
-          window.location.href = '/hr';
-          break;
-        case 'team':
-          window.location.href = '/team';
-          break;
-        case 'project':
-          window.location.href = '/projects';
-          break;
-        case 'system':
-        default:
-          setActiveMainTab(MainTab.MESSAGES);
-          break;
+    const route = getNotificationRoute(notification);
+    if (route) {
+      if (route === '/messages' || route.startsWith('/messages')) {
+        setActiveMainTab(MainTab.MESSAGES);
+      } else {
+        startTransition(() => navigate(route));
       }
+    } else {
+      setActiveMainTab(MainTab.MESSAGES);
     }
   };
 
@@ -474,12 +440,12 @@ const Messages: React.FC = () => {
   };
 
   const markSelectedAsRead = () => {
-    selectedNotifications.forEach(id => markAsRead(id));
+    markManyAsRead(selectedNotifications);
     setSelectedNotifications([]);
   };
 
   const deleteSelected = () => {
-    selectedNotifications.forEach(id => removeNotification(id));
+    removeManyNotifications(selectedNotifications);
     setSelectedNotifications([]);
   };
 
@@ -1029,32 +995,8 @@ const Messages: React.FC = () => {
                     
                     <Divider />
                     
-                    {filteredNotifications.map((notification) => {
-                      const getClickTooltip = () => {
-                        if (notification.actionUrl) {
-                          return 'Click to view details and navigate to related page';
-                        }
-                        switch(notification.type) {
-                          case 'message': return 'Click to view notification details';
-                          case 'task': return 'Click to view task details';
-                          case 'calendar': return 'Click to view calendar event details';
-                          case 'timesheet': return 'Click to view timesheet details';
-                          case 'procurement': return 'Click to view procurement details';
-                          case 'hr': return 'Click to view HR details';
-                          case 'employee': return 'Click to view employee details';
-                          case 'job': return 'Click to view job details';
-                          case 'meeting': return 'Click to view meeting details';
-                          case 'freelancer': return 'Click to view freelancer details';
-                          case 'leave': return 'Click to view leave details';
-                          case 'team': return 'Click to view team details';
-                          case 'project': return 'Click to view project details';
-                          default: return 'Click to view notification details';
-                        }
-                      };
-
-                      return (
+                    {filteredNotifications.map((notification) => (
                         <React.Fragment key={notification.id}>
-                          <Tooltip title={getClickTooltip()} placement="left">
                             <ListItem 
                               alignItems="flex-start"
                               onClick={() => handleNotificationClick(notification)}
@@ -1062,16 +1004,9 @@ const Messages: React.FC = () => {
                                 py: 2,
                                 px: 2,
                                 cursor: 'pointer',
-                                transition: 'all 0.2s ease',
                                 '&:hover': { 
                                   bgcolor: 'rgba(25, 118, 210, 0.08)',
-                                  transform: 'translateX(4px)',
                                 },
-                                '&:active': {
-                                  transform: 'translateX(2px)',
-                                  bgcolor: 'rgba(25, 118, 210, 0.12)',
-                                },
-                                position: 'relative',
                                 bgcolor: notification.read ? 'transparent' : 'rgba(25, 118, 210, 0.04)',
                                 borderLeft: notification.read ? 'none' : '3px solid #1976d2',
                                 ...(selectedNotifications.includes(notification.id) && {
@@ -1174,11 +1109,9 @@ const Messages: React.FC = () => {
                             </IconButton>
                           </ListItemSecondaryAction>
                         </ListItem>
-                          </Tooltip>
                         <Divider variant="inset" component="li" />
                       </React.Fragment>
-                    );
-                    })}
+                    ))}
                   </List>
                 ) : (
                   <Box sx={{ 

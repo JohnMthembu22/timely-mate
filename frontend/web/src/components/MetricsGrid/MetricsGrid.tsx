@@ -1,6 +1,7 @@
-import React from 'react';
-import { Grid, Paper, Typography, Box } from '@mui/material';
+import React, { memo } from 'react';
+import { Grid, Paper, Typography, Box, useTheme } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
+import { glassCardSx, metricLabelSx, metricValueSx } from '../../theme/surfaces';
 
 export interface MetricsGridItem {
   title: string;
@@ -15,25 +16,23 @@ export interface MetricsGridItem {
 
 export interface MetricsGridProps {
   metrics: MetricsGridItem[];
+  /** When true, renders only grid items (parent supplies container). */
+  embedded?: boolean;
 }
 
-/** KPI tiles styled like the Tailwind reference — implemented with MUI (no Tailwind). */
-export function MetricsGrid({ metrics }: MetricsGridProps) {
-  return (
-    <Grid container spacing={2.5}>
-      {metrics.map((metric) => {
+/** KPI tiles — theme-aware glass surfaces */
+export const MetricsGrid = memo(function MetricsGrid({ metrics, embedded = false }: MetricsGridProps) {
+  const theme = useTheme();
+
+  const tiles = metrics.map((metric) => {
         const Icon = metric.icon;
         return (
-          <Grid item xs={12} md={6} lg={3} key={metric.title}>
+          <Grid item xs={6} sm={6} md={6} lg={3} key={metric.title}>
             <Paper
               elevation={0}
               sx={{
-                p: 3,
-                borderRadius: 3,
-                bgcolor: '#fff',
-                border: '1px solid',
-                borderColor: '#f1f5f9',
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+                ...glassCardSx(theme),
+                p: { xs: 2, sm: 3 },
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -41,36 +40,17 @@ export function MetricsGrid({ metrics }: MetricsGridProps) {
               }}
             >
               <Box sx={{ minWidth: 0 }}>
-                <Typography
-                  component="span"
-                  sx={{
-                    display: 'block',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    color: '#94a3b8',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    mb: 0.25,
-                  }}
-                >
+                <Typography component="span" sx={metricLabelSx(theme)}>
                   {metric.title}
                 </Typography>
-                <Typography
-                  variant="h4"
-                  sx={{
-                    fontSize: '1.5rem',
-                    fontWeight: 700,
-                    color: '#1e293b',
-                    lineHeight: 1.2,
-                  }}
-                >
+                <Typography variant="h4" sx={{ ...metricValueSx(theme), fontSize: { xs: '1.35rem', sm: '2.125rem' } }}>
                   {metric.value}
                 </Typography>
                 <Typography
                   sx={{
                     fontSize: '0.75rem',
                     fontWeight: 600,
-                    color: '#64748b',
+                    color: 'text.secondary',
                     mt: 0.25,
                   }}
                 >
@@ -79,21 +59,30 @@ export function MetricsGrid({ metrics }: MetricsGridProps) {
               </Box>
               <Box
                 sx={{
-                  p: 1.5,
-                  borderRadius: 3,
-                  bgcolor: metric.iconBg,
-                  flexShrink: 0,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 2,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  flexShrink: 0,
+                  bgcolor: metric.iconBg,
                 }}
               >
-                <Icon size={24} strokeWidth={2} color={metric.iconColor} />
+                <Icon size={22} color={metric.iconColor} strokeWidth={2} />
               </Box>
             </Paper>
           </Grid>
         );
-      })}
+      });
+
+  if (embedded) {
+    return <>{tiles}</>;
+  }
+
+  return (
+    <Grid container spacing={2.5}>
+      {tiles}
     </Grid>
   );
-}
+});

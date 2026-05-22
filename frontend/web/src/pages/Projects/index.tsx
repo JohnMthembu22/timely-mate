@@ -1,5 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAppSelector } from '../../store';
+import { useNotifications, createNotification } from '../../contexts/NotificationContext';
+import { notifyTaskSubmittedToBriefedBy } from '../../utils/taskReview';
+import { getAuthUserLabel } from '../../utils/managerReview';
+import { FieldScannerCapture } from '../OffsiteWork/FieldScannerCapture';
 import {
   Box,
   Container,
@@ -59,10 +64,25 @@ import DashboardLayout from '../../components/DashboardLayout';
 import ProjectsConsole, {
   type ProjectViewMode,
   type ProjectHubRow,
-  type ProjectMetric,
   type ProjectMilestone,
   type ProjectPriority,
+  type CommandQuickActionId,
 } from '../../components/ProjectsConsole';
+import { buildOperationalMilestones } from '../../components/ProjectsConsole/buildOperationalMilestones';
+import { buildProjectInsights } from '../../components/ProjectsConsole/projectConsoleData';
+import {
+  buildAssignmentQueue,
+  buildSmartAssignmentInsights,
+  buildTeamAvailability,
+  type AssignmentQueueItem,
+} from '../../components/ProjectsConsole/projectAssignmentHub';
+import { buildOperationsFeed } from '../../components/ProjectsConsole/projectActivityFeed';
+import { buildProjectHubRow } from '../../components/ProjectsConsole/projectHubMetrics';
+import {
+  CreateWorkspaceDialog,
+  type CreateWorkspaceMode,
+  type StarterTaskDraft,
+} from './components/CreateWorkspaceDialog';
 import { useEmployees } from '../../contexts/EmployeeContext';
 import { useArrayPersistence } from '../../hooks/usePersistence';
 import { generateProjectsFromEmployees } from '../../utils/projectSeed';
@@ -81,11 +101,12 @@ interface Task {
   title: string;
   description: string;
   assignee: TeamMember | null;
-  status: 'todo' | 'in_progress' | 'completed';
+  status: 'todo' | 'in_progress' | 'completed' | 'pending_review';
   dueDate: string;
   priority: 'low' | 'medium' | 'high';
   isProjectTask: boolean;
   projectId?: string;
+  createdBy?: string;
   createdAt: string;
   progress: number;
 }
@@ -124,6 +145,7 @@ interface NewProject {
   endDate: string;
   startTime: string;
   endTime: string;
+  department: string;
   teamRoles: {
     [key: string]: number; // role: number of members
   };
@@ -168,11 +190,12 @@ const getProjectPriority = (progress: number, endDate: string): ProjectPriority 
 const initialNewProject: NewProject = {
   name: '',
   description: '',
-  color: '#2196f3',
+  color: '#3b82f6',
   startDate: new Date().toISOString().split('T')[0],
   endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   startTime: '09:00',
   endTime: '17:00',
+  department: '',
   teamRoles: {
     'Project Manager': 1,
     'Developer': 2,
@@ -191,10 +214,14 @@ const Projects: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { employees } = useEmployees();
+  const { user } = useAppSelector((state) => state.auth);
+  const { addNotification, addNotificationForRecipient } = useNotifications();
   const [arDialogOpen, setArDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+  const [createWorkspaceMode, setCreateWorkspaceMode] = useState<CreateWorkspaceMode>('project');
+  const [starterTasks, setStarterTasks] = useState<StarterTaskDraft[]>([]);
   const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false);
   const [projectDetailsOpen, setProjectDetailsOpen] = useState(false);
   const [newProject, setNewProject] = useState<NewProject>(initialNewProject);
@@ -213,7 +240,6 @@ const Projects: React.FC = () => {
     attendees: [] as string[],
     newAttendee: '', // For the new attendee input
   });
-  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [tasksViewOpen, setTasksViewOpen] = useState(false);
   const [newTask, setNewTask] = useState<Task>({
     id: '',
@@ -256,9 +282,26 @@ const Projects: React.FC = () => {
 
   const handleScanProject = () => {
     setIsScanning(true);
-    setTimeout(() => {
-      setIsScanning(false);
-    }, 2000);
+  };
+
+  const handleProjectTagScan = (data: string) => {
+    const match = projects.find(
+      (p) =>
+        p.id === data ||
+        p.name.toLowerCase() === data.toLowerCase() ||
+        data.toLowerCase().includes(p.id.toLowerCase())
+    );
+    if (match) {
+      setSelectedProject(match);
+      addNotification(
+        createNotification.system('Project tag verified', `Opened workspace: ${match.name}`, 'medium')
+      );
+    } else {
+      addNotification(
+        createNotification.system('Tag scanned', `Code: ${data.slice(0, 80)}`, 'medium')
+      );
+    }
+    setIsScanning(false);
   };
 
   const handleArPreview = (project: Project) => {
@@ -267,12 +310,15 @@ const Projects: React.FC = () => {
   };
 
   const handleNewProjectOpen = () => {
+    setCreateWorkspaceMode('project');
     setNewProject(initialNewProject);
-    setNewProjectDialogOpen(true);
+    setStarterTasks([]);
+    setCreateWorkspaceOpen(true);
   };
 
-  const handleNewProjectClose = () => {
-    setNewProjectDialogOpen(false);
+  const handleCreateWorkspaceClose = () => {
+    setCreateWorkspaceOpen(false);
+    setStarterTasks([]);
   };
 
   const handleNewProjectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,6 +327,10 @@ const Projects: React.FC = () => {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleNewProjectField = <K extends keyof NewProject>(key: K, value: NewProject[K]) => {
+    setNewProject((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleMemberSelection = (employeeId: string) => {
@@ -346,6 +396,22 @@ const Projects: React.FC = () => {
     });
     }
 
+    const validStarters = starterTasks.filter((t) => t.title.trim());
+    const starterProjectTasks: Task[] = validStarters.map((t) => ({
+      id: `task-${Date.now()}-${t.id}`,
+      title: t.title.trim(),
+      description: '',
+      assignee: null,
+      status: 'todo',
+      dueDate: t.dueDate,
+      priority: t.priority,
+      isProjectTask: true,
+      projectId: newId,
+      createdBy: user?.email ?? 'admin@timelymate.com',
+      createdAt: new Date().toISOString(),
+      progress: 0,
+    }));
+
     const projectToAdd: Project = {
       id: newId,
       name: newProject.name,
@@ -353,21 +419,21 @@ const Projects: React.FC = () => {
       progress: 0,
       color: newProject.color,
       team,
-      tasks: 0,
+      tasks: starterProjectTasks.length,
       completedTasks: 0,
       startDate: newProject.startDate,
       endDate: newProject.endDate,
       startTime: newProject.startTime,
       endTime: newProject.endTime,
-      projectTasks: [],
+      projectTasks: starterProjectTasks,
       notes: [],
-      createdAt: new Date().toISOString(), // Add creation timestamp
+      createdAt: new Date().toISOString(),
     } as Project;
 
-    // Add new project at the top of the list
-    setProjects(prev => [projectToAdd, ...prev]);
-    setNewProjectDialogOpen(false);
+    setProjects((prev) => [projectToAdd, ...prev]);
+    setCreateWorkspaceOpen(false);
     setNewProject(initialNewProject);
+    setStarterTasks([]);
   };
 
   const handleEditProject = (project: Project) => {
@@ -509,56 +575,68 @@ const Projects: React.FC = () => {
     setTasksViewOpen(true);
   };
 
+  const resetNewTaskForm = (project?: Project) => ({
+    id: Math.random().toString(36).substr(2, 9),
+    title: '',
+    description: '',
+    assignee: null,
+    status: 'todo' as const,
+    dueDate: new Date().toISOString().split('T')[0],
+    priority: 'medium' as const,
+    isProjectTask: !!project,
+    projectId: project?.id,
+    createdAt: new Date().toISOString(),
+    progress: 0,
+  });
+
   const handleNewTask = (project?: Project) => {
     setSelectedProject(project || null);
-    setNewTask(prev => ({
-      ...prev,
-      id: Math.random().toString(36).substr(2, 9),
-      isProjectTask: !!project,
-      projectId: project?.id,
-    }));
-    setTaskDialogOpen(true);
+    setCreateWorkspaceMode('task');
+    setNewTask(resetNewTaskForm(project));
+    setCreateWorkspaceOpen(true);
   };
 
   const handleTaskChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setNewTask(prev => ({
+    setNewTask((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
 
+  const handleTaskField = <K extends keyof Task>(key: K, value: Task[K]) => {
+    setNewTask((prev) => ({ ...prev, [key]: value }));
+  };
+
   const handleTaskSubmit = () => {
-    if (selectedProject && newTask.isProjectTask) {
-      // Add task to project
-      setProjects(prev => prev.map(p => {
-        if (p.id === selectedProject.id) {
+    const targetProjectId = newTask.projectId;
+    if (!targetProjectId) return;
+
+    const taskToAdd: Task = {
+      ...newTask,
+      isProjectTask: true,
+      projectId: targetProjectId,
+      createdBy: user?.email ?? 'admin@timelymate.com',
+    };
+
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id === targetProjectId) {
           return {
             ...p,
-            projectTasks: [...p.projectTasks, newTask],
+            projectTasks: [...p.projectTasks, taskToAdd],
             tasks: p.tasks + 1,
           };
         }
         return p;
-      }));
-    } else {
-      // Add individual task
-      // Here you would typically save to a tasks database
-      console.log('Individual task created:', newTask);
-    }
-    setTaskDialogOpen(false);
-    setNewTask({
-      id: '',
-      title: '',
-      description: '',
-      assignee: null,
-      status: 'todo',
-      dueDate: new Date().toISOString().split('T')[0],
-      priority: 'medium',
-      isProjectTask: false,
-      createdAt: new Date().toISOString(),
-      progress: 0,
-    });
+      })
+    );
+
+    const target = projects.find((p) => p.id === targetProjectId);
+    if (target) setSelectedProject(target);
+
+    setCreateWorkspaceOpen(false);
+    setNewTask(resetNewTaskForm());
   };
 
   const handleTaskStatusChange = (taskId: string, newStatus: Task['status']) => {
@@ -580,6 +658,21 @@ const Projects: React.FC = () => {
         return p;
       }));
     }
+  };
+
+  const handleSubmitTaskForReview = (task: Task) => {
+    handleTaskStatusChange(task.id, 'pending_review');
+    const submitterLabel = getAuthUserLabel(user ?? undefined);
+    notifyTaskSubmittedToBriefedBy({
+      briefedByEmail: task.createdBy ?? user?.email ?? 'admin@timelymate.com',
+      taskTitle: task.title,
+      submitterLabel,
+      submitterEmail: user?.email,
+      actionUrl: '/projects',
+      employees,
+      addNotificationForRecipient,
+      addNotification,
+    });
   };
 
   const handleAssigneeClick = (task: Task) => {
@@ -691,7 +784,10 @@ const Projects: React.FC = () => {
     if (!state) return;
 
     if (state.openCreateProject) {
-      setNewProjectDialogOpen(true);
+      setCreateWorkspaceMode('project');
+      setNewProject(initialNewProject);
+      setStarterTasks([]);
+      setCreateWorkspaceOpen(true);
       navigate(location.pathname, { replace: true, state: {} });
       return;
     }
@@ -737,73 +833,173 @@ const Projects: React.FC = () => {
 
   const projectHubRows: ProjectHubRow[] = useMemo(
     () =>
-      sortedProjects.map((p) => ({
-        id: p.id,
-        name: p.name,
-        desc: p.description,
-        progress: p.progress,
-        tasks: `${p.completedTasks}/${p.tasks}`,
-        priority: getProjectPriority(p.progress, p.endDate),
-        team: getTeamInitials(p.team),
-        dueLabel: (() => {
+      sortedProjects.map((p) => {
+        const dueLabel = (() => {
           try {
             return format(parseISO(p.endDate.includes('T') ? p.endDate : `${p.endDate}T12:00:00`), 'd MMM');
           } catch {
             return p.endDate;
           }
-        })(),
-        color: p.color,
-      })),
+        })();
+        return buildProjectHubRow(
+          {
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            progress: p.progress,
+            color: p.color,
+            tasks: p.tasks,
+            completedTasks: p.completedTasks,
+            endDate: p.endDate,
+            team: p.team,
+            projectTasks: p.projectTasks,
+          },
+          getProjectPriority(p.progress, p.endDate),
+          dueLabel
+        );
+      }),
     [sortedProjects]
   );
 
-  const projectMetrics: ProjectMetric[] = useMemo(() => {
-    const activeTasks = projects.reduce(
-      (sum, p) => sum + Math.max(0, p.tasks - p.completedTasks),
-      0
-    );
-    const atRisk = projects.filter((p) => getProjectPriority(p.progress, p.endDate) === 'High').length;
-    const avg =
-      projects.length > 0
-        ? projects.reduce((sum, p) => sum + p.progress, 0) / projects.length
-        : 0;
-    return [
-      { label: 'Active Pipelines', value: String(projects.length), icon: 'folder' },
-      { label: 'Tasks Logged', value: `${activeTasks} Active`, icon: 'layers' },
-      {
-        label: 'At Risk Blks',
-        value: atRisk > 0 ? `${atRisk} Delayed` : 'None',
-        icon: 'alert',
-      },
-      { label: 'Avg Progression', value: `${avg.toFixed(1)}%`, icon: 'trend' },
-    ];
-  }, [projects]);
+  const projectInsights = useMemo(() => buildProjectInsights(projects), [projects]);
 
-  const projectMilestones: ProjectMilestone[] = useMemo(() => {
-    return [...projects]
-      .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
-      .slice(0, 4)
-      .map((p) => {
-        let dateLabel = p.endDate;
-        try {
-          const due = parseISO(p.endDate.includes('T') ? p.endDate : `${p.endDate}T12:00:00`);
-          const days = differenceInDays(due, new Date());
-          if (days < 0) dateLabel = 'Overdue';
-          else if (days === 0) dateLabel = 'Due today';
-          else if (days === 1) dateLabel = 'In 1 day';
-          else dateLabel = `In ${days} days`;
-        } catch {
-          /* keep raw date */
-        }
-        const atRisk = getProjectPriority(p.progress, p.endDate) === 'High';
-        return {
-          id: p.id,
-          title: `${p.name} delivery`,
-          date: dateLabel,
-          state: atRisk ? ('at-risk' as const) : ('normal' as const),
-        };
-      });
-  }, [projects]);
+  const hubById = useMemo(
+    () => new Map(projectHubRows.map((r) => [r.id, r])),
+    [projectHubRows]
+  );
+
+  const hubProjects = useMemo(
+    () =>
+      projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        endDate: p.endDate,
+        progress: p.progress,
+        team: p.team,
+        projectTasks: p.projectTasks,
+        notes: p.notes,
+      })),
+    [projects]
+  );
+
+  const assignmentInsights = useMemo(
+    () => buildSmartAssignmentInsights(hubProjects, employees),
+    [hubProjects, employees]
+  );
+
+  const assignmentQueue = useMemo(() => buildAssignmentQueue(hubProjects), [hubProjects]);
+
+  const teamLanes = useMemo(
+    () => buildTeamAvailability(employees, hubProjects),
+    [employees, hubProjects]
+  );
+
+  const operationsFeed = useMemo(() => buildOperationsFeed(hubProjects), [hubProjects]);
+
+  const consoleDepartments = useMemo(
+    () => [...new Set(employees.map((e) => e.department))].sort(),
+    [employees]
+  );
+
+  const consoleProjectOptions = useMemo(
+    () => projects.map((p) => ({ id: p.id, name: p.name })),
+    [projects]
+  );
+
+  const handleQuickAssign = (item: AssignmentQueueItem, employeeId: string) => {
+    if (!item.taskId || item.projectId === 'demo') {
+      return;
+    }
+
+    const employee = employees.find((e) => e.id === employeeId);
+    if (!employee) return;
+
+    const assignee: TeamMember = {
+      name: employee.name,
+      avatar: employee.avatar || `https://i.pravatar.cc/150?u=${employee.id}`,
+      role: employee.position,
+    };
+
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== item.projectId) return p;
+        const updatedTasks = p.projectTasks.map((t) =>
+          t.id === item.taskId ? { ...t, assignee, status: t.status === 'todo' ? 'in_progress' : t.status } : t
+        );
+        return { ...p, projectTasks: updatedTasks };
+      })
+    );
+  };
+
+  const projectMilestones: ProjectMilestone[] = useMemo(
+    () =>
+      buildOperationalMilestones(
+        [...projects]
+          .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
+          .slice(0, 8)
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            endDate: p.endDate,
+            progress: p.progress,
+            color: p.color,
+            team: p.team,
+            projectTasks: p.projectTasks,
+          })),
+        hubById
+      ),
+    [projects, hubById]
+  );
+
+  const handleCommandAction = (action: CommandQuickActionId) => {
+    switch (action) {
+      case 'generate-report':
+        navigate('/reports');
+        break;
+      case 'assign-resources':
+        addNotification('Open the assignment hub above to drag tasks onto team lanes.', 'info');
+        break;
+      case 'launch-meeting':
+        setMeetingDialogOpen(true);
+        break;
+      case 'open-timeline':
+        navigate('/calendar');
+        break;
+      case 'export-dashboard': {
+        const rows = [
+          ['Project', 'Progress', 'Health', 'Department', 'Risk', 'Due'],
+          ...projectHubRows.map((r) => [
+            r.name,
+            `${r.progress}%`,
+            `${r.healthScore}%`,
+            r.department,
+            r.aiRiskLabel,
+            r.dueLabel,
+          ]),
+        ];
+        const csv = rows.map((row) => row.join(',')).join('\n');
+        saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `projects-dashboard-${Date.now()}.csv`);
+        addNotification('Dashboard exported as CSV.', 'success');
+        break;
+      }
+      case 'notify-team':
+        addNotification('Team notification queued for all active project leads.', 'success');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleMilestoneNotify = (projectId: string) => {
+    const project = projects.find((p) => p.id === projectId);
+    addNotification(
+      project
+        ? `Reminder sent to ${project.team[0]?.name ?? 'project lead'} for ${project.name}.`
+        : 'Team notification sent.',
+      'success'
+    );
+  };
 
   // Invoice handling functions
   const handleInvoiceChange = (field: string, value: any) => {
@@ -847,21 +1043,22 @@ const Projects: React.FC = () => {
           sx={{
             background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
             color: 'white',
-            py: { xs: 4, md: 6 },
+            py: { xs: 2.5, sm: 3, md: 3.5 },
           }}
         >
-          <Container maxWidth="xl">
+          <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3 } }}>
             <Typography
               variant="h3"
               sx={{
-                mb: 2,
+                mb: 1,
                 fontWeight: 700,
-                fontSize: { xs: '1.75rem', sm: '2rem', md: '2.5rem' },
+                fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                letterSpacing: '-0.02em',
               }}
             >
               Project Management
             </Typography>
-            <Typography variant="h6" sx={{ color: 'white', opacity: 0.95 }}>
+            <Typography variant="h6" sx={{ color: 'white', opacity: 0.92, fontSize: { xs: '0.9375rem', md: '1.0625rem' }, fontWeight: 500 }}>
               Manage projects with advanced tracking and collaboration tools
             </Typography>
           </Container>
@@ -869,16 +1066,31 @@ const Projects: React.FC = () => {
 
         <ProjectsConsole
           projects={projectHubRows}
-          metrics={projectMetrics}
           milestones={projectMilestones}
+          insights={projectInsights}
+          assignmentInsights={assignmentInsights}
+          assignmentQueue={assignmentQueue}
+          teamLanes={teamLanes}
+          operationsFeed={operationsFeed}
+          departments={consoleDepartments}
+          projectOptions={consoleProjectOptions}
+          employeeCount={employees.length}
+          isLoading={!projectsSeeded && employees.length > 0 && projects.length === 0}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onNewProject={handleNewProjectOpen}
           onProjectClick={handleProjectClickById}
+          onProjectTasks={(projectId) => {
+            const project = projects.find((p) => p.id === projectId);
+            if (project) handleTaskClick(project);
+          }}
           onProjectMenu={(e, projectId) => {
             const project = projects.find((p) => p.id === projectId);
             if (project) handleMenuClick(e, project);
           }}
+          onQuickAssign={handleQuickAssign}
+          onCommandAction={handleCommandAction}
+          onNotifyTeam={handleMilestoneNotify}
         />
 
         {/* AR Preview Dialog */}
@@ -922,314 +1134,46 @@ const Projects: React.FC = () => {
         </Dialog>
 
         {/* QR Scanner Dialog */}
-        <Dialog
-          open={isScanning}
-          onClose={() => setIsScanning(false)}
-        >
-          <DialogTitle>Scan Project Tag</DialogTitle>
+        <Dialog open={isScanning} onClose={() => setIsScanning(false)} maxWidth="sm" fullWidth>
+          <DialogTitle sx={{ fontWeight: 700 }}>Scan project tag</DialogTitle>
           <DialogContent>
-            <Stack spacing={3} sx={{ py: 2 }}>
-              <Box sx={{ 
-                height: 300, 
-                width: 300,
-                bgcolor: 'background.default',
-                borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px dashed',
-                borderColor: 'divider',
-              }}>
-                <Stack spacing={2} alignItems="center">
-                  <QrCodeScanner sx={{ fontSize: 60, color: 'primary.main' }} />
-                  <Typography align="center">
-                    Scanning for project tag...
-                  </Typography>
-                </Stack>
-              </Box>
-            </Stack>
+            <FieldScannerCapture
+              active={isScanning}
+              mode="qr"
+              userName={getAuthUserLabel(user ?? undefined)}
+              accentColor="#6366f1"
+              onScan={(result) => handleProjectTagScan(result.data)}
+            />
           </DialogContent>
-        </Dialog>
-
-        {/* New Project Dialog */}
-        <Dialog 
-          open={newProjectDialogOpen} 
-          onClose={handleNewProjectClose}
-          maxWidth="md"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 4,
-              background: 'linear-gradient(145deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              boxShadow: '0 24px 48px rgba(0,0,0,0.15)',
-              overflow: 'hidden'
-            }
-          }}
-        >
-          <DialogTitle sx={{ position: 'relative' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Box sx={{ 
-                p: 1.5, 
-                borderRadius: 2, 
-                background: 'rgba(255,255,255,0.2)',
-                backdropFilter: 'blur(10px)'
-              }}>
-                <VideocamIcon sx={{ fontSize: 28 }} />
-              </Box>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  Create New Project
-                </Typography>
-                <Typography variant="subtitle1" sx={{ opacity: 0.9, fontWeight: 500 }}>
-                  Set up and organize your team project
-                </Typography>
-              </Box>
-            </Box>
-          </DialogTitle>
-
-          <DialogContent sx={{ p: 4, background: 'transparent' }}>
-            <Stack spacing={3} sx={{ mt: 2 }}>
-              <TextField
-                label="Project Name"
-                name="name"
-                value={newProject.name}
-                onChange={handleNewProjectChange}
-                fullWidth
-                required
-              />
-              <TextField
-                label="Description"
-                name="description"
-                value={newProject.description}
-                onChange={handleNewProjectChange}
-                multiline
-                rows={3}
-                fullWidth
-                required
-              />
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Project Color"
-                    name="color"
-                    type="color"
-                    value={newProject.color}
-                    onChange={handleNewProjectChange}
-                    fullWidth
-                    sx={{
-                      '& input': {
-                        height: 40,
-                        padding: 1,
-                      },
-                    }}
-                  />
-                </Grid>
-              </Grid>
-
-              {/* Date and Time Settings */}
-              <Typography variant="h6" sx={{ mt: 2 }}>Project Schedule</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Start Date"
-                    name="startDate"
-                    type="date"
-                    value={newProject.startDate}
-                    onChange={handleNewProjectChange}
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="End Date"
-                    name="endDate"
-                    type="date"
-                    value={newProject.endDate}
-                    onChange={handleNewProjectChange}
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Start Time"
-                    name="startTime"
-                    type="time"
-                    value={newProject.startTime}
-                    onChange={handleNewProjectChange}
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="End Time"
-                    name="endTime"
-                    type="time"
-                    value={newProject.endTime}
-                    onChange={handleNewProjectChange}
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                  />
-                </Grid>
-              </Grid>
-
-              {/* Team Roles */}
-              <Typography variant="h6">Team Composition</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Select team members for each role. Available members will be shown based on their positions.
-              </Typography>
-              <Grid container spacing={2}>
-                {projectRoles.map((role) => {
-                  // Find employees that match this role
-                  const matchingEmployees = employees.filter(emp => 
-                    emp.position.toLowerCase().includes(role.toLowerCase()) ||
-                    role.toLowerCase().includes(emp.position.toLowerCase())
-                  );
-                  
-                  return (
-                  <Grid item xs={12} sm={6} key={role}>
-                      <Box sx={{
-                        p: 3,
-                        borderRadius: 3,
-                        background: 'linear-gradient(145deg, rgba(255,255,255,0.7), rgba(255,255,255,0.5))',
-                        backdropFilter: 'blur(10px)',
-                        border: '1px solid rgba(255,255,255,0.3)',
-                      }}>
-                        <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2, color: 'text.primary' }}>
-                          {role}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          {matchingEmployees.length > 0 
-                            ? `Select from ${matchingEmployees.length} available team members:`
-                            : 'No matching team members found. Members will be auto-assigned.'
-                          }
-                        </Typography>
-                        
-                        {matchingEmployees.length > 0 && (
-                          <Stack spacing={1}>
-                            {matchingEmployees.map((employee) => (
-                              <Box
-                                key={employee.id}
-                                sx={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 2,
-                                  p: 2,
-                                  borderRadius: 2,
-                                  cursor: 'pointer',
-                                  border: newProject.selectedMembers?.includes(employee.id) ? '2px solid #2196f3' : '1px solid #e0e0e0',
-                                  backgroundColor: newProject.selectedMembers?.includes(employee.id) ? '#e3f2fd' : 'rgba(255,255,255,0.5)',
-                                  transition: 'all 0.2s ease',
-                                  '&:hover': {
-                                    borderColor: '#2196f3',
-                                    backgroundColor: '#f5f5f5',
-                                    transform: 'translateY(-1px)',
-                                  }
-                                }}
-                                onClick={() => handleMemberSelection(employee.id)}
-                              >
-                                <Avatar 
-                                  src={employee.avatar || `https://i.pravatar.cc/150?u=${employee.id}`}
-                                  sx={{ width: 32, height: 32 }}
-                                />
-                                <Box sx={{ flex: 1 }}>
-                                  <Typography variant="body2" fontWeight="medium">
-                                    {employee.name}
-                                  </Typography>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {employee.position} • {employee.department}
-                                  </Typography>
-                                </Box>
-                                {newProject.selectedMembers?.includes(employee.id) && (
-                                  <CheckCircle sx={{ color: '#2196f3', fontSize: 20 }} />
-                                )}
-                              </Box>
-                            ))}
-                          </Stack>
-                        )}
-                        
-                        {matchingEmployees.length === 0 && (
-                          <Box sx={{
-                            p: 2,
-                            borderRadius: 2,
-                            bgcolor: 'rgba(255,255,255,0.3)',
-                            border: '1px dashed rgba(0,0,0,0.2)',
-                            textAlign: 'center'
-                          }}>
-                            <Typography variant="body2" color="text.secondary">
-                              No employees found matching this role. A placeholder will be created.
-                            </Typography>
-                          </Box>
-                        )}
-                      </Box>
-                  </Grid>
-                  );
-                })}
-              </Grid>
-
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ 
-            p: 4, 
-            pt: 2,
-            background: 'transparent',
-            borderTop: '1px solid rgba(0,0,0,0.05)',
-            gap: 2,
-            flexDirection: 'column',
-            alignItems: 'stretch'
-          }}>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-              <Button 
-                onClick={handleNewProjectClose}
-                variant="outlined"
-                size="large"
-                sx={{
-                  borderRadius: 3,
-                  px: 4,
-                  py: 1.5,
-                  borderColor: 'rgba(0,0,0,0.2)',
-                  color: 'text.secondary',
-                  '&:hover': {
-                    borderColor: 'rgba(0,0,0,0.4)',
-                    background: 'rgba(0,0,0,0.02)'
-                  }
-                }}
-              >
-                Cancel
-              </Button>
-            <Button
-              variant="contained"
-              onClick={handleNewProjectSubmit}
-              disabled={!newProject.name || !newProject.description}
-                size="large"
-                sx={{
-                  borderRadius: 3,
-                  px: 4,
-                  py: 1.5,
-                  fontWeight: 700,
-                  textTransform: 'none',
-                  background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                  boxShadow: '0 8px 24px rgba(102,126,234,0.3)',
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #764ba2, #667eea)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 12px 32px rgba(102,126,234,0.4)'
-                  },
-                  '&:disabled': {
-                    background: 'linear-gradient(135deg, rgba(102,126,234,0.3), rgba(118,75,162,0.3))',
-                    color: 'rgba(255,255,255,0.7)'
-                  }
-                }}
-            >
-              Create Project
-            </Button>
-            </Box>
+          <DialogActions>
+            <Button onClick={() => setIsScanning(false)}>Close</Button>
           </DialogActions>
         </Dialog>
+
+        <CreateWorkspaceDialog
+          open={createWorkspaceOpen}
+          mode={createWorkspaceMode}
+          onModeChange={setCreateWorkspaceMode}
+          onClose={handleCreateWorkspaceClose}
+          newProject={newProject}
+          onProjectChange={handleNewProjectChange}
+          onProjectField={handleNewProjectField}
+          onMemberToggle={handleMemberSelection}
+          starterTasks={starterTasks}
+          onStarterTasksChange={setStarterTasks}
+          newTask={newTask}
+          onTaskChange={handleTaskChange}
+          onTaskField={handleTaskField}
+          employees={employees}
+          projects={projects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            team: p.team,
+          }))}
+          onSubmitProject={handleNewProjectSubmit}
+          onSubmitTask={handleTaskSubmit}
+        />
 
         {/* Edit Project Dialog */}
         <Dialog 
@@ -1718,8 +1662,8 @@ const Projects: React.FC = () => {
           <DialogContent sx={{ p: 4, background: 'transparent' }}>
             <Grid container spacing={3} sx={{ mt: 1 }}>
               {/* Task Status Columns */}
-              {['todo', 'in_progress', 'completed'].map((status) => (
-                <Grid item xs={12} md={4} key={status}>
+              {(['todo', 'in_progress', 'pending_review', 'completed'] as const).map((status) => (
+                <Grid item xs={12} sm={6} md={3} key={status}>
                   <Box sx={{
                     p: 3,
                     borderRadius: 3,
@@ -1732,11 +1676,13 @@ const Projects: React.FC = () => {
                       mb: 2,
                       fontWeight: 'bold',
                       color: status === 'completed' ? 'success.main' :
+                             status === 'pending_review' ? 'info.main' :
                              status === 'in_progress' ? 'warning.main' :
                              'text.primary'
                     }}>
                       {status === 'todo' ? 'To Do' :
                        status === 'in_progress' ? 'In Progress' :
+                       status === 'pending_review' ? 'Pending review' :
                        'Completed'}
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         {selectedProject?.projectTasks.filter(t => t.status === status).length} tasks
@@ -1857,6 +1803,7 @@ const Projects: React.FC = () => {
                                 >
                                   <MenuItem value="todo">To Do</MenuItem>
                                   <MenuItem value="in_progress">In Progress</MenuItem>
+                                  <MenuItem value="pending_review">Pending review</MenuItem>
                                   <MenuItem value="completed">Completed</MenuItem>
                                 </Select>
                               </FormControl>
@@ -1864,7 +1811,7 @@ const Projects: React.FC = () => {
                                   <Button
                                     size="small"
                                     variant="contained"
-                                    onClick={() => handleTaskStatusChange(task.id, 'completed')}
+                                    onClick={() => handleSubmitTaskForReview(task)}
                                     sx={{
                                       borderRadius: 2,
                                       px: 2,
@@ -1880,7 +1827,7 @@ const Projects: React.FC = () => {
                                       transition: 'all 0.2s ease',
                                     }}
                                   >
-                                    Mark Complete
+                                    Submit for review
                                   </Button>
                                 )}
                               </Box>
@@ -1893,102 +1840,6 @@ const Projects: React.FC = () => {
               ))}
             </Grid>
           </DialogContent>
-        </Dialog>
-
-        {/* New Task Dialog */}
-        <Dialog
-          open={taskDialogOpen}
-          onClose={() => setTaskDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>
-            {newTask.isProjectTask ? 'New Project Task' : 'New Individual Task'}
-          </DialogTitle>
-          <DialogContent>
-            <Stack spacing={3} sx={{ mt: 2 }}>
-              <TextField
-                label="Task Title"
-                name="title"
-                value={newTask.title}
-                onChange={handleTaskChange}
-                fullWidth
-                required
-              />
-              <TextField
-                label="Description"
-                name="description"
-                value={newTask.description}
-                onChange={handleTaskChange}
-                multiline
-                rows={3}
-                fullWidth
-              />
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Due Date"
-                    name="dueDate"
-                    type="date"
-                    value={newTask.dueDate}
-                    onChange={handleTaskChange}
-                    fullWidth
-                    InputLabelProps={{ shrink: true }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Priority</InputLabel>
-                    <Select
-                      name="priority"
-                      value={newTask.priority}
-                      onChange={(e) => handleTaskChange(e as any)}
-                      label="Priority"
-                    >
-                      <MenuItem value="low">Low</MenuItem>
-                      <MenuItem value="medium">Medium</MenuItem>
-                      <MenuItem value="high">High</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                {selectedProject && (
-                  <Grid item xs={12}>
-                    <FormControl fullWidth>
-                      <InputLabel>Assignee</InputLabel>
-                      <Select
-                        value={newTask.assignee ? JSON.stringify(newTask.assignee) : ''}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setNewTask(prev => ({
-                            ...prev,
-                            assignee: value ? JSON.parse(value) : null,
-                          }));
-                        }}
-                        label="Assignee"
-                      >
-                        <MenuItem value="">Unassigned</MenuItem>
-                        {selectedProject.team.map((member) => (
-                          <MenuItem key={member.name} value={JSON.stringify(member)}>
-                            {member.name} ({member.role})
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                )}
-              </Grid>
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setTaskDialogOpen(false)}>Cancel</Button>
-            <Button
-              variant="contained"
-              onClick={handleTaskSubmit}
-              disabled={!newTask.title}
-            >
-              Create Task
-            </Button>
-          </DialogActions>
         </Dialog>
 
         {/* Assignment Dialog */}

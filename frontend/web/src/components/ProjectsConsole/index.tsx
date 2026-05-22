@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -7,84 +7,96 @@ import {
   IconButton,
   Stack,
   Grid,
-  LinearProgress,
-  Avatar,
+  Chip,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Folder,
-  Layers,
-  Calendar,
-  CheckCircle2,
-  MoreVertical,
   Plus,
   LayoutGrid,
   Kanban,
-  AlertCircle,
-  TrendingUp,
+  Sparkles,
+  Target,
 } from 'lucide-react';
+import {
+  aiBadgeSx,
+  consoleInnerSx,
+  consolePageSx,
+  consoleSplitLayoutSx,
+  sectionHeaderSx,
+  sectionShellSx,
+  sectionSubtitleSx,
+  sectionTitleSx,
+  sidebarStackSx,
+  workspaceGridSx,
+} from './projectsConsoleStyles';
+import { ConsoleLoadingSkeleton } from './ConsolePrimitives';
+import type { ProjectAiInsight } from './projectAiInsightTypes';
+import { ProjectAiInsightsSection } from './ProjectAiInsightsSection';
+import { ProjectWorkspaceCard } from './ProjectWorkspaceCard';
+import { SmartAssignmentHub } from './SmartAssignmentHub';
+import { OperationsActivityFeed } from './OperationsActivityFeed';
+import { OperationalAnalyticsStrip } from './OperationalAnalyticsStrip';
+import { CriticalMilestonesPanel } from './CriticalMilestonesPanel';
+import {
+  ProjectsCommandFilters,
+  type CommandQuickActionId,
+} from './ProjectsCommandFilters';
+import { buildOperationalMetrics } from './projectOperationalAnalytics';
+import {
+  defaultProjectFilters,
+  filterAndSortProjects,
+  type ProjectFilterState,
+} from './projectConsoleFilters';
+import type {
+  AssignmentQueueItem,
+  SmartAssignmentInsight,
+  TeamAvailabilityLane,
+} from './projectAssignmentHub';
+export type { AssignmentQueueItem } from './projectAssignmentHub';
+import type { OperationsFeedItem } from './projectActivityFeed';
+import type { ProjectHubRow } from './projectHubTypes';
+export type { ProjectHubRow, ProjectPriority } from './projectHubTypes';
+export type { ProjectMilestone, OperationalMilestone } from './projectMilestoneTypes';
+export type { CommandQuickActionId } from './ProjectsCommandFilters';
 
 export type ProjectViewMode = 'grid' | 'board';
 
-export type ProjectPriority = 'High' | 'Medium' | 'Low';
-
-export interface ProjectHubRow {
-  id: string;
-  name: string;
-  desc: string;
-  progress: number;
-  tasks: string;
-  priority: ProjectPriority;
-  team: string[];
-  dueLabel: string;
-  color: string;
-}
-
+/** @deprecated Use buildOperationalMetrics — kept for parent compatibility */
 export interface ProjectMetric {
   label: string;
   value: string;
   icon: 'folder' | 'layers' | 'alert' | 'trend';
-}
-
-export interface ProjectMilestone {
-  id: string;
-  title: string;
-  date: string;
-  state: 'at-risk' | 'normal';
+  delta?: string;
+  deltaUp?: boolean;
 }
 
 export interface ProjectsConsoleProps {
   projects: ProjectHubRow[];
-  metrics: ProjectMetric[];
-  milestones: ProjectMilestone[];
+  /** @deprecated Operational analytics are computed inside the console */
+  metrics?: ProjectMetric[];
+  milestones: import('./projectMilestoneTypes').OperationalMilestone[];
+  insights: ProjectAiInsight[];
+  assignmentInsights: SmartAssignmentInsight[];
+  assignmentQueue: AssignmentQueueItem[];
+  teamLanes: TeamAvailabilityLane[];
+  operationsFeed: OperationsFeedItem[];
+  departments: string[];
+  projectOptions: { id: string; name: string }[];
+  employeeCount?: number;
   viewMode: ProjectViewMode;
   onViewModeChange: (mode: ProjectViewMode) => void;
   onNewProject: () => void;
   onProjectClick: (projectId: string) => void;
+  onProjectTasks?: (projectId: string) => void;
   onProjectMenu?: (event: React.MouseEvent<HTMLElement>, projectId: string) => void;
+  onQuickAssign: (item: AssignmentQueueItem, teamMemberId: string) => void;
+  onCommandAction?: (action: CommandQuickActionId) => void;
+  onNotifyTeam?: (projectId: string) => void;
+  /** Show premium skeleton while portfolio hydrates */
+  isLoading?: boolean;
 }
-
-const priorityStyles: Record<
-  ProjectPriority,
-  { bg: string; color: string; border: string }
-> = {
-  High: { bg: 'rgba(244, 63, 94, 0.08)', color: '#e11d48', border: 'rgba(244, 63, 94, 0.2)' },
-  Medium: { bg: 'rgba(245, 158, 11, 0.08)', color: '#d97706', border: 'rgba(245, 158, 11, 0.2)' },
-  Low: { bg: 'rgba(148, 163, 184, 0.12)', color: '#475569', border: 'rgba(148, 163, 184, 0.25)' },
-};
-
-const metricIconMap = {
-  folder: Folder,
-  layers: Layers,
-  alert: AlertCircle,
-  trend: TrendingUp,
-};
-
-const metricTone: Record<ProjectMetric['icon'], { bg: string; color: string }> = {
-  folder: { bg: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6' },
-  layers: { bg: 'rgba(99, 102, 241, 0.08)', color: '#6366f1' },
-  alert: { bg: 'rgba(244, 63, 94, 0.08)', color: '#f43f5e' },
-  trend: { bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' },
-};
 
 const boardColumns: { key: string; label: string; min: number; max: number }[] = [
   { key: 'planning', label: 'Planning', min: 0, max: 33 },
@@ -94,485 +106,359 @@ const boardColumns: { key: string; label: string; min: number; max: number }[] =
 
 const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
   projects,
-  metrics,
   milestones,
+  insights,
+  assignmentInsights,
+  assignmentQueue,
+  teamLanes,
+  operationsFeed,
+  departments,
+  projectOptions,
+  employeeCount = 0,
   viewMode,
   onViewModeChange,
   onNewProject,
   onProjectClick,
+  onProjectTasks,
   onProjectMenu,
+  onQuickAssign,
+  onCommandAction,
+  onNotifyTeam,
+  isLoading = false,
 }) => {
-  const renderProjectCard = (project: ProjectHubRow) => {
-    const pill = priorityStyles[project.priority];
-    return (
-      <Paper
-        key={project.id}
-        elevation={0}
-        onClick={() => onProjectClick(project.id)}
-        sx={{
-          p: 2.5,
-          height: 224,
-          borderRadius: 3,
-          border: '1px solid #f1f5f9',
-          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          cursor: 'pointer',
-          transition: 'box-shadow 150ms ease, border-color 150ms ease',
-          '&:hover': {
-            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
-            borderColor: '#e2e8f0',
-            '& .project-title': { color: '#2563eb' },
-          },
-        }}
-      >
-        <Box>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Box>
-              <Typography
-                className="project-title"
-                sx={{
-                  fontSize: '0.875rem',
-                  fontWeight: 700,
-                  color: '#1e293b',
-                  letterSpacing: '-0.01em',
-                  transition: 'color 120ms ease',
-                }}
-              >
-                {project.name}
-              </Typography>
-              <Box
-                component="span"
-                sx={{
-                  display: 'inline-block',
-                  mt: 0.5,
-                  px: 0.75,
-                  py: 0.25,
-                  fontSize: '0.5625rem',
-                  fontWeight: 700,
-                  borderRadius: 0.5,
-                  border: '1px solid',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  bgcolor: pill.bg,
-                  color: pill.color,
-                  borderColor: pill.border,
-                }}
-              >
-                {project.priority} Priority
-              </Box>
-            </Box>
-            {onProjectMenu && (
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onProjectMenu?.(e, project.id);
-                }}
-                sx={{ color: '#94a3b8', '&:hover': { color: '#475569' } }}
-              >
-                <MoreVertical size={16} />
-              </IconButton>
-            )}
-          </Box>
-          <Typography
-            sx={{
-              fontSize: '0.75rem',
-              color: '#94a3b8',
-              mt: 1.5,
-              fontWeight: 500,
-              lineHeight: 1.5,
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            }}
-          >
-            {project.desc}
-          </Typography>
-        </Box>
+  const [filters, setFilters] = useState<ProjectFilterState>(defaultProjectFilters);
+  const [actionToast, setActionToast] = useState<string | null>(null);
 
-        <Box>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <CheckCircle2 size={14} color="#cbd5e1" />
-              <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, color: '#94a3b8' }}>
-                Tasks: <Box component="strong" sx={{ color: '#334155' }}>{project.tasks}</Box>
-              </Typography>
-            </Box>
-            <Typography sx={{ fontSize: '0.625rem', fontWeight: 700, color: '#334155' }}>
-              {project.progress}%
-            </Typography>
-          </Box>
-          <LinearProgress
-            variant="determinate"
-            value={project.progress}
-            sx={{
-              height: 6,
-              borderRadius: 3,
-              bgcolor: '#f1f5f9',
-              '& .MuiLinearProgress-bar': {
-                borderRadius: 3,
-                background: `linear-gradient(90deg, ${project.color}, #6366f1)`,
-              },
-            }}
-          />
-        </Box>
+  const consoleDepartments = useMemo(
+    () => [...new Set([...departments, ...projects.map((p) => p.department)])].filter(Boolean).sort(),
+    [departments, projects]
+  );
 
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            pt: 1.5,
-            borderTop: '1px solid #f8fafc',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Calendar size={14} color="#94a3b8" />
-            <Typography sx={{ fontSize: '0.6875rem', color: '#94a3b8', fontWeight: 500 }}>
-              Due {project.dueLabel}
-            </Typography>
-          </Box>
-          <Stack direction="row" spacing={-0.75}>
-            {project.team.slice(0, 4).map((initials, idx) => (
-              <Avatar
-                key={idx}
-                sx={{
-                  width: 24,
-                  height: 24,
-                  fontSize: '0.5625rem',
-                  fontWeight: 700,
-                  bgcolor: '#1e293b',
-                  border: '2px solid #fff',
-                }}
-              >
-                {initials}
-              </Avatar>
-            ))}
-          </Stack>
-        </Box>
-      </Paper>
+  const filteredProjects = useMemo(
+    () => filterAndSortProjects(projects, filters),
+    [projects, filters]
+  );
+
+  const operationalMetrics = useMemo(
+    () => buildOperationalMetrics(projects, employeeCount),
+    [projects, employeeCount]
+  );
+
+  const portfolioHealth = useMemo(() => {
+    if (projects.length === 0) return 0;
+    return Math.round(
+      projects.reduce((s, p) => s + p.healthScore, 0) / projects.length
     );
-  };
+  }, [projects]);
 
-  return (
-    <Box sx={{ bgcolor: 'rgba(248, 250, 252, 0.3)', py: 3, px: { xs: 2, md: 3 }, minHeight: '100%' }}>
-      <Box sx={{ maxWidth: 1600, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {/* Header */}
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2.5,
-            borderRadius: 3,
-            border: '1px solid #f1f5f9',
-            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            justifyContent: 'space-between',
-            alignItems: { sm: 'center' },
-            gap: 2,
-          }}
-        >
-          <Box>
-            <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.02em' }}>
-              Project Hub
-            </Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8', mt: 0.25 }}>
-              Track developmental phases, milestones, resource allocation profiles, and task completions.
-            </Typography>
-          </Box>
-          <Stack direction="row" spacing={1.25} alignItems="center">
-            <Box
-              sx={{
-                display: 'flex',
-                bgcolor: '#f1f5f9',
-                p: 0.5,
-                borderRadius: 2,
-                border: '1px solid rgba(226, 232, 240, 0.4)',
-              }}
-            >
-              <IconButton
-                size="small"
-                onClick={() => onViewModeChange('grid')}
+  const handleFiltersChange = useCallback((patch: Partial<ProjectFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const handleQuickAction = useCallback(
+    (action: CommandQuickActionId) => {
+      if (onCommandAction) {
+        onCommandAction(action);
+        return;
+      }
+      const labels: Record<CommandQuickActionId, string> = {
+        'generate-report': 'Generating operational report…',
+        'assign-resources': 'Opening assignment hub…',
+        'launch-meeting': 'Launching team meeting…',
+        'open-timeline': 'Opening delivery timeline…',
+        'export-dashboard': 'Exporting dashboard snapshot…',
+        'notify-team': 'Notifying project teams…',
+      };
+      setActionToast(labels[action]);
+    },
+    [onCommandAction]
+  );
+
+  const workspaceContent =
+    filteredProjects.length === 0 ? (
+      <Box sx={{ p: { xs: 3, md: 5 }, textAlign: 'center' }}>
+        <Folder size={44} color="#94a3b8" style={{ margin: '0 auto 14px' }} />
+        <Typography sx={{ fontWeight: 800, color: '#334155', fontSize: '1.0625rem' }}>
+          {projects.length === 0 ? 'No project workspaces yet' : 'No projects match your filters'}
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#64748b', mt: 0.75, mb: 2.5, maxWidth: 420, mx: 'auto' }}>
+          {projects.length === 0
+            ? 'Create a project space to activate milestones, task routing, and operational intelligence for your portfolio.'
+            : 'Adjust search, department, status, or utilization filters to see more workspaces.'}
+        </Typography>
+        {projects.length === 0 ? (
+          <Button
+            variant="contained"
+            startIcon={<Plus size={16} />}
+            onClick={onNewProject}
+            sx={{ textTransform: 'none', fontWeight: 700, bgcolor: '#0f172a', borderRadius: 2 }}
+          >
+            New Project Space
+          </Button>
+        ) : (
+          <Button
+            variant="outlined"
+            onClick={() => setFilters(defaultProjectFilters)}
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
+          >
+            Clear filters
+          </Button>
+        )}
+      </Box>
+    ) : viewMode === 'grid' ? (
+      <Box sx={workspaceGridSx}>
+        {filteredProjects.map((project) => (
+          <ProjectWorkspaceCard
+            key={project.id}
+            project={project}
+            onOpen={() => onProjectClick(project.id)}
+            onOpenTasks={onProjectTasks ? () => onProjectTasks(project.id) : undefined}
+            onProjectMenu={onProjectMenu}
+          />
+        ))}
+      </Box>
+    ) : (
+      <Grid container spacing={1.5} sx={{ p: { xs: 1.25, sm: 1.5, md: 1.75 } }}>
+        {boardColumns.map((col) => {
+          const colProjects = filteredProjects.filter(
+            (p) => p.progress >= col.min && p.progress <= col.max
+          );
+          return (
+            <Grid item xs={12} md={4} key={col.key}>
+              <Box
                 sx={{
-                  borderRadius: 1.5,
-                  bgcolor: viewMode === 'grid' ? '#fff' : 'transparent',
-                  color: viewMode === 'grid' ? '#1e293b' : '#94a3b8',
-                  boxShadow: viewMode === 'grid' ? '0 1px 2px rgba(15,23,42,0.06)' : 'none',
+                  p: 1.5,
+                  borderRadius: 2,
+                  border: '1px dashed #e2e8f0',
+                  bgcolor: '#fafbfc',
+                  minHeight: { xs: 200, md: 240 },
                 }}
               >
-                <LayoutGrid size={16} />
-              </IconButton>
-              <IconButton
-                size="small"
-                onClick={() => onViewModeChange('board')}
-                sx={{
-                  borderRadius: 1.5,
-                  bgcolor: viewMode === 'board' ? '#fff' : 'transparent',
-                  color: viewMode === 'board' ? '#1e293b' : '#94a3b8',
-                  boxShadow: viewMode === 'board' ? '0 1px 2px rgba(15,23,42,0.06)' : 'none',
-                }}
-              >
-                <Kanban size={16} />
-              </IconButton>
-            </Box>
-            <Button
-              data-tour="new-project"
-              variant="contained"
-              disableElevation
-              startIcon={<Plus size={14} />}
-              onClick={onNewProject}
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.75rem',
-                borderRadius: 2,
-                px: 2,
-                py: 1,
-                bgcolor: '#0f172a',
-                '&:hover': { bgcolor: '#1e293b' },
-              }}
-            >
-              New Project Space
-            </Button>
-          </Stack>
-        </Paper>
-
-        {/* Metrics */}
-        <Grid container spacing={2}>
-          {metrics.map((m) => {
-            const Icon = metricIconMap[m.icon];
-            const tone = metricTone[m.icon];
-            return (
-              <Grid item xs={6} md={3} key={m.label}>
-                <Paper
-                  elevation={0}
+                <Typography
                   sx={{
-                    p: 2,
-                    borderRadius: 3,
-                    border: '1px solid #f1f5f9',
-                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    color: '#475569',
+                    mb: 2,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
                   }}
                 >
-                  <Box>
-                    <Typography
-                      sx={{
-                        fontSize: '0.625rem',
-                        fontWeight: 700,
-                        color: '#94a3b8',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                      }}
-                    >
-                      {m.label}
-                    </Typography>
-                    <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', mt: 0.25 }}>
-                      {m.value}
-                    </Typography>
+                  {col.label}{' '}
+                  <Box component="span" sx={{ color: '#94a3b8' }}>
+                    ({colProjects.length})
                   </Box>
-                  <Box sx={{ p: 1, borderRadius: 2, bgcolor: tone.bg, color: tone.color, display: 'flex' }}>
-                    <Icon size={16} />
-                  </Box>
-                </Paper>
-              </Grid>
-            );
-          })}
-        </Grid>
+                </Typography>
+                <Stack spacing={1.5}>
+                  {colProjects.length === 0 ? (
+                    <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8', py: 3, textAlign: 'center' }}>
+                      Drop projects here as they advance
+                    </Typography>
+                  ) : (
+                    colProjects.map((p) => (
+                      <Paper
+                        key={p.id}
+                        elevation={0}
+                        onClick={() => onProjectClick(p.id)}
+                        sx={{
+                          p: 1.75,
+                          borderRadius: 2,
+                          border: '1px solid #e8edf4',
+                          bgcolor: '#fff',
+                          cursor: 'pointer',
+                          transition: 'all 150ms ease',
+                          '&:hover': {
+                            borderColor: '#cbd5e1',
+                            boxShadow: '0 6px 16px rgba(15,23,42,0.06)',
+                          },
+                        }}
+                      >
+                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
+                          {p.name}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.5 }}>
+                          {p.progress}% · {p.tasks} tasks
+                        </Typography>
+                      </Paper>
+                    ))
+                  )}
+                </Stack>
+              </Box>
+            </Grid>
+          );
+        })}
+      </Grid>
+    );
 
-        <Grid container spacing={3} alignItems="flex-start">
-          <Grid item xs={12} lg={9}>
-            {projects.length === 0 ? (
-              <Paper
-                elevation={0}
+  return (
+    <Box sx={consolePageSx}>
+      <Snackbar
+        open={Boolean(actionToast)}
+        autoHideDuration={3500}
+        onClose={() => setActionToast(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="info" onClose={() => setActionToast(null)} sx={{ fontWeight: 600 }}>
+          {actionToast}
+        </Alert>
+      </Snackbar>
+
+      <Box sx={consoleInnerSx}>
+        {isLoading ? (
+          <ConsoleLoadingSkeleton />
+        ) : (
+          <>
+        <Paper elevation={0} sx={{ ...sectionShellSx, p: { xs: 1.25, sm: 1.5, md: 1.75 } }}>
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', md: 'row' },
+              justifyContent: 'space-between',
+              alignItems: { md: 'center' },
+              gap: 2,
+            }}
+          >
+            <Box>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                <Typography
+                  sx={{ fontSize: { xs: '0.9375rem', md: '1.0625rem' }, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.03em' }}
+                >
+                  Project command center
+                </Typography>
+                <Box sx={aiBadgeSx}>
+                  <Sparkles size={10} />
+                  AI-assisted
+                </Box>
+              </Stack>
+              <Typography sx={{ fontSize: '0.8125rem', color: '#64748b', maxWidth: 640, lineHeight: 1.5 }}>
+                Executive analytics, smart filtering, milestone runway, and live operations — enterprise-grade
+                portfolio control without leaving your workspace.
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap">
+              <Chip
+                size="small"
+                icon={<Target size={12} />}
+                label={`Health ${portfolioHealth}%`}
                 sx={{
-                  p: 8,
-                  textAlign: 'center',
-                  borderRadius: 3,
-                  border: '1px dashed #e2e8f0',
+                  fontWeight: 700,
+                  fontSize: '0.6875rem',
+                  bgcolor: portfolioHealth >= 70 ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                  color: portfolioHealth >= 70 ? '#059669' : '#d97706',
+                  border: '1px solid',
+                  borderColor:
+                    portfolioHealth >= 70 ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.25)',
+                }}
+              />
+              <Box
+                sx={{
+                  display: 'flex',
+                  bgcolor: '#f1f5f9',
+                  p: 0.5,
+                  borderRadius: 2,
+                  border: '1px solid #e8edf4',
                 }}
               >
-                <Folder size={40} color="#94a3b8" style={{ margin: '0 auto 12px' }} />
-                <Typography sx={{ fontWeight: 600, color: '#475569' }}>No projects yet</Typography>
-                <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', mt: 0.5, mb: 2 }}>
-                  Create a project space to start tracking milestones and tasks.
-                </Typography>
-                <Button
-                  variant="contained"
-                  startIcon={<Plus size={16} />}
-                  onClick={onNewProject}
-                  sx={{ textTransform: 'none', bgcolor: '#0f172a' }}
+                <IconButton
+                  size="small"
+                  onClick={() => onViewModeChange('grid')}
+                  sx={{
+                    borderRadius: 1.5,
+                    bgcolor: viewMode === 'grid' ? '#fff' : 'transparent',
+                    color: viewMode === 'grid' ? '#0f172a' : '#94a3b8',
+                    boxShadow: viewMode === 'grid' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
+                  }}
                 >
-                  New Project Space
-                </Button>
-              </Paper>
-            ) : viewMode === 'grid' ? (
-              <Grid container spacing={2.5}>
-                {projects.map((project) => (
-                  <Grid item xs={12} md={6} key={project.id}>
-                    {renderProjectCard(project)}
-                  </Grid>
-                ))}
-              </Grid>
-            ) : (
-              <Grid container spacing={2}>
-                {boardColumns.map((col) => {
-                  const colProjects = projects.filter(
-                    (p) => p.progress >= col.min && p.progress <= col.max
-                  );
-                  return (
-                    <Grid item xs={12} md={4} key={col.key}>
-                      <Paper
-                        elevation={0}
-                        sx={{
-                          p: 2,
-                          borderRadius: 3,
-                          border: '1px solid #f1f5f9',
-                          bgcolor: '#fafbfc',
-                          minHeight: 280,
-                        }}
-                      >
-                        <Typography
-                          sx={{
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            color: '#475569',
-                            mb: 2,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.04em',
-                          }}
-                        >
-                          {col.label}{' '}
-                          <Box component="span" sx={{ color: '#94a3b8', fontWeight: 600 }}>
-                            ({colProjects.length})
-                          </Box>
-                        </Typography>
-                        <Stack spacing={1.5}>
-                          {colProjects.length === 0 ? (
-                            <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8', py: 2, textAlign: 'center' }}>
-                              No projects
-                            </Typography>
-                          ) : (
-                            colProjects.map((p) => (
-                              <Paper
-                                key={p.id}
-                                elevation={0}
-                                onClick={() => onProjectClick(p.id)}
-                                sx={{
-                                  p: 1.5,
-                                  borderRadius: 2,
-                                  border: '1px solid #e2e8f0',
-                                  bgcolor: '#fff',
-                                  cursor: 'pointer',
-                                  '&:hover': { borderColor: '#cbd5e1' },
-                                }}
-                              >
-                                <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b' }}>
-                                  {p.name}
-                                </Typography>
-                                <Typography sx={{ fontSize: '0.6875rem', color: '#94a3b8', mt: 0.5 }}>
-                                  {p.progress}% · {p.tasks} tasks
-                                </Typography>
-                              </Paper>
-                            ))
-                          )}
-                        </Stack>
-                      </Paper>
-                    </Grid>
-                  );
-                })}
-              </Grid>
-            )}
-          </Grid>
+                  <LayoutGrid size={16} />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => onViewModeChange('board')}
+                  sx={{
+                    borderRadius: 1.5,
+                    bgcolor: viewMode === 'board' ? '#fff' : 'transparent',
+                    color: viewMode === 'board' ? '#0f172a' : '#94a3b8',
+                    boxShadow: viewMode === 'board' ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
+                  }}
+                >
+                  <Kanban size={16} />
+                </IconButton>
+              </Box>
+              <Button
+                data-tour="new-project"
+                variant="contained"
+                disableElevation
+                startIcon={<Plus size={14} />}
+                onClick={onNewProject}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.8125rem',
+                  borderRadius: 2,
+                  px: 2.25,
+                  py: 1.1,
+                  bgcolor: '#0f172a',
+                  '&:hover': { bgcolor: '#1e293b' },
+                }}
+              >
+                New Project Space
+              </Button>
+            </Stack>
+          </Box>
+        </Paper>
 
-          {/* Milestones sidebar */}
-          <Grid item xs={12} lg={3}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 3,
-                border: '1px solid #f1f5f9',
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-              }}
-            >
-              <Box sx={{ mb: 2 }}>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e293b' }}>
-                  Critical Milestones
-                </Typography>
-                <Typography sx={{ fontSize: '0.6875rem', color: '#94a3b8', mt: 0.25 }}>
-                  High priority checkpoints due inside this workspace cycle.
+        <OperationalAnalyticsStrip metrics={operationalMetrics} />
+
+        <ProjectsCommandFilters
+          filters={filters}
+          departments={consoleDepartments}
+          resultCount={filteredProjects.length}
+          totalCount={projects.length}
+          onFiltersChange={handleFiltersChange}
+          onQuickAction={handleQuickAction}
+        />
+
+        <ProjectAiInsightsSection insights={insights} onProjectClick={onProjectClick} />
+
+        <SmartAssignmentHub
+          insights={assignmentInsights}
+          queue={assignmentQueue}
+          teamLanes={teamLanes}
+          departments={departments}
+          projectOptions={projectOptions}
+          onAssignToProject={onProjectClick}
+          onQuickAssign={onQuickAssign}
+        />
+
+        <Box sx={consoleSplitLayoutSx}>
+          <Paper elevation={0} sx={{ ...sectionShellSx, minWidth: 0 }}>
+            <Box sx={sectionHeaderSx}>
+              <Box>
+                <Typography sx={sectionTitleSx}>Project workspace</Typography>
+                <Typography sx={sectionSubtitleSx}>
+                  {filteredProjects.length} of {projects.length} pipeline
+                  {projects.length !== 1 ? 's' : ''} · grid or board delivery views.
                 </Typography>
               </Box>
-              <Stack spacing={1.25}>
-                {milestones.length === 0 ? (
-                  <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8' }}>No upcoming milestones</Typography>
-                ) : (
-                  milestones.map((m) => (
-                    <Paper
-                      key={m.id}
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 2,
-                        border: '1px solid #f1f5f9',
-                        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-                      }}
-                    >
-                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
-                        {m.title}
-                      </Typography>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          mt: 1,
-                        }}
-                      >
-                        <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, color: '#94a3b8' }}>
-                          {m.date}
-                        </Typography>
-                        <Box
-                          component="span"
-                          sx={{
-                            px: 0.75,
-                            py: 0.25,
-                            fontSize: '0.5rem',
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            borderRadius: 0.5,
-                            border: '1px solid',
-                            ...(m.state === 'at-risk'
-                              ? {
-                                  bgcolor: 'rgba(244, 63, 94, 0.08)',
-                                  color: '#e11d48',
-                                  borderColor: 'rgba(244, 63, 94, 0.2)',
-                                }
-                              : {
-                                  bgcolor: '#f8fafc',
-                                  color: '#475569',
-                                  borderColor: '#e2e8f0',
-                                }),
-                          }}
-                        >
-                          {m.state === 'at-risk' ? 'at-risk' : 'on track'}
-                        </Box>
-                      </Box>
-                    </Paper>
-                  ))
-                )}
-              </Stack>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Box>
+            </Box>
+            {workspaceContent}
+          </Paper>
 
+          <Box sx={sidebarStackSx}>
+            <CriticalMilestonesPanel
+              milestones={milestones}
+              onProjectClick={onProjectClick}
+              onNotifyTeam={onNotifyTeam}
+            />
+            <OperationsActivityFeed
+              items={operationsFeed}
+              onItemClick={onProjectClick}
+            />
+          </Box>
+        </Box>
+          </>
+        )}
+      </Box>
     </Box>
   );
 };

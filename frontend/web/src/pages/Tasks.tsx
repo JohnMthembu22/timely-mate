@@ -1,32 +1,44 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
   Button,
   Typography,
-  Container,
   Grid,
-  Card,
-  CardContent,
-  CardActions,
-  Chip,
   Alert,
-  IconButton,
   Menu,
   MenuItem,
+  Container,
+  Stack,
 } from '@mui/material';
-import { Add as AddIcon, MoreVert as MoreVertIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import DashboardLayout from '../components/DashboardLayout';
 import { TaskDialog } from '../components/TaskDialog';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAppSelector } from '../store';
+import { useEmployees } from '../contexts/EmployeeContext';
 import PermissionGuard from '../components/PermissionGuard';
+import { useNotifications } from '../contexts/NotificationContext';
+import { notifyTaskSubmittedToBriefedBy } from '../utils/taskReview';
+import { getOfficeAssignableEmployees } from '../utils/offsiteWorkers';
+import { getAuthUserLabel } from '../utils/managerReview';
+import type { AiTaskSuggestion, Task, TaskFiltersState, TaskFormValues, TaskGroupMode, TaskPriority, TaskStatus } from './Tasks/types';
+import { INITIAL_TASKS, MOCK_AI_TASK_SUGGESTIONS } from './Tasks/tasksMockData';
+import { filterTasks, groupTasks } from './Tasks/taskUtils';
+import { TaskFiltersBar } from './Tasks/components/TaskFiltersBar';
+import { TaskAiSuggestions } from './Tasks/components/TaskAiSuggestions';
+import { TaskCard } from './Tasks/components/TaskCard';
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: 'TODO' | 'IN_PROGRESS' | 'COMPLETED';
-  assignee: string;
-  createdBy: string;
+function daysFromNow(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function resolveAssigneeName(email: string, employees: { email?: string; name: string }[]): string {
+  const match = employees.find((e) => e.email === email);
+  if (match) return match.name;
+  const local = email.split('@')[0]?.replace(/[._]/g, ' ') ?? 'User';
+  return local.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export const Tasks: React.FC = () => {
@@ -34,43 +46,39 @@ export const Tasks: React.FC = () => {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  
+  const [groupMode, setGroupMode] = useState<TaskGroupMode>('status');
+  const [aiSuggestions, setAiSuggestions] = useState(MOCK_AI_TASK_SUGGESTIONS);
+  const [filters, setFilters] = useState<TaskFiltersState>({
+    search: '',
+    statuses: [],
+    priorities: [],
+    assignee: '',
+    dueFilter: 'all',
+    myTasksOnly: false,
+  });
+
   const { user } = useAppSelector((state) => state.auth);
-  const { 
-    canCreateTasks, 
-    canEditTasks, 
-    canDeleteTasks, 
+  const { employees } = useEmployees();
+  const { addNotification, addNotificationForRecipient } = useNotifications();
+  const {
+    canCreateTasks,
+    canEditTasks,
+    canDeleteTasks,
     canViewAllTasks,
-    isEmployee 
+    isEmployee,
   } = usePermissions();
 
-  // Mock tasks data
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: '1',
-      title: 'Complete Project Report',
-      description: 'Write and submit the quarterly project report',
-      status: 'TODO',
-      assignee: 'employee@timelymate.com',
-      createdBy: 'admin@timelymate.com',
-    },
-    {
-      id: '2',
-      title: 'Client Meeting',
-      description: 'Prepare and attend client meeting',
-      status: 'IN_PROGRESS',
-      assignee: 'leader@timelymate.com',
-      createdBy: 'admin@timelymate.com',
-    },
-    {
-      id: '3',
-      title: 'Code Review',
-      description: 'Review pull requests from team members',
-      status: 'TODO',
-      assignee: 'employee@timelymate.com',
-      createdBy: 'leader@timelymate.com',
-    },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+
+  const assigneeOptions = useMemo(() => {
+    const fromTasks = tasks.map((t) => ({ email: t.assignee, name: t.assigneeName }));
+    const fromEmp = getOfficeAssignableEmployees(employees)
+      .filter((e) => e.email)
+      .map((e) => ({ email: e.email!, name: e.name }));
+    const map = new Map<string, string>();
+    [...fromTasks, ...fromEmp].forEach((a) => map.set(a.email, a.name));
+    return [...map.entries()].map(([email, name]) => ({ email, name }));
+  }, [tasks, employees]);
 
   const handleOpenDialog = () => {
     setEditingTask(null);
@@ -88,30 +96,33 @@ export const Tasks: React.FC = () => {
     setEditingTask(null);
   };
 
-  const handleCreateTask = (newTask: Omit<Task, 'id' | 'createdBy'>) => {
-    const task: Task = {
-      ...newTask,
-      id: Math.random().toString(36).substr(2, 9),
-      createdBy: user?.email || 'unknown',
-    };
-    setTasks([...tasks, task]);
+  const formToTask = (form: TaskFormValues, existing?: Task): Task => ({
+    id: existing?.id ?? Math.random().toString(36).slice(2, 11),
+    title: form.title,
+    description: form.description,
+    status: form.status,
+    assignee: form.assignee,
+    createdBy: existing?.createdBy ?? user?.email ?? 'unknown',
+    priority: form.priority,
+    dueDate: form.dueDate || daysFromNow(7),
+    assigneeName: resolveAssigneeName(form.assignee, employees),
+    project: form.project?.trim() || 'General',
+  });
+
+  const handleCreateTask = (form: TaskFormValues) => {
+    setTasks((prev) => [...prev, formToTask(form)]);
     handleCloseDialog();
   };
 
-  const handleUpdateTask = (updatedTask: Omit<Task, 'id' | 'createdBy'>) => {
+  const handleUpdateTask = (form: TaskFormValues) => {
     if (!editingTask) return;
-    
-    const updated: Task = {
-      ...editingTask,
-      ...updatedTask,
-    };
-    
-    setTasks(tasks.map(task => task.id === editingTask.id ? updated : task));
+    const updated = formToTask(form, editingTask);
+    setTasks((prev) => prev.map((t) => (t.id === editingTask.id ? updated : t)));
     handleCloseDialog();
   };
 
   const handleDeleteTask = (taskId: string) => {
-    setTasks(tasks.filter(task => task.id !== taskId));
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
     handleCloseMenu();
   };
 
@@ -125,185 +136,205 @@ export const Tasks: React.FC = () => {
     setSelectedTask(null);
   };
 
-  const handleUpdateStatus = (taskId: string, newStatus: Task['status']) => {
-    setTasks(tasks.map(task => 
-      task.id === taskId ? { ...task, status: newStatus } : task
-    ));
+  const handleUpdateStatus = (taskId: string, newStatus: TaskStatus) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
   };
 
-  const getStatusColor = (status: Task['status']) => {
-    switch (status) {
-      case 'TODO':
-        return 'default';
-      case 'IN_PROGRESS':
-        return 'primary';
-      case 'COMPLETED':
-        return 'success';
-      default:
-        return 'default';
-    }
+  const handleSubmitForReview = (task: Task) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, status: 'PENDING_REVIEW' } : t))
+    );
+    const submitterLabel = getAuthUserLabel(user ?? undefined);
+    notifyTaskSubmittedToBriefedBy({
+      briefedByEmail: task.createdBy,
+      taskTitle: task.title,
+      submitterLabel,
+      submitterEmail: user?.email,
+      actionUrl: '/tasks',
+      employees,
+      addNotificationForRecipient,
+      addNotification,
+    });
   };
 
-  const isAssignedToUser = (task: Task) => {
-    return user?.email === task.assignee;
+  const handleUpdatePriority = (taskId: string, priority: TaskPriority) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, priority } : t)));
   };
 
-  const canModifyTask = (task: Task) => {
-    // Task creator or assigned user can modify status
-    // Only users with edit permission can modify task details
-    return isAssignedToUser(task) || task.createdBy === user?.email || canEditTasks();
+  const handleApplyAiSuggestion = (s: AiTaskSuggestion) => {
+    const form: TaskFormValues = {
+      title: s.title,
+      description: s.reason,
+      status: 'TODO',
+      assignee: user?.email ?? 'employee@timelymate.com',
+      priority: s.suggestedPriority,
+      dueDate: daysFromNow(s.suggestedDueDays),
+      project: 'AI Suggested',
+    };
+    setTasks((prev) => [...prev, formToTask(form)]);
+    setAiSuggestions((prev) => prev.filter((x) => x.id !== s.id));
   };
 
-  // Filter tasks based on permissions
-  const visibleTasks = canViewAllTasks() 
-    ? tasks 
-    : tasks.filter(task => isAssignedToUser(task));
+  const isAssignedToUser = (task: Task) => user?.email === task.assignee;
+
+  const canModifyTask = (task: Task) =>
+    isAssignedToUser(task) || task.createdBy === user?.email || canEditTasks();
+
+  const visibleTasks = useMemo(() => {
+    const base = canViewAllTasks() ? tasks : tasks.filter((t) => isAssignedToUser(t));
+    return filterTasks(base, filters, user?.email);
+  }, [tasks, filters, user?.email, canViewAllTasks]);
+
+  const grouped = useMemo(() => groupTasks(visibleTasks, groupMode), [visibleTasks, groupMode]);
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Tasks
-        </Typography>
-        <PermissionGuard permission="canCreateTasks" showMessage={false}>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleOpenDialog}
-          >
-            Create Task
-          </Button>
-        </PermissionGuard>
-      </Box>
-
-      {/* Show role information for employees */}
-      {isEmployee() && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          As an employee, you can only view and update tasks assigned to you. 
-          Contact your team leader to create new tasks or modify existing ones.
-        </Alert>
-      )}
-
-      <Grid container spacing={3}>
-        {visibleTasks.map((task) => (
-          <Grid item xs={12} md={6} lg={4} key={task.id}>
-            <Card>
-              <CardContent>
-                <Box display="flex" justifyContent="space-between" alignItems="flex-start">
-                  <Typography variant="h6" component="h2" gutterBottom sx={{ flex: 1 }}>
-                    {task.title}
-                  </Typography>
-                  <PermissionGuard 
-                    permissions={['canEditTasks', 'canDeleteTasks']} 
-                    showMessage={false}
-                    fallback={
-                      isAssignedToUser(task) ? (
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleOpenMenu(e, task)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
-                      ) : null
-                    }
-                  >
-                    <IconButton
-                      size="small"
-                      onClick={(e) => handleOpenMenu(e, task)}
-                    >
-                      <MoreVertIcon />
-                    </IconButton>
-                  </PermissionGuard>
-                </Box>
-                
-                <Typography
-                  variant="body2"
-                  color="textSecondary"
-                  component="p"
-                  sx={{ mb: 2 }}
-                >
-                  {task.description}
-                </Typography>
-                
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                  <Chip
-                    label={task.status.replace('_', ' ')}
-                    color={getStatusColor(task.status)}
-                  />
-                  <Typography variant="body2" color="textSecondary">
-                    Assignee: {task.assignee}
-                  </Typography>
-                </Box>
-                
-                <Typography variant="caption" color="textSecondary">
-                  Created by: {task.createdBy}
-                </Typography>
-              </CardContent>
-              
-              <CardActions>
-                {isAssignedToUser(task) && (
-                  <>
-                    <Button 
-                      size="small" 
-                      color="primary"
-                      onClick={() => handleUpdateStatus(task.id, 'IN_PROGRESS')}
-                      disabled={task.status === 'IN_PROGRESS'}
-                    >
-                      Start
-                    </Button>
-                    <Button 
-                      size="small" 
-                      color="success"
-                      onClick={() => handleUpdateStatus(task.id, 'COMPLETED')}
-                      disabled={task.status === 'COMPLETED'}
-                    >
-                      Complete
-                    </Button>
-                  </>
-                )}
-              </CardActions>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Task actions menu */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleCloseMenu}
-      >
-        {selectedTask && canEditTasks() && (
-          <MenuItem onClick={() => handleEditTask(selectedTask)}>
-            <EditIcon sx={{ mr: 1 }} />
-            Edit Task
-          </MenuItem>
-        )}
-        {selectedTask && canDeleteTasks() && (
-          <MenuItem 
-            onClick={() => handleDeleteTask(selectedTask.id)}
-            sx={{ color: 'error.main' }}
-          >
-            <DeleteIcon sx={{ mr: 1 }} />
-            Delete Task
-          </MenuItem>
-        )}
-        {selectedTask && isAssignedToUser(selectedTask) && !canEditTasks() && (
-          <MenuItem onClick={handleCloseMenu} disabled>
-            <Typography variant="body2" color="textSecondary">
-              Limited access - Contact admin for modifications
+    <DashboardLayout>
+      <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, sm: 3 } }}>
+        <Box
+          display="flex"
+          flexDirection={{ xs: 'column', sm: 'row' }}
+          justifyContent="space-between"
+          alignItems={{ xs: 'flex-start', sm: 'center' }}
+          gap={2}
+          mb={3}
+        >
+          <Box>
+            <Typography variant="h4" component="h1" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+              Tasks
             </Typography>
-          </MenuItem>
-        )}
-      </Menu>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Manage work with filters, smart grouping, and AI suggestions
+            </Typography>
+          </Box>
+          <PermissionGuard permission="canCreateTasks" showMessage={false}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleOpenDialog}
+              fullWidth
+              sx={{ maxWidth: { xs: '100%', sm: 'auto' }, textTransform: 'none', fontWeight: 600, borderRadius: '3px' }}
+            >
+              Create Task
+            </Button>
+          </PermissionGuard>
+        </Box>
 
-      <TaskDialog
-        open={isDialogOpen}
-        onClose={handleCloseDialog}
-        onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
-        initialTask={editingTask || undefined}
-      />
-    </Container>
+        {isEmployee() && (
+          <Alert severity="info" sx={{ mb: 3, borderRadius: '3px' }}>
+            As an employee, you can only view and update tasks assigned to you. Contact your team leader to create new
+            tasks or modify existing ones.
+          </Alert>
+        )}
+
+        <Grid container spacing={{ xs: 2, md: 3 }}>
+          <Grid item xs={12} lg={8}>
+            <Stack gap={2}>
+              <TaskFiltersBar
+                filters={filters}
+                groupMode={groupMode}
+                assigneeOptions={assigneeOptions}
+                resultCount={visibleTasks.length}
+                onFiltersChange={setFilters}
+                onGroupModeChange={setGroupMode}
+              />
+
+              {visibleTasks.length === 0 ? (
+                <Alert severity="warning" sx={{ borderRadius: '3px' }}>
+                  No tasks match your filters. Try adjusting search or filters, or create a new task.
+                </Alert>
+              ) : (
+                grouped.map((group) => (
+                  <Box key={group.key}>
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.8125rem',
+                        color: 'text.secondary',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        mb: 1.5,
+                      }}
+                    >
+                      {group.label} ({group.tasks.length})
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {group.tasks.map((task) => (
+                        <Grid item xs={12} sm={6} key={task.id}>
+                          <TaskCard
+                            task={task}
+                            canModify={canModifyTask(task)}
+                            canEdit={canEditTasks()}
+                            isAssignedToUser={isAssignedToUser(task)}
+                            onOpenMenu={(e) => handleOpenMenu(e, task)}
+                            onEdit={() => handleEditTask(task)}
+                            onDelete={() => handleDeleteTask(task.id)}
+                            onStart={() => handleUpdateStatus(task.id, 'IN_PROGRESS')}
+                            onComplete={() => handleSubmitForReview(task)}
+                            onQuickStatus={(status) => handleUpdateStatus(task.id, status)}
+                            onQuickPriority={(priority) => handleUpdatePriority(task.id, priority)}
+                          />
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                ))
+              )}
+            </Stack>
+          </Grid>
+
+          <Grid item xs={12} lg={4}>
+            <Box sx={{ position: { lg: 'sticky' }, top: { lg: 88 } }}>
+              <TaskAiSuggestions
+                suggestions={aiSuggestions}
+                onApply={handleApplyAiSuggestion}
+                onDismiss={(id) => setAiSuggestions((prev) => prev.filter((s) => s.id !== id))}
+              />
+            </Box>
+          </Grid>
+        </Grid>
+
+        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseMenu}>
+          {selectedTask && canEditTasks() && (
+            <MenuItem onClick={() => handleEditTask(selectedTask)}>
+              <EditIcon sx={{ mr: 1 }} />
+              Edit Task
+            </MenuItem>
+          )}
+          {selectedTask && canDeleteTasks() && (
+            <MenuItem onClick={() => handleDeleteTask(selectedTask.id)} sx={{ color: 'error.main' }}>
+              <DeleteIcon sx={{ mr: 1 }} />
+              Delete Task
+            </MenuItem>
+          )}
+          {selectedTask && isAssignedToUser(selectedTask) && !canEditTasks() && (
+            <MenuItem onClick={handleCloseMenu} disabled>
+              <Typography variant="body2" color="text.secondary">
+                Limited access — contact admin for modifications
+              </Typography>
+            </MenuItem>
+          )}
+        </Menu>
+
+        <TaskDialog
+          open={isDialogOpen}
+          onClose={handleCloseDialog}
+          onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
+          initialTask={
+            editingTask
+              ? {
+                  title: editingTask.title,
+                  description: editingTask.description,
+                  status: editingTask.status,
+                  assignee: editingTask.assignee,
+                  priority: editingTask.priority,
+                  dueDate: editingTask.dueDate,
+                  project: editingTask.project,
+                }
+              : undefined
+          }
+        />
+      </Container>
+    </DashboardLayout>
   );
-}; 
+};

@@ -1,48 +1,28 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
   Paper,
   Typography,
   Button,
-  IconButton,
   Stack,
   Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Menu,
-  MenuItem,
+
 } from '@mui/material';
-import {
-  Calendar,
-  Download,
-  Filter,
-  MoreVertical,
-  CheckCircle2,
-  Clock,
-  FileSpreadsheet,
-  RefreshCcw,
-} from 'lucide-react';
+import { Download, Filter, FileSpreadsheet, RefreshCcw, Shield } from 'lucide-react';
+import { PayrollAuditIntelligence } from './PayrollAuditIntelligence';
+import { AiPayrollIntelligencePanel } from './AiPayrollIntelligencePanel';
+import { TimesheetLedgerTable } from './TimesheetLedgerTable';
+import { SmartApprovalWorkflow } from './SmartApprovalWorkflow';
+import { buildTimesheetsAuditBundle, type SmartLedgerFilter } from './timesheetsAuditMock';
+import { buildPayrollIntelligenceBundle } from './payrollIntelligenceMock';
+import { buildApprovalWorkflow } from './approvalWorkflowMock';
+import { enrichLedgerGroups } from './ledgerEnrichment';
+import { WorkforceCostAnalytics } from './WorkforceCostAnalytics';
+import { MobileWorkforceOpsBar, type MobileWorkforceAction } from '../WorkforceOps/MobileWorkforceOpsBar';
+import { wfGlowPulse, wfPageSx, wfPremiumSx } from '../WorkforceOps/workforceOpsStyles';
+import type { LedgerFilterStatus, TimesheetLedgerEntry, TimesheetLedgerGroup } from './timesheetsTypes';
 
-export type LedgerFilterStatus = 'All' | 'Approved' | 'Pending';
-
-export interface TimesheetLedgerEntry {
-  id: string;
-  code: string;
-  project: string;
-  description: string;
-  duration: string;
-  status: 'Approved' | 'Pending' | 'Rejected' | 'Draft';
-}
-
-export interface TimesheetLedgerGroup {
-  date: string;
-  totalHours: string;
-  entries: TimesheetLedgerEntry[];
-}
+export type { LedgerFilterStatus, TimesheetLedgerEntry, TimesheetLedgerGroup };
 
 export interface TimesheetsConsoleProps {
   groups: TimesheetLedgerGroup[];
@@ -56,19 +36,32 @@ export interface TimesheetsConsoleProps {
   approvedHours: string;
   pendingHours: string;
   emptyMessage?: string;
+  onAuditNotify?: (title: string, message: string) => void;
 }
 
-const statusStyles: Record<
-  TimesheetLedgerEntry['status'],
-  { bg: string; color: string; border: string }
-> = {
-  Approved: { bg: 'rgba(16, 185, 129, 0.08)', color: '#059669', border: 'rgba(16, 185, 129, 0.2)' },
-  Pending: { bg: 'rgba(245, 158, 11, 0.08)', color: '#d97706', border: 'rgba(245, 158, 11, 0.2)' },
-  Rejected: { bg: 'rgba(239, 68, 68, 0.08)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.2)' },
-  Draft: { bg: 'rgba(148, 163, 184, 0.12)', color: '#64748b', border: 'rgba(148, 163, 184, 0.25)' },
-};
-
-const FILTER_CYCLE: LedgerFilterStatus[] = ['All', 'Approved', 'Pending'];
+function matchesSmartFilter(
+  entry: TimesheetLedgerEntry,
+  filter: SmartLedgerFilter
+): boolean {
+  if (filter === 'All') return true;
+  if (filter === 'Approved') return entry.status === 'Approved';
+  if (filter === 'Pending') return entry.status === 'Pending' || entry.status === 'Draft';
+  if (filter === 'Anomalies') {
+    return (
+      entry.status === 'Draft' ||
+      entry.status === 'Rejected' ||
+      entry.description.toLowerCase().includes('retro')
+    );
+  }
+  if (filter === 'Overtime') {
+    const match = entry.duration.match(/([\d.]+)/);
+    return match ? parseFloat(match[1]) >= 8 : false;
+  }
+  if (filter === 'Compliance') {
+    return entry.description.toLowerCase().includes('break') || entry.status === 'Pending';
+  }
+  return true;
+}
 
 const TimesheetsConsole: React.FC<TimesheetsConsoleProps> = ({
   groups,
@@ -82,416 +75,206 @@ const TimesheetsConsole: React.FC<TimesheetsConsoleProps> = ({
   approvedHours,
   pendingHours,
   emptyMessage = 'No timesheet entries match your filters.',
+  onAuditNotify,
 }) => {
-  const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null);
-  const [menuEntryId, setMenuEntryId] = React.useState<string | null>(null);
+  const [smartFilter, setSmartFilter] = useState<SmartLedgerFilter>('All');
+  const [mobileOfflineMode, setMobileOfflineMode] = useState(false);
 
-  const handleFilterClick = () => {
-    const idx = FILTER_CYCLE.indexOf(filterStatus);
-    onFilterStatusChange(FILTER_CYCLE[(idx + 1) % FILTER_CYCLE.length]);
+  const auditBundle = useMemo(
+    () => buildTimesheetsAuditBundle(approvedHours, pendingHours),
+    [approvedHours, pendingHours]
+  );
+
+  const payrollBundle = useMemo(
+    () => buildPayrollIntelligenceBundle(approvedHours, pendingHours),
+    [approvedHours, pendingHours]
+  );
+
+  const allEnriched = useMemo(() => enrichLedgerGroups(groups), [groups]);
+
+  const filteredEntries = useMemo(() => {
+    return allEnriched.filter((e) => {
+      const legacy =
+        filterStatus === 'All' ||
+        (filterStatus === 'Approved' && e.status === 'Approved') ||
+        (filterStatus === 'Pending' && (e.status === 'Pending' || e.status === 'Draft'));
+      return legacy && matchesSmartFilter(e, smartFilter);
+    });
+  }, [allEnriched, filterStatus, smartFilter]);
+
+  const approvalBundle = useMemo(
+    () =>
+      buildApprovalWorkflow(
+        allEnriched.map((e) => ({
+          id: e.id,
+          project: e.project,
+          duration: e.duration,
+          status: e.status,
+        }))
+      ),
+    [allEnriched]
+  );
+
+  const handleMobileAction = (action: MobileWorkforceAction) => {
+    const notify = (title: string, message: string) => onAuditNotify?.(title, message);
+    const labels: Record<MobileWorkforceAction, [string, string]> = {
+      offline: ['Offline capture', 'Timesheet entries saved locally until auto-sync.'],
+      sync: ['Automatic sync', 'Syncing pending mobile entries to audit ledger.'],
+      voice: ['Voice logging', 'Voice timesheet note recorded (pilot).'],
+      approve: ['Mobile approval', 'Quick approval applied to selected queue item.'],
+      field_capture: ['Field timesheet', 'Field hours captured with GPS proof placeholder.'],
+      biometric: ['Biometric verify', 'Mobile verification attestation logged.'],
+      whatsapp: ['WhatsApp approval', 'Approval request sent to manager thread.'],
+      check_in: ['Quick check-in', 'Mobile attendance punch recorded.'],
+    };
+    const [t, m] = labels[action];
+    notify(t, m);
   };
 
-  const openRowMenu = (event: React.MouseEvent<HTMLElement>, entryId: string) => {
-    setMenuAnchor(event.currentTarget);
-    setMenuEntryId(entryId);
-  };
-
-  const closeRowMenu = () => {
-    setMenuAnchor(null);
-    setMenuEntryId(null);
-  };
-
-  const handleMenuEdit = () => {
-    if (menuEntryId && onEntryAction) {
-      onEntryAction(menuEntryId);
-    }
-    closeRowMenu();
+  const handleLegacyFilterClick = () => {
+    const cycle: LedgerFilterStatus[] = ['All', 'Approved', 'Pending'];
+    const idx = cycle.indexOf(filterStatus);
+    onFilterStatusChange(cycle[(idx + 1) % cycle.length]);
   };
 
   return (
-    <Box sx={{ bgcolor: 'rgba(248, 250, 252, 0.3)', py: 3, px: { xs: 2, md: 3 } }}>
-      <Box sx={{ maxWidth: 1600, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {/* Header */}
+    <Box sx={wfPageSx}>
+      <Box sx={{ maxWidth: 1600, mx: 'auto', display: 'flex', flexDirection: 'column', gap: { xs: 1.5, md: 2 } }}>
+        <PayrollAuditIntelligence bundle={auditBundle} />
+
+        <AiPayrollIntelligencePanel bundle={payrollBundle} />
+
+        <WorkforceCostAnalytics
+          approvedHours={approvedHours}
+          pendingHours={pendingHours}
+          onExport={(format) => (format === 'csv' ? onExport() : onCompileReport?.())}
+        />
+
+        <SmartApprovalWorkflow bundle={approvalBundle} onNotify={onAuditNotify} />
+
         <Paper
           elevation={0}
           sx={{
-            p: 2.5,
-            borderRadius: 3,
-            border: '1px solid #f1f5f9',
-            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+            ...wfPremiumSx,
+            ...wfGlowPulse,
+            p: { xs: 1.25, sm: 1.5 },
             display: 'flex',
             flexDirection: { xs: 'column', md: 'row' },
             justifyContent: 'space-between',
             alignItems: { md: 'center' },
-            gap: 2,
+            gap: 1.25,
           }}
         >
           <Box>
-            <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.02em' }}>
-              Timesheet Log Ledger
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 800, color: '#0f172a' }}>
+              Workforce audit console
             </Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8', mt: 0.25 }}>
-              Review, audit, and filter historical time allocations across engineering and branding workflows.
+            <Typography sx={{ fontSize: '0.6875rem', color: '#64748b', mt: 0.25 }}>
+              Finance-ready ledger · inline approvals · AI anomaly detection
             </Typography>
           </Box>
-          <Stack direction="row" spacing={1.25} sx={{ alignSelf: { xs: 'stretch', md: 'auto' } }}>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap">
             <Button
               variant="outlined"
-              onClick={handleFilterClick}
+              size="small"
+              onClick={handleLegacyFilterClick}
               startIcon={<Filter size={14} />}
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.75rem',
-                borderRadius: 2,
-                borderColor: '#e2e8f0',
-                color: '#334155',
-                bgcolor: '#fff',
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-                '&:hover': { bgcolor: '#f8fafc', borderColor: '#cbd5e1' },
-              }}
+              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 1.5 }}
             >
-              Filter{filterStatus !== 'All' ? `: ${filterStatus}` : ''}
+              Status{filterStatus !== 'All' ? `: ${filterStatus}` : ''}
             </Button>
             <Button
               variant="contained"
+              size="small"
               disableElevation
               onClick={onExport}
               startIcon={<Download size={14} />}
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.75rem',
-                borderRadius: 2,
-                bgcolor: '#0f172a',
-                '&:hover': { bgcolor: '#1e293b' },
-              }}
+              sx={{ textTransform: 'none', fontWeight: 700, bgcolor: '#0f172a', borderRadius: 1.5 }}
             >
-              Export Ledger
+              Export audit
             </Button>
           </Stack>
         </Paper>
 
-        <Grid container spacing={3} alignItems="flex-start">
-          {/* Main ledger */}
+        <Grid container spacing={2} alignItems="flex-start">
           <Grid item xs={12} lg={9}>
-            <Stack spacing={3}>
-              {groups.length === 0 ? (
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 6,
-                    textAlign: 'center',
-                    borderRadius: 3,
-                    border: '1px solid #f1f5f9',
-                  }}
-                >
-                  <Typography sx={{ fontSize: '0.875rem', color: '#64748b' }}>{emptyMessage}</Typography>
-                </Paper>
-              ) : (
-                groups.map((group, groupIdx) => (
-                  <Paper
-                    key={groupIdx}
-                    elevation={0}
-                    sx={{
-                      borderRadius: 3,
-                      border: '1px solid #f1f5f9',
-                      boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        bgcolor: 'rgba(248, 250, 252, 0.7)',
-                        px: 2.5,
-                        py: 1.5,
-                        borderBottom: '1px solid #f1f5f9',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Calendar size={16} color="#94a3b8" />
-                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', letterSpacing: '-0.01em' }}>
-                          {group.date}
-                        </Typography>
-                      </Box>
-                      <Typography
-                        component="span"
-                        sx={{
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          color: '#64748b',
-                          bgcolor: '#fff',
-                          border: '1px solid rgba(226, 232, 240, 0.6)',
-                          px: 1,
-                          py: 0.25,
-                          borderRadius: 1,
-                        }}
-                      >
-                        Total:{' '}
-                        <Box component="strong" sx={{ color: '#1e293b', fontWeight: 700 }}>
-                          {group.totalHours}
-                        </Box>
-                      </Typography>
-                    </Box>
-
-                    <TableContainer>
-                      <Table size="small" sx={{ minWidth: 640 }}>
-                        <TableHead>
-                          <TableRow
-                            sx={{
-                              bgcolor: '#fff',
-                              borderBottom: '1px solid #f1f5f9',
-                              '& th': {
-                                fontSize: '0.625rem',
-                                fontWeight: 700,
-                                color: '#94a3b8',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.06em',
-                                py: 1.5,
-                                borderBottom: '1px solid #f1f5f9',
-                              },
-                            }}
-                          >
-                            <TableCell sx={{ pl: 2.5, width: 96 }}>Task Code</TableCell>
-                            <TableCell>Project Context</TableCell>
-                            <TableCell>Activity Description</TableCell>
-                            <TableCell align="center" sx={{ width: 96 }}>Duration</TableCell>
-                            <TableCell align="center" sx={{ width: 112 }}>Status</TableCell>
-                            <TableCell align="center" sx={{ width: 48, pr: 2 }} />
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {group.entries.map((entry) => {
-                            const pill = statusStyles[entry.status];
-                            return (
-                              <TableRow
-                                key={entry.id}
-                                hover
-                                sx={{
-                                  '& td': {
-                                    fontSize: '0.75rem',
-                                    py: 1.75,
-                                    borderBottom: '1px solid #f8fafc',
-                                  },
-                                  '&:hover': { bgcolor: 'rgba(248, 250, 252, 0.5)' },
-                                  '&:hover .row-action': { opacity: 1 },
-                                }}
-                              >
-                                <TableCell
-                                  sx={{
-                                    pl: 2.5,
-                                    fontFamily: 'monospace',
-                                    fontWeight: 700,
-                                    color: '#64748b',
-                                  }}
-                                >
-                                  {entry.code}
-                                </TableCell>
-                                <TableCell
-                                  sx={{
-                                    fontWeight: 600,
-                                    color: '#1e293b',
-                                    maxWidth: 140,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {entry.project}
-                                </TableCell>
-                                <TableCell
-                                  sx={{
-                                    color: '#64748b',
-                                    fontWeight: 500,
-                                    maxWidth: 280,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {entry.description}
-                                </TableCell>
-                                <TableCell align="center" sx={{ fontWeight: 700, color: '#334155' }}>
-                                  {entry.duration}
-                                </TableCell>
-                                <TableCell align="center">
-                                  <Box
-                                    component="span"
-                                    sx={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 0.5,
-                                      px: 1,
-                                      py: 0.25,
-                                      fontSize: '0.625rem',
-                                      fontWeight: 700,
-                                      borderRadius: 0.5,
-                                      border: '1px solid',
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.04em',
-                                      bgcolor: pill.bg,
-                                      color: pill.color,
-                                      borderColor: pill.border,
-                                    }}
-                                  >
-                                    {entry.status === 'Approved' ? (
-                                      <CheckCircle2 size={10} />
-                                    ) : (
-                                      <Clock size={10} />
-                                    )}
-                                    {entry.status}
-                                  </Box>
-                                </TableCell>
-                                <TableCell align="center" sx={{ pr: 2 }}>
-                                  {onEntryAction && (
-                                    <IconButton
-                                      size="small"
-                                      className="row-action"
-                                      onClick={(e) => openRowMenu(e, entry.id)}
-                                      sx={{
-                                        opacity: 0,
-                                        color: '#94a3b8',
-                                        transition: 'opacity 120ms ease',
-                                        '&:hover': { color: '#475569' },
-                                      }}
-                                    >
-                                      <MoreVertical size={14} />
-                                    </IconButton>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </Paper>
-                ))
-              )}
-            </Stack>
+            <TimesheetLedgerTable
+              entries={filteredEntries}
+              smartFilter={smartFilter}
+              onSmartFilterChange={setSmartFilter}
+              onEntryAction={onEntryAction}
+              emptyMessage={emptyMessage}
+            />
           </Grid>
 
-          {/* Payroll sidebar */}
           <Grid item xs={12} lg={3}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 3,
-                border: '1px solid #f1f5f9',
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-              }}
-            >
-              <Stack spacing={2}>
-                <Box>
-                  <Typography
-                    sx={{
-                      fontSize: '0.5625rem',
-                      fontWeight: 700,
-                      color: '#94a3b8',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.08em',
-                    }}
-                  >
-                    Payroll Lifecycle
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e293b', mt: 0.25 }}>
-                    Current Approval Period
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{payCycleLabel}</Typography>
-                </Box>
+            <Stack spacing={2}>
+              <Paper elevation={0} sx={{ p: 2, borderRadius: 2.5, border: '1px solid #e8edf4', bgcolor: '#fff' }}>
+                <Typography sx={{ fontSize: '0.5625rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.08em' }}>
+                  PAYROLL LIFECYCLE
+                </Typography>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 800, color: '#0f172a', mt: 0.5 }}>
+                  Approval period
+                </Typography>
+                <Typography sx={{ fontSize: '0.6875rem', color: '#64748b' }}>{payCycleLabel}</Typography>
 
-                <Stack spacing={1}>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      p: 1.25,
-                      bgcolor: 'rgba(248, 250, 252, 0.6)',
-                      borderRadius: 2,
-                      border: '1px solid rgba(241, 245, 249, 0.5)',
-                    }}
-                  >
-                    <Typography sx={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>
-                      Approved Hours
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>
-                      {approvedHours}
-                    </Typography>
+                <Stack spacing={1} sx={{ mt: 1.5 }}>
+                  <Box sx={{ p: 1.15, borderRadius: 2, bgcolor: '#f0fdf4', border: '1px solid #d1fae5' }}>
+                    <Typography sx={{ fontSize: '0.6875rem', color: '#64748b' }}>Approved</Typography>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 800, color: '#059669' }}>{approvedHours}</Typography>
                   </Box>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      p: 1.25,
-                      bgcolor: 'rgba(248, 250, 252, 0.6)',
-                      borderRadius: 2,
-                      border: '1px solid rgba(241, 245, 249, 0.5)',
-                    }}
-                  >
-                    <Typography sx={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>
-                      Pending Audit
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#d97706' }}>
-                      {pendingHours}
-                    </Typography>
+                  <Box sx={{ p: 1.15, borderRadius: 2, bgcolor: '#fffbeb', border: '1px solid #fde68a' }}>
+                    <Typography sx={{ fontSize: '0.6875rem', color: '#64748b' }}>Pending audit</Typography>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 800, color: '#d97706' }}>{pendingHours}</Typography>
                   </Box>
                 </Stack>
 
-                <Stack spacing={1} sx={{ pt: 1, borderTop: '1px solid #f1f5f9' }}>
+                <Stack spacing={1} sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #f1f5f9' }}>
                   <Button
                     fullWidth
                     variant="contained"
                     disableElevation
                     onClick={onCompileReport}
                     startIcon={<FileSpreadsheet size={14} />}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      fontSize: '0.75rem',
-                      borderRadius: 2,
-                      py: 1,
-                      bgcolor: '#0f172a',
-                      '&:hover': { bgcolor: '#1e293b' },
-                    }}
+                    sx={{ textTransform: 'none', fontWeight: 800, bgcolor: '#0f172a', borderRadius: 1.5 }}
                   >
-                    Compile Cycle Report
+                    Compile cycle report
                   </Button>
                   <Button
                     fullWidth
                     variant="outlined"
                     onClick={onSync}
                     startIcon={<RefreshCcw size={14} />}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 500,
-                      fontSize: '0.75rem',
-                      borderRadius: 2,
-                      py: 1,
-                      borderColor: '#e2e8f0',
-                      color: '#475569',
-                      '&:hover': { bgcolor: '#f8fafc' },
-                    }}
+                    sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 1.5 }}
                   >
-                    Sync Remote Repos
+                    Sync remote repos
                   </Button>
                 </Stack>
-              </Stack>
-            </Paper>
+              </Paper>
+
+              <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: '1px solid #c7d2fe', bgcolor: '#f5f3ff' }}>
+                <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 1 }}>
+                  <Shield size={16} color="#4f46e5" />
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, color: '#4338ca' }}>
+                    Compliance tracking
+                  </Typography>
+                </Stack>
+                <Typography sx={{ fontSize: '0.6875rem', color: '#475569', lineHeight: 1.45 }}>
+                  Score {auditBundle.complianceScore}% · {payrollBundle.insights.filter((i) => i.severity === 'critical').length}{' '}
+                  critical payroll signals.
+                </Typography>
+              </Paper>
+            </Stack>
           </Grid>
         </Grid>
       </Box>
 
-      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeRowMenu}>
-        <MenuItem onClick={handleMenuEdit} sx={{ fontSize: '0.875rem' }}>
-          Edit entry
-        </MenuItem>
-      </Menu>
+      <MobileWorkforceOpsBar
+        variant="timesheets"
+        offlineMode={mobileOfflineMode}
+        onToggleOffline={() => setMobileOfflineMode((prev) => !prev)}
+        onAction={handleMobileAction}
+      />
     </Box>
   );
 };

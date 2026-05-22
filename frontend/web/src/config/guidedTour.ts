@@ -9,9 +9,9 @@ export const guidedTourSteps: TourStep[] = [
   {
     element: '[data-tour="status-clock-in"]',
     popover: {
-      title: 'Clock in to start',
+      title: 'Start your workday',
       description:
-        'Begin your workday here. Clocking in unlocks time tracking, projects, and team collaboration for your session.',
+        'Clock in here to unlock time tracking, projects, and team tools for this session. Most features stay gated until you are clocked in.',
       side: 'bottom',
       align: 'center',
     },
@@ -19,65 +19,71 @@ export const guidedTourSteps: TourStep[] = [
   {
     element: '[data-tour="nav-dashboard"]',
     popover: {
-      title: 'Your dashboard',
+      title: 'Dashboard home',
       description:
-        'See active workspaces, quick actions, and team metrics at a glance. This is your home base.',
+        'Your command center — active workspaces, quick actions, metrics, and shortcuts to what matters today.',
       side: 'right',
+      align: 'start',
     },
   },
   {
     element: '[data-tour="nav-hr"]',
     popover: {
-      title: 'Import your team',
+      title: 'Build your team',
       description:
-        'Go to HR to import employees from Excel/CSV or add people manually. Demo data is loaded automatically if the roster is empty.',
+        'Open HR to import employees from Excel/CSV or add people manually. Demo roster data loads automatically when the list is empty.',
       side: 'right',
+      align: 'start',
     },
   },
   {
     element: '[data-tour="nav-projects"]',
     popover: {
-      title: 'Projects workspace',
+      title: 'Projects & tasks',
       description:
-        'Create projects, assign team members, track progress, and manage tasks. Open a project to chat with the team.',
+        'Create projects, assign teammates, track progress, and open project chat — everything delivery lives here.',
       side: 'right',
+      align: 'start',
     },
   },
   {
     route: '/projects',
     element: '[data-tour="new-project"]',
     popover: {
-      title: 'Create a project',
+      title: 'Spin up a project',
       description:
-        'Click New Project, fill in details, and select team members from your roster. Assignments appear on the project card immediately.',
+        'Tap New Project, add details, and pick team members from your roster. Assignments show on the card right away.',
       side: 'bottom',
+      align: 'start',
     },
   },
   {
     element: '[data-tour="nav-messages"]',
     popover: {
-      title: 'Messages',
+      title: 'Team messages',
       description:
-        'Send direct messages to teammates. Start a conversation from the + button and messages are saved for your demo session.',
+        'Direct-message anyone on your roster. Conversations persist locally so your demo flow stays intact between pages.',
       side: 'right',
+      align: 'start',
     },
   },
   {
     route: '/messages',
     element: '[data-tour="new-message"]',
     popover: {
-      title: 'Start chatting',
+      title: 'New conversation',
       description:
-        'Pick a team member to message. Use this for announcements, task updates, or quick check-ins during your demo.',
+        'Use the compose button to pick a teammate — great for announcements, task handoffs, or quick check-ins.',
       side: 'left',
+      align: 'start',
     },
   },
   {
     element: '[data-tour="tour-guide-button"]',
     popover: {
-      title: 'Tour guide',
+      title: 'You are all set',
       description:
-        'Replay this walkthrough anytime from the Tour Guide button in the top bar. Happy demonstrating!',
+        'Replay this tour anytime from Tour guide in the top bar. Enjoy the demo — you are ready to impress.',
       side: 'bottom',
       align: 'end',
     },

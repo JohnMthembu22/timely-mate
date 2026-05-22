@@ -15,9 +15,12 @@ const Pricing = lazy(() => import('./pages/Pricing'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const TimeTracking = lazy(() => import('./pages/TimeTracking'));
 const Projects = lazy(() => import('./pages/Projects'));
+const Tasks = lazy(() => import('./pages/Tasks').then((m) => ({ default: m.Tasks })));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const Team = lazy(() => import('./pages/Team'));
+const WorkforceIntelligence = lazy(() => import('./pages/WorkforceIntelligence'));
 const OffsiteWork = lazy(() => import('./pages/OffsiteWork'));
+const IncidentReports = lazy(() => import('./pages/OffsiteWork/IncidentReports'));
 const ExpenseTracking = lazy(() => import('./pages/ExpenseTracking'));
 const IndustryModules = lazy(() => import('./pages/IndustryModules'));
 const LearningPortal = lazy(() => import('./pages/LearningPortal'));
@@ -112,6 +115,18 @@ const AppRoutes = () => {
           }
         />
         <Route
+          path="/tasks"
+          element={
+            <ProtectedRoute>
+              <ClockInGuard>
+                <LazyRoute>
+                  <Tasks />
+                </LazyRoute>
+              </ClockInGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/calendar"
           element={
             <ProtectedRoute>
@@ -138,12 +153,38 @@ const AppRoutes = () => {
           }
         />
         <Route
+          path="/workforce-intelligence"
+          element={
+            <ProtectedRoute>
+              <ClockInGuard>
+                <PermissionGuard permission="canManageTeam" customMessage="Workforce intelligence is available to team leaders and administrators.">
+                  <LazyRoute>
+                    <WorkforceIntelligence />
+                  </LazyRoute>
+                </PermissionGuard>
+              </ClockInGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/offsite-work"
           element={
             <ProtectedRoute>
               <ClockInGuard>
                 <LazyRoute>
                   <OffsiteWork />
+                </LazyRoute>
+              </ClockInGuard>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/offsite-work/incidents"
+          element={
+            <ProtectedRoute>
+              <ClockInGuard>
+                <LazyRoute>
+                  <IncidentReports />
                 </LazyRoute>
               </ClockInGuard>
             </ProtectedRoute>

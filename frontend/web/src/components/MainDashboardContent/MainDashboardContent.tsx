@@ -1,9 +1,20 @@
-import React from 'react';
-import { Box, Button, Grid, Typography } from '@mui/material';
+import React, { memo } from 'react';
+import { Box, Button, Grid, Stack, Typography, alpha } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { Briefcase, TrendingUp, Users, Clock } from 'lucide-react';
 import { ProjectCard, type ProjectCardProps } from '../ProjectCard/ProjectCard';
-import { MetricsGrid, type MetricsGridItem } from '../MetricsGrid/MetricsGrid';
+import type { MetricsGridItem } from '../MetricsGrid/MetricsGrid';
+import { glassCardSx } from '../../theme/surfaces';
+import { tmColors, tmGradients } from '../../theme/designTokens';
+import { ExecutiveSummaryStrip } from '../../pages/Dashboard/components/ExecutiveSummaryStrip';
+import { QuickActionsBar, type QuickActionItem } from '../../pages/Dashboard/components/QuickActionsBar';
+import { AiInsightsPanel } from '../AiInsightsPanel';
+import { ProjectHealthOverview } from '../../pages/Dashboard/components/ProjectHealthOverview';
+import { WorkforceSnapshot } from '../../pages/Dashboard/components/WorkforceSnapshot';
+import { LiveActivityFeed } from '../../pages/Dashboard/components/LiveActivityFeed';
+import type { ProjectHealthRow } from '../../pages/Dashboard/dashboardOpsData';
+import type { WorkforceSnapshotData } from '../../pages/Dashboard/dashboardOpsData';
+import type { LiveActivityItem } from '../../pages/Dashboard/dashboardOpsData';
 
 export type DashboardProjectTile = { id: string } & Omit<
   ProjectCardProps,
@@ -13,21 +24,27 @@ export type DashboardProjectTile = { id: string } & Omit<
 export interface MainDashboardContentProps {
   displayName: string;
   summaryLine?: string;
-  /** Label shown in the profile strip (e.g. “Last updated: …”). */
   lastUpdatedLabel?: string;
   metrics: MetricsGridItem[];
-  /** Tiles for the critical-projects grid (two columns from `md`). */
   projects: DashboardProjectTile[];
-  /** Right column — typically `PersonalAttendanceTools`. */
   attendanceSidebar: React.ReactNode;
-  /** Optional block rendered under project cards (e.g. recent activity list). */
   recentActivity?: React.ReactNode;
   onViewAllProjects?: () => void;
   onProjectCardClick?: (id: string) => void;
   onProjectMenuClick?: (id: string) => void;
+  onProjectTrackClick?: (id: string) => void;
+  quickActions?: QuickActionItem[];
+  managementActions?: QuickActionItem[];
+  projectHealth?: ProjectHealthRow[];
+  workforce?: WorkforceSnapshotData;
+  liveActivity?: LiveActivityItem[];
+  atRiskCount?: number;
+  unreadCount?: number;
+  onViewAllActivities?: () => void;
+  isClockedIn?: boolean;
+  clockInTime?: string | null;
 }
 
-/** Demo dataset aligned with the Tailwind reference — use when no live jobs exist. */
 export const MAIN_DASHBOARD_SAMPLE_PROJECTS: DashboardProjectTile[] = [
   {
     id: 'sample-platform',
@@ -63,7 +80,6 @@ export const MAIN_DASHBOARD_SAMPLE_PROJECTS: DashboardProjectTile[] = [
   },
 ];
 
-/** Optional starter KPI row for demos / loading shells. */
 export const MAIN_DASHBOARD_SAMPLE_METRICS: MetricsGridItem[] = [
   {
     title: 'Active Projects',
@@ -100,12 +116,12 @@ export const MAIN_DASHBOARD_SAMPLE_METRICS: MetricsGridItem[] = [
 ];
 
 /**
- * Primary dashboard canvas: profile strip → KPI metrics → 4-column master grid
- * (`lg`: main stream 9 cols + contextual sidebar 3 cols). MUI equivalent of the Tailwind layout.
+ * AI-powered operations command center — profile, executive KPIs, insights,
+ * project health, critical projects, workforce, live feed, and attendance.
  */
-export function MainDashboardContent({
+export const MainDashboardContent = memo(function MainDashboardContent({
   displayName,
-  summaryLine = 'Here is a summary of your workspace performance today.',
+  summaryLine = 'Operations command center — live view of delivery, people, and signals.',
   lastUpdatedLabel = 'Last updated: Just now',
   metrics,
   projects,
@@ -114,71 +130,163 @@ export function MainDashboardContent({
   onViewAllProjects,
   onProjectCardClick,
   onProjectMenuClick,
+  onProjectTrackClick,
+  quickActions = [],
+  managementActions = [],
+  projectHealth = [],
+  workforce,
+  liveActivity = [],
+  atRiskCount = 0,
+  unreadCount = 0,
+  onViewAllActivities,
+  isClockedIn = false,
+  clockInTime = null,
 }: MainDashboardContentProps) {
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
   return (
     <Box
       component="main"
       sx={{
         flex: 1,
-        bgcolor: 'rgba(248, 250, 252, 0.65)',
+        bgcolor: isDark ? 'background.default' : 'rgba(248, 250, 252, 0.65)',
         minHeight: '100vh',
-        py: { xs: 3, md: 4 },
-        px: { xs: 2, sm: 3, md: 4 },
+        py: { xs: 2, md: 3 },
+        px: { xs: 1.5, sm: 2.5, md: 4 },
+        overflowX: 'hidden',
+        maxWidth: '100%',
       }}
     >
-      <Box sx={{ width: '100%', maxWidth: theme.breakpoints.values.xl, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {/* Profile header */}
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: theme.breakpoints.values.xl,
+          mx: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: { xs: 2.5, md: 3 },
+        }}
+      >
+        {/* Command center header */}
         <Box
           sx={{
-            display: 'flex',
-            flexDirection: { xs: 'column', md: 'row' },
-            justifyContent: 'space-between',
-            alignItems: { xs: 'flex-start', md: 'center' },
-            gap: 2,
-            bgcolor: '#fff',
-            p: 3,
-            borderRadius: 3,
-            border: '1px solid #f1f5f9',
-            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+            ...glassCardSx(theme),
+            p: { xs: 2, md: 2.5 },
+            background: isDark
+              ? `linear-gradient(135deg, ${alpha(tmColors.charcoal800, 0.95)} 0%, ${alpha(tmColors.charcoal900, 0.98)} 100%)`
+              : undefined,
+            border: `1px solid ${isDark ? tmColors.borderSubtle : 'divider'}`,
           }}
         >
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', letterSpacing: '-0.02em' }}>
-              Welcome back, {displayName}
-            </Typography>
-            <Typography sx={{ fontSize: '0.875rem', color: '#64748b', mt: 0.5 }}>{summaryLine}</Typography>
-          </Box>
-          <Typography
-            sx={{
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#94a3b8',
-              bgcolor: '#f8fafc',
-              border: '1px solid #f1f5f9',
-              px: 1.5,
-              py: 0.75,
-              borderRadius: 2,
-              flexShrink: 0,
-            }}
-          >
-            {lastUpdatedLabel}
-          </Typography>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={8}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    bgcolor: isClockedIn ? tmColors.emerald : '#fbbf24',
+                    boxShadow: isClockedIn ? `0 0 10px ${tmColors.emerald}` : undefined,
+                  }}
+                />
+                <Typography
+                  sx={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    color: tmColors.neonBlueBright,
+                  }}
+                >
+                  Operations command center
+                </Typography>
+              </Stack>
+              <Typography sx={{ fontSize: { xs: '1.35rem', md: '1.5rem' }, fontWeight: 700, color: 'text.primary', letterSpacing: '-0.03em' }}>
+                Welcome back, {displayName}
+              </Typography>
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary', mt: 0.5, maxWidth: 560 }}>
+                {summaryLine}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: { xs: 'flex-start', md: 'flex-end' },
+                  gap: 1,
+                }}
+              >
+                <Typography
+                  sx={{
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                    bgcolor: isDark ? alpha('#fff', 0.04) : '#f8fafc',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: '3px',
+                  }}
+                >
+                  {lastUpdatedLabel}
+                </Typography>
+                <Box
+                  sx={{
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: '3px',
+                    background: tmGradients.heroAccent,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  <Typography sx={{ fontSize: '0.6875rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    AI-assisted oversight
+                  </Typography>
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
         </Box>
 
-        <MetricsGrid metrics={metrics} />
+        {quickActions.length > 0 && (
+          <QuickActionsBar primaryActions={quickActions} managementActions={managementActions} />
+        )}
 
-        {/* Master grid: 3 + 1 at lg */}
-        <Grid container spacing={4}>
-          <Grid item xs={12} lg={9}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 3 }}>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#1e293b' }}>
-                  Critical projects
-                </Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8', mt: 0.5 }}>
-                  Active engineering and operations tasks requiring supervision.
+        <ExecutiveSummaryStrip
+          metrics={metrics}
+          atRiskCount={atRiskCount}
+          unreadCount={unreadCount}
+          isClockedIn={isClockedIn}
+          clockInTime={clockInTime}
+        />
+
+        <Grid container spacing={{ xs: 2, md: 2.5 }}>
+          <Grid item xs={12} lg={7}>
+            <AiInsightsPanel useMockData />
+          </Grid>
+          <Grid item xs={12} lg={5}>
+            {workforce ? <WorkforceSnapshot data={workforce} clockInTime={clockInTime} /> : null}
+          </Grid>
+        </Grid>
+
+        <Grid container spacing={{ xs: 2, md: 2.5 }}>
+          <Grid item xs={12}>
+            <ProjectHealthOverview rows={projectHealth} onViewAll={onViewAllProjects} />
+          </Grid>
+        </Grid>
+
+        <Grid container spacing={{ xs: 2.5, md: 3 }}>
+          <Grid item xs={12} lg={8}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+              <Box>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>Critical projects</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.35 }}>
+                  Active engineering and operations tasks requiring supervision
                 </Typography>
               </Box>
               {onViewAllProjects && (
@@ -187,70 +295,106 @@ export function MainDashboardContent({
                   sx={{
                     flexShrink: 0,
                     fontWeight: 600,
-                    fontSize: '0.875rem',
+                    fontSize: '0.8125rem',
                     textTransform: 'none',
-                    color: '#2563eb',
-                    '&:hover': { color: '#1d4ed8', bgcolor: 'transparent' },
+                    color: isDark ? tmColors.neonBlueBright : 'primary.main',
                   }}
                 >
                   View all projects
                 </Button>
               )}
             </Box>
-
-            <Grid container spacing={2.5}>
-              {projects.length === 0 ? (
-                <Grid item xs={12}>
-                  <Box
-                    sx={{
-                      bgcolor: '#fff',
-                      border: '1px solid #f1f5f9',
-                      borderRadius: 3,
-                      boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-                      p: 4,
-                      textAlign: 'center',
-                    }}
-                  >
-                    <Typography sx={{ fontWeight: 600, color: '#1e293b', mb: 0.5 }}>No active jobs</Typography>
-                    <Typography sx={{ fontSize: '0.875rem', color: '#94a3b8', mb: 2 }}>
-                      Start tracking time on a job to populate this grid.
-                    </Typography>
-                    {onViewAllProjects && (
-                      <Button variant="contained" onClick={onViewAllProjects} sx={{ textTransform: 'none', fontWeight: 600 }}>
-                        Go to time tracking
-                      </Button>
-                    )}
-                  </Box>
-                </Grid>
-              ) : (
-                projects.map((project) => (
-                  <Grid item xs={12} md={6} key={project.id}>
-                    <ProjectCard
-                      title={project.title}
-                      department={project.department}
-                      progress={project.progress}
-                      dueDate={project.dueDate}
-                      teamSize={project.teamSize}
-                      onCardClick={
-                        onProjectCardClick ? () => onProjectCardClick(project.id) : undefined
-                      }
-                      onMenuClick={
-                        onProjectMenuClick ? () => onProjectMenuClick(project.id) : undefined
-                      }
-                    />
+            <Box
+              role="region"
+              aria-label="Critical projects list"
+              sx={{
+                maxHeight: { xs: 'min(48vh, 400px)', md: 'min(52vh, 440px)' },
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                pr: 0.75,
+                borderRadius: '3px',
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: isDark ? alpha('#000', 0.2) : alpha('#fff', 0.5),
+                scrollBehavior: 'smooth',
+                WebkitOverflowScrolling: 'touch',
+                '&::-webkit-scrollbar': { width: 6 },
+                '&::-webkit-scrollbar-thumb': {
+                  borderRadius: 3,
+                  bgcolor: isDark ? alpha('#fff', 0.18) : alpha('#000', 0.15),
+                },
+              }}
+            >
+              <Grid container spacing={2} sx={{ p: { xs: 1.5, sm: 2 } }}>
+                {projects.length === 0 ? (
+                  <Grid item xs={12}>
+                    <Box sx={{ ...glassCardSx(theme), p: 4, textAlign: 'center' }}>
+                      <Typography sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>No active jobs</Typography>
+                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary', mb: 2 }}>
+                        Start tracking time on a job to populate this grid.
+                      </Typography>
+                      {onViewAllProjects && (
+                        <Button variant="contained" onClick={onViewAllProjects} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                          Go to time tracking
+                        </Button>
+                      )}
+                    </Box>
                   </Grid>
-                ))
-              )}
-            </Grid>
-
-            {recentActivity}
+                ) : (
+                  projects.map((project) => (
+                    <Grid item xs={12} sm={6} key={project.id}>
+                      <ProjectCard
+                        id={project.id}
+                        title={project.title}
+                        department={project.department}
+                        progress={project.progress}
+                        dueDate={project.dueDate}
+                        teamSize={project.teamSize}
+                        status={project.status}
+                        riskScore={project.riskScore}
+                        budgetHealth={project.budgetHealth}
+                        budgetLabel={project.budgetLabel}
+                        aiRecommendation={project.aiRecommendation}
+                        onCardClick={onProjectCardClick ? () => onProjectCardClick(project.id) : undefined}
+                        onMenuClick={
+                          onProjectMenuClick
+                            ? (e) => {
+                                e.stopPropagation();
+                                onProjectMenuClick(project.id);
+                              }
+                            : undefined
+                        }
+                        onTrackClick={
+                          onProjectTrackClick
+                            ? (e) => {
+                                e.stopPropagation();
+                                onProjectTrackClick(project.id);
+                              }
+                            : undefined
+                        }
+                      />
+                    </Grid>
+                  ))
+                )}
+              </Grid>
+            </Box>
           </Grid>
 
-          <Grid item xs={12} lg={3}>
-            {attendanceSidebar}
+          <Grid item xs={12} lg={4}>
+            <Box sx={{ position: { lg: 'sticky' }, top: { lg: 16 } }}>{attendanceSidebar}</Box>
+          </Grid>
+        </Grid>
+
+        <Grid container spacing={{ xs: 2, md: 2.5 }}>
+          <Grid item xs={12}>
+            <LiveActivityFeed
+              items={liveActivity}
+              onViewAll={onViewAllActivities}
+              legacyActivitySlot={recentActivity}
+            />
           </Grid>
         </Grid>
       </Box>
     </Box>
   );
-}
+});

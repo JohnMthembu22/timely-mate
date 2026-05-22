@@ -98,7 +98,7 @@ const FeatureGuard: React.FC<FeatureGuardProps> = ({
       freelancers: 'Freelancers',
       messages: 'Messages',
       notifications: 'Notifications',
-      offsiteWork: 'Offsite Work',
+      offsiteWork: 'Field Operations',
       industryModules: 'Industry Modules',
       expenseTracking: 'Expense Tracking',
       procurement: 'Procurement',

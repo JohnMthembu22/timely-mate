@@ -84,7 +84,7 @@ const MapDialog: React.FC<MapDialogProps> = ({
               {selectedLocation ? `${selectedLocation.name} - Location Map` : 'Site Locations Map'}
             </Typography>
             <Typography variant="subtitle1" sx={{ opacity: 0.9, fontWeight: 500 }}>
-              {selectedLocation ? 'View location details and navigate' : 'Explore all offsite work locations'}
+              {selectedLocation ? 'View location details and navigate' : 'Explore all field operation sites'}
             </Typography>
           </Box>
         </Box>

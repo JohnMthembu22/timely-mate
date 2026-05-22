@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { memo } from 'react';
+import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import {
   Box,
   Button,
@@ -7,8 +8,12 @@ import {
   ListItem,
   ListItemText,
   Typography,
+  useTheme,
+  alpha,
 } from '@mui/material';
 import { AccessTime } from '@mui/icons-material';
+import { glassCardSx } from '../../theme/surfaces';
+import { tmColors } from '../../theme/designTokens';
 
 export interface AttendanceRecord {
   id: string;
@@ -19,7 +24,6 @@ export interface AttendanceRecord {
 
 export interface PersonalAttendanceToolsProps {
   isClockedIn: boolean;
-  elapsedTime: string;
   clockInTime: string | null;
   records: AttendanceRecord[];
   onClockIn: () => void;
@@ -27,50 +31,54 @@ export interface PersonalAttendanceToolsProps {
   onOpenTimeTracking: () => void;
 }
 
-const SURFACE = {
-  bgcolor: '#fff',
-  border: '1px solid #f1f5f9',
-  borderRadius: 3,
-  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-} as const;
-
 /** Right-column contextual attendance panel for the dashboard master grid. */
-export function PersonalAttendanceTools({
+export const PersonalAttendanceTools = memo(function PersonalAttendanceTools({
   isClockedIn,
-  elapsedTime,
   clockInTime,
   records,
   onClockIn,
   onClockOut,
   onOpenTimeTracking,
 }: PersonalAttendanceToolsProps) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const elapsedTime = useElapsedTimer(isClockedIn, clockInTime);
   const recent = [...records].slice(-5).reverse();
 
   return (
     <Box
       sx={{
-        ...SURFACE,
+        ...glassCardSx(theme),
         p: 2.5,
         position: { lg: 'sticky' },
         top: { lg: 88 },
       }}
     >
-      <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e293b', mb: 0.25 }}>
+      <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', color: 'text.primary', mb: 0.25 }}>
         Attendance
       </Typography>
-      <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', mb: 2 }}>
+      <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', mb: 2 }}>
         Today&apos;s session and recent punches
       </Typography>
 
       <Box sx={{ mb: 2 }}>
-        <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+        <Typography
+          sx={{
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            color: 'text.secondary',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            mb: 0.75,
+          }}
+        >
           Status
         </Typography>
-        <Typography sx={{ fontWeight: 600, color: '#1e293b', mb: 0.25 }}>
+        <Typography sx={{ fontWeight: 600, color: 'text.primary', mb: 0.25 }}>
           {isClockedIn ? 'Clocked in' : 'Not clocked in'}
         </Typography>
         {isClockedIn && clockInTime && (
-          <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
             Started tracking • session timer running
           </Typography>
         )}
@@ -81,20 +89,35 @@ export function PersonalAttendanceTools({
           display: 'flex',
           alignItems: 'center',
           gap: 1,
-          bgcolor: '#f8fafc',
-          border: '1px solid #f1f5f9',
+          bgcolor: isDark ? alpha(tmColors.neonBlue, 0.08) : '#f8fafc',
+          border: '1px solid',
+          borderColor: 'divider',
           borderRadius: 2,
           px: 1.5,
           py: 1.25,
           mb: 2,
         }}
       >
-        <AccessTime sx={{ fontSize: 22, color: '#64748b' }} />
+        <AccessTime sx={{ fontSize: 22, color: isDark ? tmColors.neonBlue : 'text.secondary' }} />
         <Box>
-          <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>
+          <Typography
+            sx={{
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              color: 'text.secondary',
+              textTransform: 'uppercase',
+            }}
+          >
             Elapsed
           </Typography>
-          <Typography sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '1.125rem', color: '#1e293b' }}>
+          <Typography
+            sx={{
+              fontVariantNumeric: 'tabular-nums',
+              fontWeight: 700,
+              fontSize: '1.125rem',
+              color: 'text.primary',
+            }}
+          >
             {elapsedTime}
           </Typography>
         </Box>
@@ -102,13 +125,13 @@ export function PersonalAttendanceTools({
 
       <StackButtons isClockedIn={isClockedIn} onClockIn={onClockIn} onClockOut={onClockOut} />
 
-      <Divider sx={{ my: 2, borderColor: '#f1f5f9' }} />
+      <Divider sx={{ my: 2 }} />
 
-      <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1e293b', mb: 1 }}>
+      <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', color: 'text.primary', mb: 1 }}>
         Recent history
       </Typography>
       {recent.length === 0 ? (
-        <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8' }}>
+        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>
           No punches yet. Clock in to start recording.
         </Typography>
       ) : (
@@ -116,8 +139,8 @@ export function PersonalAttendanceTools({
           {recent.map((record) => (
             <ListItem key={record.id} disableGutters sx={{ py: 0.75, display: 'block' }}>
               <ListItemText
-                primaryTypographyProps={{ sx: { fontSize: '0.8125rem', fontWeight: 600, color: '#334155' } }}
-                secondaryTypographyProps={{ sx: { fontSize: '0.75rem', color: '#94a3b8' } }}
+                primaryTypographyProps={{ sx: { fontSize: '0.8125rem', fontWeight: 600, color: 'text.primary' } }}
+                secondaryTypographyProps={{ sx: { fontSize: '0.75rem', color: 'text.secondary' } }}
                 primary={`In · ${record.clockIn}`}
                 secondary={
                   record.clockOut
@@ -134,13 +157,13 @@ export function PersonalAttendanceTools({
         fullWidth
         variant="text"
         onClick={onOpenTimeTracking}
-        sx={{ mt: 2, fontWeight: 600, color: '#475569', fontSize: '0.8125rem' }}
+        sx={{ mt: 2, fontWeight: 600, fontSize: '0.8125rem' }}
       >
         Open time tracking
       </Button>
     </Box>
   );
-}
+});
 
 function StackButtons({
   isClockedIn,
@@ -154,11 +177,11 @@ function StackButtons({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {!isClockedIn ? (
-        <Button variant="contained" fullWidth onClick={onClockIn} sx={{ textTransform: 'none', fontWeight: 600 }}>
+        <Button variant="contained" color="secondary" fullWidth onClick={onClockIn}>
           Clock in
         </Button>
       ) : (
-        <Button variant="outlined" fullWidth onClick={onClockOut} sx={{ textTransform: 'none', fontWeight: 600 }}>
+        <Button variant="outlined" fullWidth onClick={onClockOut}>
           Clock out
         </Button>
       )}

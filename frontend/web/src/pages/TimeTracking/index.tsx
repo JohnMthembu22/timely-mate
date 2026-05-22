@@ -83,6 +83,12 @@ import {
 } from '@mui/icons-material';
 import DashboardLayout from '../../components/DashboardLayout';
 import TimeTrackingConsole from '../../components/TimeTrackingConsole';
+import { HeaderVerificationStrip } from '../../components/TimeTrackingConsole/HeaderVerificationStrip';
+import {
+  formatMsToElapsed,
+  msToHours,
+  parseElapsedToMs,
+} from '../../components/TimeTrackingConsole/timeTrackingTimer';
 import TimesheetsConsole, {
   type LedgerFilterStatus,
   type TimesheetLedgerGroup,
@@ -96,6 +102,16 @@ import {
   getManagerRecipientId,
   managerMatchesUser,
 } from '../../utils/managerReview';
+import {
+  briefedByFromUser,
+  notifyJobSubmittedToBriefedBy,
+  resolveLineManagerDisplayName,
+  resolveLineManagerRecipient,
+  type BriefedByRef,
+} from '../../utils/jobLineManager';
+import { getOfficeAssignableEmployees } from '../../utils/offsiteWorkers';
+import { FieldScannerCapture } from '../OffsiteWork/FieldScannerCapture';
+import { resolveFieldOpsLineManager } from '../OffsiteWork/fieldOpsReview';
 import { format, parseISO, isToday, isYesterday } from 'date-fns';
 import { useEmployees } from '../../contexts/EmployeeContext';
 import { useArrayPersistence } from '../../hooks/usePersistence';
@@ -110,6 +126,8 @@ enum MainTab {
   TIMESHEETS = 'timesheets',
   JOBS_TO_REVIEW = 'jobs-to-review',
 }
+
+const DEFAULT_HOURLY_RATE_ZAR = 850;
 
 // Define the job interface type
 interface Job {
@@ -129,10 +147,15 @@ interface Job {
   allocatedHours?: number; // Total hours allocated to this job
   currentTimesheetId?: string; // ID of current active timesheet
   isTracking?: boolean; // Whether currently tracking time
+  trackingStartedAt?: string; // ISO when live timer started
+  trackingBaseMs?: number; // Elapsed ms before current live session
   breakStartTime?: string; // When break started
   isOnBreak?: boolean; // Whether currently on break
   totalBreakTime?: number; // Total break time in minutes
   assignedToManager?: string; // Manager assigned for review
+  briefedByEmail?: string;
+  briefedById?: string;
+  briefedByName?: string;
   reviewNotes?: string;
   submittedBy?: string;
   submittedById?: string;
@@ -268,7 +291,7 @@ const TimeTracking: React.FC = () => {
   // Update team members whenever employees change
   useEffect(() => {
     if (employees && employees.length > 0) {
-      const convertedTeamMembers = employees.map(emp => ({
+      const convertedTeamMembers = getOfficeAssignableEmployees(employees).map(emp => ({
         id: emp.id,
         name: emp.name,
         role: emp.position || 'Team Member',
@@ -285,6 +308,7 @@ const TimeTracking: React.FC = () => {
   const savedClockInTime = localStorage.getItem('clockInTime');
   
   // Check if user has already clocked in based on localStorage values
+  const [mobileOfflineMode, setMobileOfflineMode] = useState(false);
   const [isCheckedIn, setIsCheckedIn] = useState(clockInToday === new Date().toDateString());
   const [checkInTime, setCheckInTime] = useState<string | null>(
     clockInToday === new Date().toDateString() ? savedClockInTime : null
@@ -298,6 +322,7 @@ const TimeTracking: React.FC = () => {
   // Rest of state variables
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const [qrScanData, setQrScanData] = useState<string | null>(null);
   const [activeJobs, setActiveJobs] = useArrayPersistence<Job>('timelymate_active_jobs', []);
   const [newJobDialogOpen, setNewJobDialogOpen] = useState(false);
   const [teamViewOpen, setTeamViewOpen] = useState(false);
@@ -373,8 +398,8 @@ const TimeTracking: React.FC = () => {
       isAutomated: true,
       tags: ['Frontend', 'Design'],
       billableHours: 8,
-      hourlyRate: 50,
-      totalAmount: 400,
+      hourlyRate: DEFAULT_HOURLY_RATE_ZAR,
+      totalAmount: 8 * DEFAULT_HOURLY_RATE_ZAR,
       breakTime: 1,
       overtime: 0,
       category: 'development',
@@ -400,8 +425,8 @@ const TimeTracking: React.FC = () => {
       isAutomated: false,
       tags: ['API', 'Authentication'],
       billableHours: 7.5,
-      hourlyRate: 60,
-      totalAmount: 375,
+      hourlyRate: 920,
+      totalAmount: Math.round(7.5 * 920),
       breakTime: 1,
       overtime: 0,
       category: 'development',
@@ -427,8 +452,8 @@ const TimeTracking: React.FC = () => {
       isAutomated: true,
       tags: ['Database', 'Optimization'],
       billableHours: 6,
-      hourlyRate: 70,
-      totalAmount: 360,
+      hourlyRate: 780,
+      totalAmount: 6 * 780,
       breakTime: 0,
       overtime: 0,
       category: 'administration',
@@ -627,7 +652,7 @@ const TimeTracking: React.FC = () => {
         overtime: (newTimesheet.hoursWorked || 0) > 8 ? (newTimesheet.hoursWorked || 0) - 8 : 0,
         billableHours: newTimesheet.hoursWorked,
         hourlyRate: 50, // Would be from employee data
-        totalAmount: (newTimesheet.hoursWorked || 0) * 50,
+        totalAmount: (newTimesheet.hoursWorked || 0) * DEFAULT_HOURLY_RATE_ZAR,
       };
 
       setTimesheetEntries((prev: TimesheetEntry[]) => [...prev, timesheetEntry]);
@@ -651,57 +676,123 @@ const TimeTracking: React.FC = () => {
     }
   };
 
-  // Automatic timesheet tracking handlers
-  const handleConfirmJobStart = () => {
-    if (!jobToStart) return;
+  const beginJobTracking = (job: Job) => {
+    const timesheetId = job.currentTimesheetId ?? Date.now().toString();
+    const trackingBaseMs = job.trackingBaseMs ?? parseElapsedToMs(job.elapsedTime || '0h 00m');
+    const now = new Date().toISOString();
+    const submitterName = getAuthUserLabel(user);
+    const submitterId = user ? getManagerRecipientId(user) : 'current-user';
 
-    // Create automatic timesheet entry
-    const timesheetId = Date.now().toString();
-    const newTimesheetEntry: TimesheetEntry = {
-      id: timesheetId,
-      employeeId: 'current-user',
-      employeeName: 'Current User',
-      date: new Date().toISOString().split('T')[0],
-      project: jobToStart.name,
-      projectId: jobToStart.id,
-      hoursWorked: 0, // Will be updated as time progresses
-      breakTime: 0,
-      description: `Automatic tracking for ${jobToStart.name}`,
-      status: 'draft',
-      submittedAt: new Date().toISOString(),
-      isAutomated: true,
-      tags: ['auto-tracked'],
-      category: 'development',
-    };
-
-    // Update job with tracking info
-    setActiveJobs((prevJobs: Job[]) => 
-      prevJobs.map((job: Job) => {
-        if (job.id === jobToStart.id) {
-          return { 
-            ...job, 
-            status: 'active', 
+    setActiveJobs((prevJobs: Job[]) =>
+      prevJobs.map((j: Job) => {
+        if (j.id === job.id) {
+          return {
+            ...j,
+            status: 'active',
             isTracking: true,
+            isOnBreak: false,
+            trackingStartedAt: now,
+            trackingBaseMs,
             currentTimesheetId: timesheetId,
-            pauseCondition: '', 
-            pauseTask: null 
+            pauseCondition: '',
+            pauseTask: null,
           };
         }
-        return job;
+        if (j.isTracking && j.trackingStartedAt) {
+          const base = j.trackingBaseMs ?? 0;
+          const totalMs = base + (Date.now() - new Date(j.trackingStartedAt).getTime());
+          return {
+            ...j,
+            isTracking: false,
+            trackingStartedAt: undefined,
+            trackingBaseMs: totalMs,
+            elapsedTime: formatMsToElapsed(totalMs),
+          };
+        }
+        return { ...j, isTracking: false, trackingStartedAt: undefined };
       })
     );
 
-    // Add timesheet entry
-    setTimesheetEntries((prev: TimesheetEntry[]) => [...prev, newTimesheetEntry]);
+    setTimesheetEntries((prev: TimesheetEntry[]) => {
+      if (prev.some((e) => e.id === timesheetId)) return prev;
+      return [
+        ...prev,
+        {
+          id: timesheetId,
+          employeeId: submitterId,
+          employeeName: submitterName,
+          date: new Date().toISOString().split('T')[0],
+          project: job.name,
+          projectId: job.id,
+          hoursWorked: 0,
+          breakTime: 0,
+          description: `Automatic tracking for ${job.name}`,
+          status: 'draft',
+          submittedAt: now,
+          isAutomated: true,
+          tags: ['auto-tracked'],
+          category: 'development',
+          hourlyRate: DEFAULT_HOURLY_RATE_ZAR,
+          billableHours: 0,
+          totalAmount: 0,
+        },
+      ];
+    });
 
-    // Close dialog
+    addNotification(
+      createNotification.timesheet(
+        'Job Started',
+        `Live time tracking started for ${job.name}. Hours accrue to your timesheet automatically.`
+      )
+    );
+  };
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setActiveJobs((prevJobs) => {
+        const tracking = prevJobs.filter(
+          (j) => j.isTracking && j.trackingStartedAt && j.status === 'active' && !j.isOnBreak
+        );
+        if (!tracking.length) return prevJobs;
+
+        const updatedJobs = prevJobs.map((job) => {
+          if (!job.isTracking || !job.trackingStartedAt || job.status !== 'active' || job.isOnBreak) {
+            return job;
+          }
+          const base = job.trackingBaseMs ?? 0;
+          const totalMs = base + (Date.now() - new Date(job.trackingStartedAt).getTime());
+          return { ...job, elapsedTime: formatMsToElapsed(totalMs) };
+        });
+
+        setTimesheetEntries((prevTs) =>
+          prevTs.map((entry) => {
+            const job = updatedJobs.find((j) => j.currentTimesheetId === entry.id);
+            if (!job?.trackingStartedAt || job.isOnBreak) return entry;
+            const base = job.trackingBaseMs ?? 0;
+            const hours = msToHours(base + (Date.now() - new Date(job.trackingStartedAt).getTime()));
+            const rate = entry.hourlyRate ?? DEFAULT_HOURLY_RATE_ZAR;
+            if (entry.hoursWorked === hours) return entry;
+            return {
+              ...entry,
+              hoursWorked: hours,
+              billableHours: hours,
+              totalAmount: Math.round(hours * rate * 100) / 100,
+            };
+          })
+        );
+
+        return updatedJobs;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const handleConfirmJobStart = () => {
+    if (!jobToStart) return;
+    beginJobTracking(jobToStart);
     setJobStartConfirmationOpen(false);
     setJobToStart(null);
-
-    addNotification(createNotification.timesheet(
-      "Job Started",
-      `Timesheet tracking has started for ${jobToStart.name}. Time will be automatically recorded.`
-    ));
   };
 
   const handleStartBreak = () => {
@@ -709,17 +800,23 @@ const TimeTracking: React.FC = () => {
 
     const breakStartTime = new Date().toISOString();
     
-    setActiveJobs((prevJobs: Job[]) => 
+    setActiveJobs((prevJobs: Job[]) =>
       prevJobs.map((job: Job) => {
-        if (job.id === jobOnBreak.id) {
-          return { 
-            ...job, 
-            isOnBreak: true,
-            breakStartTime: breakStartTime,
-            status: 'paused'
-          };
+        if (job.id !== jobOnBreak.id) return job;
+        let trackingBaseMs = job.trackingBaseMs ?? parseElapsedToMs(job.elapsedTime || '0h 00m');
+        if (job.isTracking && job.trackingStartedAt) {
+          trackingBaseMs += Date.now() - new Date(job.trackingStartedAt).getTime();
         }
-        return job;
+        return {
+          ...job,
+          isOnBreak: true,
+          isTracking: false,
+          trackingStartedAt: undefined,
+          trackingBaseMs,
+          elapsedTime: formatMsToElapsed(trackingBaseMs),
+          breakStartTime,
+          status: 'paused',
+        };
       })
     );
 
@@ -744,12 +841,14 @@ const TimeTracking: React.FC = () => {
     setActiveJobs((prevJobs: Job[]) => 
       prevJobs.map((j: Job) => {
         if (j.id === jobId) {
-          return { 
-            ...j, 
+          return {
+            ...j,
             isOnBreak: false,
             breakStartTime: undefined,
-            totalBreakTime: totalBreakTime,
-            status: 'active'
+            totalBreakTime,
+            status: 'active',
+            isTracking: true,
+            trackingStartedAt: new Date().toISOString(),
           };
         }
         return j;
@@ -775,6 +874,16 @@ const TimeTracking: React.FC = () => {
   const handleSubmitForReview = () => {
     if (!jobForReview) return;
 
+    const managerId =
+      resolveLineManagerRecipient(
+        {
+          email: jobForReview.briefedByEmail,
+          id: jobForReview.briefedById,
+          name: jobForReview.briefedByName,
+        },
+        employees
+      ) ?? managerOptions[0]?.id;
+
     // Update timesheet status to pending
     setTimesheetEntries((prev: TimesheetEntry[]) => 
       prev.map((entry: TimesheetEntry) => {
@@ -792,20 +901,20 @@ const TimeTracking: React.FC = () => {
           return { 
             ...job, 
             status: 'pending_review',
-            isTracking: false
+            isTracking: false,
+            assignedToManager: managerId,
           };
         }
         return job;
       })
     );
 
+    if (managerId) {
+      notifyManagerOfJobReview(jobForReview, managerId);
+    }
+
     setReviewSubmissionDialogOpen(false);
     setJobForReview(null);
-
-    addNotification(createNotification.timesheet(
-      "Submitted for Review",
-      `${jobForReview.name} has been submitted for review. Awaiting manager approval.`
-    ));
   };
 
 
@@ -865,7 +974,23 @@ const TimeTracking: React.FC = () => {
         `${jobToStop.name} paused for meeting. Timesheet tracking is paused.`
       ));
     } else if (option === 'review') {
-      // Proceed to manager selection
+      const briefedBy = briefedByFromUser(user);
+      const fromJob = jobToStop.briefedByEmail
+        ? resolveLineManagerRecipient(
+            {
+              email: jobToStop.briefedByEmail,
+              id: jobToStop.briefedById,
+              name: jobToStop.briefedByName,
+            },
+            employees
+          )
+        : null;
+      const autoManager =
+        fromJob ??
+        resolveLineManagerRecipient(briefedBy, employees) ??
+        managerOptions[0]?.id ??
+        '';
+      if (autoManager) setSelectedManager(autoManager);
       setStopWorkflowStep('manager');
       return;
     }
@@ -879,32 +1004,36 @@ const TimeTracking: React.FC = () => {
   const notifyManagerOfJobReview = (job: Job, managerId: string) => {
     const submitterName = getAuthUserLabel(user);
     const managerName = getManagerDisplayName(managerId, employees, managerOptions);
+    const briefedBy = {
+      email: job.briefedByEmail,
+      id: job.briefedById ?? managerId,
+      name: job.briefedByName ?? managerName,
+    };
 
-    addNotificationForRecipient(
-      managerId,
-      createNotification.job(
-        'Job submitted for your review',
-        `${submitterName} submitted "${job.name}" (${job.client}) for your review.`,
-        job.id
-      )
-    );
+    notifyJobSubmittedToBriefedBy({
+      briefedBy,
+      submitterEmail: user?.email,
+      employees,
+      notification: {
+        ...createNotification.job(
+          'Job submitted for your review',
+          `${submitterName} submitted "${job.name}" (${job.client}) for your review.`
+        ),
+        actionUrl: '/time-tracking?tab=jobs-to-review',
+      },
+      addNotificationForRecipient,
+      addNotification,
+    });
 
     const submitterRecipient = user ? getManagerRecipientId(user) : undefined;
+    const confirmNotification = createNotification.timesheet(
+      'Submitted for Review',
+      `"${job.name}" was sent to ${managerName} (who briefed this job) for review.`
+    );
     if (submitterRecipient) {
-      addNotificationForRecipient(
-        submitterRecipient,
-        createNotification.timesheet(
-          'Submitted for Review',
-          `"${job.name}" was sent to ${managerName} for review.`
-        )
-      );
+      addNotificationForRecipient(submitterRecipient, confirmNotification);
     } else {
-      addNotification(
-        createNotification.timesheet(
-          'Submitted for Review',
-          `"${job.name}" was sent to ${managerName} for review.`
-        )
-      );
+      addNotification(confirmNotification);
     }
   };
 
@@ -1072,7 +1201,9 @@ const TimeTracking: React.FC = () => {
           entry.id === editingTimesheet.id 
             ? { 
                 ...editingTimesheet, 
-                totalAmount: (editingTimesheet.billableHours || editingTimesheet.hoursWorked) * (editingTimesheet.hourlyRate || 50),
+                totalAmount:
+                  (editingTimesheet.billableHours || editingTimesheet.hoursWorked) *
+                  (editingTimesheet.hourlyRate || DEFAULT_HOURLY_RATE_ZAR),
                 overtime: editingTimesheet.hoursWorked > 8 ? editingTimesheet.hoursWorked - 8 : 0,
               }
             : entry
@@ -1541,6 +1672,7 @@ const TimeTracking: React.FC = () => {
 
   const handleCheckIn = (method: string) => {
     setSelectedMethod(method);
+    setQrScanData(null);
     setDialogOpen(true);
   };
 
@@ -1663,12 +1795,26 @@ const TimeTracking: React.FC = () => {
         })
       );
       
-      // Send notification
       if (jobToComplete) {
-        addNotification(createNotification.job(
-          'Job Completed',
-          `Job "${jobToComplete.name}" has been completed successfully`
-        ));
+        const submitterLabel = getAuthUserLabel(user);
+        notifyJobSubmittedToBriefedBy({
+          briefedBy: {
+            email: jobToComplete.briefedByEmail,
+            id: jobToComplete.briefedById,
+            name: jobToComplete.briefedByName,
+          },
+          submitterEmail: user?.email,
+          employees,
+          notification: {
+            ...createNotification.job(
+              'Job completed',
+              `${submitterLabel} marked "${jobToComplete.name}" complete and sent it for your review.`
+            ),
+            actionUrl: '/time-tracking',
+          },
+          addNotificationForRecipient,
+          addNotification,
+        });
       }
       
       setStopDialogOpen(false);
@@ -1685,6 +1831,7 @@ const TimeTracking: React.FC = () => {
     if (newJob.name && newJob.client && newJob.totalTime && newJob.startDate && newJob.startTime) {
       const jobId = (activeJobs.length + 1).toString();
       
+      const briefed = briefedByFromUser(user);
       const jobToAdd = {
         id: jobId,
         name: newJob.name,
@@ -1703,6 +1850,9 @@ const TimeTracking: React.FC = () => {
         isTracking: false,
         isOnBreak: false,
         totalBreakTime: 0,
+        briefedByEmail: briefed.email,
+        briefedById: briefed.id,
+        briefedByName: briefed.name,
       };
 
       setActiveJobs([...activeJobs, jobToAdd]);
@@ -1882,7 +2032,16 @@ const TimeTracking: React.FC = () => {
   };
 
   const handleConsoleJobToggle = (jobId: string, isRunning: boolean) => {
-    handleJobAction(jobId, isRunning ? 'stop' : 'start');
+    if (isRunning) {
+      handleJobAction(jobId, 'stop');
+      return;
+    }
+    if (!isCheckedIn) {
+      alert('You must check in before starting any project. Please check in first.');
+      return;
+    }
+    const job = activeJobs.find((j) => j.id === jobId);
+    if (job) beginJobTracking(job);
   };
 
   const handleConsoleBreak = () => {
@@ -1892,14 +2051,131 @@ const TimeTracking: React.FC = () => {
     }
   };
 
+  const memberNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    teamMembers.forEach((m) => map.set(m.id, m.name));
+    employees.forEach((e) => map.set(e.id, e.name));
+    return map;
+  }, [teamMembers, employees]);
+
   const consoleJobRows = activeJobs.map((job) => ({
     id: job.id,
     name: job.name,
     team: job.client || 'Internal Team',
     progress: job.progress,
     timeSpent: job.elapsedTime || job.totalTime || '0h 0m',
-    isRunning: Boolean(job.isTracking && job.status === 'active'),
+    isRunning: Boolean(job.isTracking && !job.isOnBreak),
+    trackingStartedAt: job.trackingStartedAt ?? null,
+    trackingBaseMs: job.trackingBaseMs ?? parseElapsedToMs(job.elapsedTime || '0h 00m'),
+    status: job.status,
+    assignedMembers: (job.assignedMembers ?? [])
+      .map((id) => memberNameById.get(id) ?? '')
+      .filter(Boolean),
   }));
+
+  const workforceEmployeeNames = useMemo(
+    () => employees.map((e) => e.name?.trim() || 'Team member').filter(Boolean),
+    [employees]
+  );
+
+  const handleAssignmentQuickAction = (
+    jobId: string,
+    action: 'pause' | 'voice' | 'proof' | 'assist'
+  ) => {
+    const job = activeJobs.find((j) => j.id === jobId);
+    const label = job?.name ?? 'Assignment';
+
+    switch (action) {
+      case 'pause':
+        if (job?.isTracking) handleJobAction(jobId, 'pause');
+        break;
+      case 'voice':
+        addNotification(
+          createNotification.system(
+            'Voice update',
+            `Voice note will attach to "${label}" for your line manager (coming soon).`,
+            'low'
+          )
+        );
+        break;
+      case 'proof':
+        addNotification(
+          createNotification.system(
+            'Field proof',
+            `Capture photo or scan for "${label}" — open Field Operations tools.`,
+            'medium'
+          )
+        );
+        break;
+      case 'assist': {
+        if (!user) {
+          addNotification(
+            createNotification.system(
+              'Sign in required',
+              'Sign in with your work account to request supervisor assistance on active assignments.',
+              'urgent'
+            )
+          );
+          break;
+        }
+
+        const submitterName = getAuthUserLabel(user);
+        const jobBriefedBy: BriefedByRef | null =
+          job?.briefedByEmail || job?.briefedById || job?.briefedByName
+            ? {
+                email: job.briefedByEmail,
+                id: job.briefedById,
+                name: job.briefedByName,
+              }
+            : null;
+
+        let lineManagerBriefedBy: BriefedByRef = jobBriefedBy ?? (() => {
+          const mgr = resolveFieldOpsLineManager(employees, user);
+          return { id: mgr.id, name: mgr.name };
+        })();
+
+        let lineManagerName = resolveLineManagerDisplayName(lineManagerBriefedBy, employees);
+        if (!resolveLineManagerRecipient(lineManagerBriefedBy, employees)) {
+          const mgr = resolveFieldOpsLineManager(employees, user);
+          lineManagerBriefedBy = { id: mgr.id, name: mgr.name };
+          lineManagerName = mgr.name;
+        }
+
+        const { managerName } = notifyJobSubmittedToBriefedBy({
+          briefedBy: lineManagerBriefedBy,
+          submitterEmail: user.email,
+          employees,
+          notification: {
+            ...createNotification.team(
+              'Assistance requested',
+              `${submitterName} needs support on "${label}"${job?.client ? ` (${job.client})` : ''}. Routed to line manager ${lineManagerName}.`
+            ),
+            priority: 'urgent',
+            actionUrl: '/time-tracking',
+            jobId,
+          },
+          addNotificationForRecipient,
+          addNotification,
+        });
+
+        const submitterRecipient = getManagerRecipientId(user);
+        const confirmNotification = {
+          ...createNotification.timesheet(
+            'Assistance requested',
+            `Logged as ${submitterName}. Your line manager, ${managerName}, has been notified.`
+          ),
+          priority: 'high' as const,
+          jobId,
+        };
+        if (submitterRecipient) {
+          addNotificationForRecipient(submitterRecipient, confirmNotification);
+        } else {
+          addNotification(confirmNotification);
+        }
+        break;
+      }
+    }
+  };
 
   const jobsPendingReview = useMemo(
     () => activeJobs.filter((job) => job.status === 'pending_review'),
@@ -1999,14 +2275,29 @@ const TimeTracking: React.FC = () => {
           }}
         >
           <Container maxWidth="xl">
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: activeMainTab === MainTab.TIME_TRACKING ? 1 : 2 }}>
               <Typography variant="h3" sx={{ fontWeight: 700 }}>
                 Time Management
               </Typography>
             </Box>
-            <Typography variant="h6" sx={{ opacity: 0.9 }}>
-              {activeMainTab === MainTab.TIME_TRACKING 
-                ? 'Track your time with biometric precision' 
+            {activeMainTab === MainTab.TIME_TRACKING && (
+              <HeaderVerificationStrip
+                isCheckedIn={isCheckedIn}
+                onVerify={(key) => handleCheckIn(key)}
+                onPlaceholder={(title) => {
+                  addNotification(
+                    createNotification.system(
+                      `${title} — pilot channel`,
+                      'This verification method will be available in the enterprise biometric rollout. Use QR, geofence, smartwatch, or voice to check in today.',
+                      'low'
+                    )
+                  );
+                }}
+              />
+            )}
+            <Typography variant="h6" sx={{ opacity: 0.9, mt: activeMainTab === MainTab.TIME_TRACKING ? 0 : undefined }}>
+              {activeMainTab === MainTab.TIME_TRACKING
+                ? 'Track your time with biometric precision'
                 : 'Manage and review employee timesheets'}
             </Typography>
           </Container>
@@ -2063,9 +2354,25 @@ const TimeTracking: React.FC = () => {
                 checkInTime={checkInTime}
                 dailyCode={dailyCode}
                 activeJobs={consoleJobRows}
+                employeeNames={workforceEmployeeNames}
                 onToggleShift={handleToggleShift}
                 onTakeBreak={handleConsoleBreak}
                 onJobToggle={handleConsoleJobToggle}
+                onAssignmentAction={handleAssignmentQuickAction}
+                onProductivityInsightNotify={(title, description, priority = 'medium') => {
+                  addNotification(createNotification.system(title, description, priority));
+                }}
+                onMobileNotify={(title, description) => {
+                  addNotification(createNotification.system(title, description, 'low'));
+                }}
+                offlineMode={mobileOfflineMode}
+                onToggleOffline={() => setMobileOfflineMode((prev) => !prev)}
+                approvedHours={ledgerApprovedHours}
+                pendingHours={ledgerPendingHours}
+                payCycleLabel={payCycleLabel}
+                teamStats={teamTimeStats}
+                hasTeamMembers={teamMembers.length > 0}
+                onOpenTeamView={handleTeamViewOpen}
               />
             ) : activeMainTab === MainTab.JOBS_TO_REVIEW ? (
               <JobReviewConsole
@@ -2091,6 +2398,9 @@ const TimeTracking: React.FC = () => {
                     ? 'No entries match the current filter.'
                     : 'Create a timesheet entry or sync from active projects to populate the ledger.'
                 }
+                onAuditNotify={(title, message) => {
+                  addNotification(createNotification.system(title, message, 'medium'));
+                }}
               />
             )}
           </Card>
@@ -2124,18 +2434,33 @@ const TimeTracking: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <Typography>
-                    {selectedMethod === 'qr' && 'Please scan the QR code at the office entrance.'}
-                    {selectedMethod === 'location' && 'Verifying your location...'}
-                    {selectedMethod === 'watch' && 'Connecting to your smart watch...'}
-                    {selectedMethod === 'voice' && 'Listening for voice command...'}
-                  </Typography>
-                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                    {selectedMethod === 'qr' && <QrCode sx={{ fontSize: 100, color: 'primary.main' }} />}
-                    {selectedMethod === 'location' && <LocationOn sx={{ fontSize: 100, color: 'primary.main' }} />}
-                    {selectedMethod === 'watch' && <Watch sx={{ fontSize: 100, color: 'primary.main' }} />}
-                    {selectedMethod === 'voice' && <Mic sx={{ fontSize: 100, color: 'primary.main' }} />}
-                  </Box>
+                  {selectedMethod === 'qr' ? (
+                    <FieldScannerCapture
+                      active={dialogOpen && selectedMethod === 'qr'}
+                      mode="qr"
+                      userName={getAuthUserLabel(user ?? undefined)}
+                      accentColor="#2196f3"
+                      onScan={(result) => setQrScanData(result.data)}
+                    />
+                  ) : (
+                    <>
+                      <Typography>
+                        {selectedMethod === 'location' && 'Verifying your location...'}
+                        {selectedMethod === 'watch' && 'Connecting to your smart watch...'}
+                        {selectedMethod === 'voice' && 'Listening for voice command...'}
+                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                        {selectedMethod === 'location' && <LocationOn sx={{ fontSize: 100, color: 'primary.main' }} />}
+                        {selectedMethod === 'watch' && <Watch sx={{ fontSize: 100, color: 'primary.main' }} />}
+                        {selectedMethod === 'voice' && <Mic sx={{ fontSize: 100, color: 'primary.main' }} />}
+                      </Box>
+                    </>
+                  )}
+                  {selectedMethod === 'qr' && qrScanData && (
+                    <Typography variant="body2" color="success.main" fontWeight={600} textAlign="center">
+                      QR verified: {qrScanData.slice(0, 48)}
+                    </Typography>
+                  )}
                 </>
               )}
             </Stack>
@@ -2143,8 +2468,12 @@ const TimeTracking: React.FC = () => {
           <DialogActions>
             {selectedMethod ? (
               <>
-                <Button onClick={() => setSelectedMethod(null)}>Back</Button>
-                <Button variant="contained" onClick={confirmCheckIn}>
+                <Button onClick={() => { setSelectedMethod(null); setQrScanData(null); }}>Back</Button>
+                <Button
+                  variant="contained"
+                  onClick={confirmCheckIn}
+                  disabled={selectedMethod === 'qr' && !qrScanData}
+                >
                   Confirm Check-in
                 </Button>
               </>
@@ -2634,245 +2963,6 @@ const TimeTracking: React.FC = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Check-in Methods */}
-        <Container maxWidth="xl" sx={{ py: 6 }}>
-          <Typography variant="h4" sx={{ mb: 4 }}>
-            Check-in Methods
-          </Typography>
-          <Grid container spacing={4}>
-            {checkInMethods.map((method, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <Card 
-                  sx={{ 
-                    height: '100%',
-                    borderRadius: 4,
-                    boxShadow: 4,
-                    cursor: 'pointer',
-                    transition: 'transform 0.2s',
-                    '&:hover': {
-                      transform: 'scale(1.02)',
-                    },
-                  }}
-                  onClick={method.action}
-                >
-                  <CardContent>
-                    <Stack spacing={2} alignItems="center" textAlign="center">
-                      <Box sx={{ color: 'primary.main' }}>
-                        {method.icon}
-                      </Box>
-                      <Typography variant="h6">
-                        {method.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {method.description}
-                      </Typography>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-
-        {/* Team Time Management Section */}
-        <Container maxWidth="xl" sx={{ mt: 6 }}>
-          <Paper 
-            sx={{ 
-              p: 3, 
-              borderRadius: 4,
-              background: `linear-gradient(45deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`,
-              color: 'white'
-            }}
-          >
-            <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
-              Team Time Management
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 4, opacity: 0.9 }}>
-              Track your team's work progress and task assignments. 
-              Team members must check in before starting any project.
-            </Typography>
-            
-            <Grid container spacing={3} sx={{ mb: 3 }}>
-              {/* Overview Stats */}
-              <Grid item xs={12} sm={6} md={3}>
-                <Card sx={{ borderRadius: 2, height: '100%' }}>
-                  <CardContent>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Total Hours Today
-                    </Typography>
-                    <Typography variant="h4" sx={{ mt: 1, fontWeight: 'bold' }}>
-                      {teamTimeStats.totalHours}h
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Across all projects
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              
-              <Grid item xs={12} sm={6} md={3}>
-                <Card sx={{ borderRadius: 2, height: '100%' }}>
-                  <CardContent>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Active Projects
-                    </Typography>
-                    <Typography variant="h4" sx={{ mt: 1, fontWeight: 'bold' }}>
-                      {teamTimeStats.activeProjects}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Currently running
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              
-              <Grid item xs={12} sm={6} md={3}>
-                <Card sx={{ borderRadius: 2, height: '100%' }}>
-                  <CardContent>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Team Members
-                    </Typography>
-                    <Typography variant="h4" sx={{ mt: 1, fontWeight: 'bold' }}>
-                      {teamTimeStats.totalTeamMembers}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {teamTimeStats.assignedTeamMembers} assigned
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              
-              <Grid item xs={12} sm={6} md={3}>
-                <Card sx={{ borderRadius: 2, height: '100%' }}>
-                  <CardContent>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Average Progress
-                    </Typography>
-                    <Typography variant="h4" sx={{ mt: 1, fontWeight: 'bold' }}>
-                      {teamTimeStats.averageProgress}%
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Across all projects
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-            
-            {/* Department Overview */}
-            {Object.keys(teamTimeStats.departmentBreakdown).length > 0 && (
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ mb: 2, color: 'white' }}>
-                  Department Overview
-                </Typography>
-                <Grid container spacing={2}>
-                  {Object.entries(teamTimeStats.departmentBreakdown).map(([dept, count]) => (
-                    <Grid item xs={6} sm={4} md={3} key={dept}>
-                      <Card sx={{ borderRadius: 2, bgcolor: 'rgba(255, 255, 255, 0.1)', color: 'white' }}>
-                        <CardContent sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                            {count}
-                          </Typography>
-                          <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                            {dept}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
-            )}
-            
-            {/* Team Activity Summary */}
-            <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(255, 255, 255, 0.1)', borderRadius: 2 }}>
-              <Typography variant="h6" sx={{ mb: 2, color: 'white' }}>
-                Team Activity Summary
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {teamTimeStats.activeTeamMembers}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                      Active Team Members
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {teamTimeStats.completedTasks}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                      Completed Tasks
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {activeJobs.length}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                      Total Jobs
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {Math.round((teamTimeStats.assignedTeamMembers / teamTimeStats.totalTeamMembers) * 100) || 0}%
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                      Team Utilization
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-            </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-              {teamMembers.length > 0 ? (
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="large"
-                  startIcon={<Group />}
-                  onClick={() => {
-                    console.log('Button clicked - opening team view');
-                    handleTeamViewOpen();
-                  }}
-                  sx={{ 
-                    px: 4,
-                    py: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'white',
-                    color: 'primary.main',
-                    fontWeight: 'bold',
-                    '&:hover': {
-                      bgcolor: 'grey.100',
-                      transform: 'translateY(-2px)',
-                      boxShadow: 4,
-                    },
-                    '&:active': {
-                      transform: 'translateY(0)',
-                    },
-                    transition: 'all 0.2s ease-in-out',
-                  }}
-                >
-                  View Team Progress
-                </Button>
-              ) : (
-                <Typography variant="body1" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                  Import employees through the HR page to enable team management features
-                  </Typography>
-              )}
-            </Box>
-          </Paper>
-        </Container>
-        
         {/* All Dialogs */}
         
         {/* Check-in Method Selection Dialog */}
@@ -3523,9 +3613,9 @@ const TimeTracking: React.FC = () => {
                 <Grid item xs={12} md={4}>
                   <TextField
                     fullWidth
-                    label="Hourly Rate ($)"
+                    label="Hourly Rate (ZAR)"
                     type="number"
-                    value={editingTimesheet.hourlyRate || 50}
+                    value={editingTimesheet.hourlyRate || DEFAULT_HOURLY_RATE_ZAR}
                     onChange={(e) => setEditingTimesheet(prev => prev ? ({ ...prev, hourlyRate: parseFloat(e.target.value) || 0 }) : null)}
                     inputProps={{ min: 0, step: 1 }}
                   />
@@ -4276,7 +4366,9 @@ const TimeTracking: React.FC = () => {
                   Assign to Manager
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Select the line manager or traffic manager to review this work
+                  {jobToStop?.briefedByName
+                    ? `This job was briefed by ${jobToStop.briefedByName}. Review is routed to them automatically.`
+                    : 'Select the line manager who briefed this job to review submitted work'}
                 </Typography>
                 
                 <FormControl fullWidth sx={{ mb: 2 }}>

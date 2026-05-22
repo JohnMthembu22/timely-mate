@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo } from 'react';
 import { useArrayPersistence } from '../hooks/usePersistence';
 import { seedDemoEmployeesIfEmpty } from '../utils/demoSeed';
 
@@ -17,6 +17,8 @@ export interface Employee {
   email?: string;
   phone?: string; // Phone number
   employmentType: 'permanent' | 'contract' | 'freelancer';
+  /** office = default roster; offsite = only on Field Operations page; hybrid = both */
+  workLocation?: 'office' | 'offsite' | 'hybrid';
 }
 
 interface EmployeeContextType {
@@ -55,74 +57,88 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({ children }) 
     seedDemoEmployeesIfEmpty(employees, (list) => setEmployees((prev) => [...prev, ...list]));
   }, [employees.length, setEmployees]);
 
-  const addEmployee = (employee: Employee) => {
-    setEmployees(prev => [...prev, employee]);
-  };
+  const addEmployee = useCallback((employee: Employee) => {
+    setEmployees((prev) => [...prev, employee]);
+  }, [setEmployees]);
 
-  const addEmployees = (newEmployees: Employee[]) => {
-    setEmployees(prev => [...prev, ...newEmployees]);
-  };
+  const addEmployees = useCallback((newEmployees: Employee[]) => {
+    setEmployees((prev) => [...prev, ...newEmployees]);
+  }, [setEmployees]);
 
-  const updateEmployee = (id: string, updates: Partial<Employee>) => {
-    setEmployees(prev => 
-      prev.map(emp => 
-        emp.id === id ? { ...emp, ...updates } : emp
-      )
-    );
-  };
+  const updateEmployee = useCallback((id: string, updates: Partial<Employee>) => {
+    setEmployees((prev) => prev.map((emp) => (emp.id === id ? { ...emp, ...updates } : emp)));
+  }, [setEmployees]);
 
-  const removeEmployee = (id: string) => {
-    setEmployees(prev => prev.filter(emp => emp.id !== id));
-  };
+  const removeEmployee = useCallback((id: string) => {
+    setEmployees((prev) => prev.filter((emp) => emp.id !== id));
+  }, [setEmployees]);
 
-  const getEmployeeById = (id: string) => {
-    return employees.find(emp => emp.id === id);
-  };
+  const getEmployeeById = useCallback(
+    (id: string) => employees.find((emp) => emp.id === id),
+    [employees]
+  );
 
-  const getEmployeesByDepartment = (department: string) => {
-    return employees.filter(emp => emp.department === department);
-  };
+  const getEmployeesByDepartment = useCallback(
+    (department: string) => employees.filter((emp) => emp.department === department),
+    [employees]
+  );
 
-  const getEmployeesByLevel = (level: Employee['level']) => {
-    return employees.filter(emp => emp.level === level);
-  };
+  const getEmployeesByLevel = useCallback(
+    (level: Employee['level']) => employees.filter((emp) => emp.level === level),
+    [employees]
+  );
 
-  const getActiveEmployees = () => {
-    return employees.filter(emp => emp.status === 'active');
-  };
+  const getActiveEmployees = useCallback(
+    () => employees.filter((emp) => emp.status === 'active'),
+    [employees]
+  );
 
-  const getEmployeeCount = () => {
-    return employees.length;
-  };
+  const getEmployeeCount = useCallback(() => employees.length, [employees]);
 
-  const getDepartmentStats = () => {
+  const getDepartmentStats = useCallback(() => {
     return employees.reduce((stats, emp) => {
       stats[emp.department] = (stats[emp.department] || 0) + 1;
       return stats;
     }, {} as { [key: string]: number });
-  };
+  }, [employees]);
 
-  const getLevelStats = () => {
+  const getLevelStats = useCallback(() => {
     return employees.reduce((stats, emp) => {
       stats[emp.level] = (stats[emp.level] || 0) + 1;
       return stats;
     }, {} as { [key: string]: number });
-  };
+  }, [employees]);
 
-  const value: EmployeeContextType = {
-    employees,
-    addEmployee,
-    addEmployees,
-    updateEmployee,
-    removeEmployee,
-    getEmployeeById,
-    getEmployeesByDepartment,
-    getEmployeesByLevel,
-    getActiveEmployees,
-    getEmployeeCount,
-    getDepartmentStats,
-    getLevelStats,
-  };
+  const value = useMemo<EmployeeContextType>(
+    () => ({
+      employees,
+      addEmployee,
+      addEmployees,
+      updateEmployee,
+      removeEmployee,
+      getEmployeeById,
+      getEmployeesByDepartment,
+      getEmployeesByLevel,
+      getActiveEmployees,
+      getEmployeeCount,
+      getDepartmentStats,
+      getLevelStats,
+    }),
+    [
+      employees,
+      addEmployee,
+      addEmployees,
+      updateEmployee,
+      removeEmployee,
+      getEmployeeById,
+      getEmployeesByDepartment,
+      getEmployeesByLevel,
+      getActiveEmployees,
+      getEmployeeCount,
+      getDepartmentStats,
+      getLevelStats,
+    ]
+  );
 
   return (
     <EmployeeContext.Provider value={value}>

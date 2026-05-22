@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Container,
   Grid,
   Typography,
-  Card,
-  CardContent,
-  Stack,
   LinearProgress,
   Chip,
   List,
@@ -35,15 +32,25 @@ import {
 } from '@mui/icons-material';
 import { useAppSelector } from '../../store';
 import DashboardLayout from '../../components/DashboardLayout';
+import LoadingScreen from '../../components/LoadingScreen';
+import { DashboardCommandSkeleton } from './DashboardCommandSkeleton';
 import { MainDashboardContent, MAIN_DASHBOARD_SAMPLE_PROJECTS } from '../../components/MainDashboardContent/MainDashboardContent';
 import { PersonalAttendanceTools } from '../../components/PersonalAttendanceTools/PersonalAttendanceTools';
 import JobChat from '../../components/JobChat';
 import { useEmployees } from '../../contexts/EmployeeContext';
-import { Briefcase, Users, Building2, Clock } from 'lucide-react';
+import { Briefcase, Users, Building2 } from 'lucide-react';
 import type { MetricsGridItem } from '../../components/MetricsGrid/MetricsGrid';
 import { useArrayPersistence } from '../../hooks/usePersistence';
 import { useGuidedTour } from '../../contexts/GuidedTourContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { TOUR_AUTO_START_KEY, TOUR_COMPLETED_KEY } from '../../config/guidedTour';
+import {
+  deriveProjectHealth,
+  buildLiveActivityFeed,
+  buildWorkforceSnapshot,
+} from './dashboardOpsData';
+import { tmGradients } from '../../theme/designTokens';
+import { alpha } from '@mui/material/styles';
 
 // Define job interface (matching TimeTracking)
 interface Job {
@@ -98,84 +105,12 @@ interface ChatState {
   selectedRecipient: string | null;
 }
 
-const workspaceCardSx = {
-  bgcolor: '#fff',
-  border: '1px solid #f1f5f9',
-  borderRadius: 3,
-  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-  transition: 'box-shadow 0.2s ease',
-} as const;
-
-const ActionCard: React.FC<{
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onClick?: () => void;
-}> = ({ icon, title, description, onClick }) => {
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!onClick) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onClick();
-    }
-  };
-
-  return (
-  <Card
-    role={onClick ? 'button' : undefined}
-    tabIndex={onClick ? 0 : undefined}
-    onClick={onClick}
-    onKeyDown={handleKeyDown}
-    sx={{
-      ...workspaceCardSx,
-      height: '100%',
-      cursor: onClick ? 'pointer' : 'default',
-      outline: 'none',
-      transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-      '&:hover': onClick
-        ? { boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)', borderColor: '#e2e8f0' }
-        : {},
-      '&:focus-visible': onClick
-        ? { boxShadow: '0 0 0 2px #fff, 0 0 0 4px #3b82f6', borderColor: '#93c5fd' }
-        : {},
-    }}
-  >
-    <CardContent sx={{ p: 2.5 }}>
-      <Stack direction="row" spacing={2} alignItems="flex-start">
-        <Box
-          sx={{
-            p: 1.25,
-            borderRadius: 2,
-            bgcolor: '#f8fafc',
-            border: '1px solid #f1f5f9',
-            color: '#475569',
-            display: 'flex',
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: '#1e293b', mb: 0.25 }}>
-            {title}
-          </Typography>
-          <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', lineHeight: 1.45 }}>
-            {description}
-          </Typography>
-        </Box>
-      </Stack>
-    </CardContent>
-  </Card>
-  );
-};
-
-
-
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAppSelector((state) => state.auth);
   const { startTour } = useGuidedTour();
+  const { notifications, unreadCount } = useNotifications();
   
   // Call hooks - they should be available via context providers
   const [activeJobs] = useArrayPersistence<Job>('timelymate_active_jobs', []);
@@ -193,8 +128,9 @@ const Dashboard: React.FC = () => {
   const [clockInTime, setClockInTime] = useState<string | null>(
     isClockInToday ? (savedClockInTime || null) : null
   );
-  const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [clockInAlert, setClockInAlert] = useState(false);
+  const [commandReady, setCommandReady] = useState(false);
+  const recordsPrunedRef = useRef(false);
   
   // Determine if we should show the clock-in prompt
   const locationState = location.state as { from?: string; requiresClockIn?: boolean } | null;
@@ -203,6 +139,12 @@ const Dashboard: React.FC = () => {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
   const [redirectPath, setRedirectPath] = useState<string | null>(locationState?.from || null);
+
+  // Defer heavy command-center panels so header paints first
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setCommandReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   // First-time guided tour (replay anytime via Tour guide in the top bar)
   useEffect(() => {
@@ -232,14 +174,20 @@ const Dashboard: React.FC = () => {
     selectedRecipient: null,
   });
 
-  const departmentCount = [...new Set(employees.map((emp) => emp.department))].length;
+  const departmentCount = useMemo(
+    () => new Set(employees.map((emp) => emp.department)).size,
+    [employees]
+  );
 
-  // Mock team members for direct messaging - now using real employees
-  const teamMembers = employees.slice(0, 3).map(emp => ({ 
-    id: emp.id, 
-    name: emp.name, 
-    avatar: emp.avatar || emp.name.charAt(0) 
-  }));
+  const teamMembers = useMemo(
+    () =>
+      employees.slice(0, 3).map((emp) => ({
+        id: emp.id,
+        name: emp.name,
+        avatar: emp.avatar || emp.name.charAt(0),
+      })),
+    [employees]
+  );
 
   // Format time as HH:MM:SS
   const formatTime = (date: Date): string => {
@@ -265,45 +213,6 @@ const Dashboard: React.FC = () => {
     
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
-
-  // Update elapsed time every second
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    
-    if (isClockedIn && clockInTime) {
-      // Calculate initial elapsed time
-      const startTime = new Date(clockInTime);
-      const now = new Date();
-      const diff = now.getTime() - startTime.getTime();
-      
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-      
-      // Set initial elapsed time immediately
-      setElapsedTime(
-        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-      );
-      
-      // Update elapsed time every second
-      interval = setInterval(() => {
-        const currentTime = new Date();
-        const elapsedMs = currentTime.getTime() - startTime.getTime();
-        
-        const h = Math.floor(elapsedMs / (1000 * 60 * 60));
-        const m = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60));
-        const s = Math.floor((elapsedMs % (1000 * 60)) / 1000);
-        
-        setElapsedTime(
-          `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-        );
-      }, 1000);
-    }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isClockedIn, clockInTime]);
 
   // Check if user needs to clock in when they first load the dashboard
   useEffect(() => {
@@ -337,30 +246,23 @@ const Dashboard: React.FC = () => {
       setIsClockedIn(false);
       setClockInTime(null);
     }
-  }, [location.state]);
+  }, [location.state, isClockedIn]);
 
-  // Listen for changes to isClockedIn state
+  // Prune clock-in records older than 30 days once per mount
   useEffect(() => {
-    // We no longer automatically show the clock-in prompt when not clocked in
-    // This allows users to view the dashboard without being forced to clock in
-    // The prompt will only show if they were redirected from a page that requires clock-in
-  }, [isClockedIn]);
-
-  // Clean up old clock-in records (older than 30 days) periodically
-  useEffect(() => {
+    if (recordsPrunedRef.current) return;
+    recordsPrunedRef.current = true;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const cleanedRecords = clockInRecords.filter(record => {
-      const recordDate = new Date(record.clockIn.split(' ')[0]); // Extract date part
-      return recordDate >= thirtyDaysAgo;
+
+    setClockInRecords((prev) => {
+      const cleaned = prev.filter((record) => {
+        const recordDate = new Date(record.clockIn.split(' ')[0]);
+        return recordDate >= thirtyDaysAgo;
+      });
+      return cleaned.length === prev.length ? prev : cleaned;
     });
-    
-    // Only update if records were actually cleaned
-    if (cleanedRecords.length !== clockInRecords.length) {
-      setClockInRecords(cleanedRecords);
-    }
-  }, [clockInRecords, setClockInRecords]);
+  }, [setClockInRecords]);
 
   // Listen for global clock in/out events (from floating status bar)
   useEffect(() => {
@@ -405,7 +307,7 @@ const Dashboard: React.FC = () => {
     };
   }, []);
 
-  const handleClockIn = () => {
+  const handleClockIn = useCallback(() => {
     console.log('Clocked in at', new Date().toLocaleTimeString());
     const now = new Date();
     setIsClockedIn(true);
@@ -439,10 +341,9 @@ const Dashboard: React.FC = () => {
       // Navigate back to the page the user was trying to access
       navigate(redirectPath);
     }
-  };
+  }, [navigate, redirectPath, setClockInRecords]);
 
-  const handleClockOut = () => {
-    console.log('Clocked out after', elapsedTime, 'of work');
+  const handleClockOut = useCallback(() => {
     if (clockInTime) {
       const clockOutTime = new Date();
       const clockInDate = new Date(clockInTime);
@@ -461,71 +362,75 @@ const Dashboard: React.FC = () => {
     }
     
     setIsClockedIn(false);
-    setClockInTime('');
-    setElapsedTime('00:00:00');
+    setClockInTime(null);
     
     // Remove today's clock-in record from localStorage
     localStorage.removeItem('clockInToday');
     localStorage.removeItem('clockInTime');
-  };
+  }, [clockInTime, setClockInRecords]);
 
-  const handleViewAllJobs = () => {
+  const handleViewAllJobs = useCallback(() => {
     navigate('/time-tracking');
-  };
+  }, [navigate]);
 
-  const handleViewAllActivities = () => {
+  const handleViewAllActivities = useCallback(() => {
     navigate('/activities');
-  };
+  }, [navigate]);
 
-  const handleJobClick = (job: Job) => {
+  const handleJobClick = useCallback((job: Job) => {
     setSelectedJob(job);
     setJobDetailsOpen(true);
-  };
+  }, []);
 
-  const handleProjectCardClick = (id: string) => {
-    const job = activeJobs.find((j) => j.id === id);
-    if (job) {
-      handleJobClick(job);
-      return;
-    }
-    if (MAIN_DASHBOARD_SAMPLE_PROJECTS.some((p) => p.id === id)) {
-      navigate('/projects');
-      return;
-    }
-    navigate('/projects');
-  };
-
-  const handleProjectMenuClick = (id: string) => {
-    const job = activeJobs.find((j) => j.id === id);
-    if (job) {
-      handleOpenChat(job);
-      return;
-    }
-    navigate('/projects');
-  };
-
-  const handleCloseJobDetails = () => {
-    setJobDetailsOpen(false);
-    setSelectedJob(null);
-  };
-
-  const handleActivityClick = (activityId: string) => {
-    navigate(`/activities/${activityId}`);
-  };
-
-  const handleOpenChat = (job: Job) => {
-    setChatState(prev => ({
+  const handleOpenChat = useCallback((job: Job) => {
+    setChatState((prev) => ({
       ...prev,
       isOpen: true,
       selectedJob: job,
-      messages: [], // In a real app, you would fetch messages here
+      messages: [],
       newMessage: '',
       selectedRecipient: null,
     }));
-  };
+  }, []);
 
-  const handleCloseChat = () => {
-    setChatState(prev => ({
+  const handleProjectCardClick = useCallback(
+    (id: string) => {
+      const job = activeJobs.find((j) => j.id === id);
+      if (job) {
+        handleJobClick(job);
+        return;
+      }
+      navigate('/projects');
+    },
+    [activeJobs, handleJobClick, navigate]
+  );
+
+  const handleProjectMenuClick = useCallback(
+    (id: string) => {
+      const job = activeJobs.find((j) => j.id === id);
+      if (job) {
+        handleOpenChat(job);
+        return;
+      }
+      navigate('/projects');
+    },
+    [activeJobs, handleOpenChat, navigate]
+  );
+
+  const handleCloseJobDetails = useCallback(() => {
+    setJobDetailsOpen(false);
+    setSelectedJob(null);
+  }, []);
+
+  const handleActivityClick = useCallback(
+    (activityId: string) => {
+      navigate(`/activities/${activityId}`);
+    },
+    [navigate]
+  );
+
+  const handleCloseChat = useCallback(() => {
+    setChatState((prev) => ({
       ...prev,
       isOpen: false,
       selectedJob: null,
@@ -533,9 +438,10 @@ const Dashboard: React.FC = () => {
       newMessage: '',
       selectedRecipient: null,
     }));
-  };
+  }, []);
 
-  const quickActions = [
+  const quickActions = useMemo(
+    () => [
     {
       icon: <Timer />,
       title: 'Track Time',
@@ -560,9 +466,12 @@ const Dashboard: React.FC = () => {
       description: 'Start or join a video meeting',
       onClick: () => navigate('/meetings'),
     },
-  ];
+  ],
+    [navigate]
+  );
 
-  const managementTools = [
+  const managementTools = useMemo(
+    () => [
     {
       icon: <Group />,
       title: 'Team',
@@ -581,9 +490,12 @@ const Dashboard: React.FC = () => {
       description: 'Configure your workspace preferences',
       onClick: () => navigate('/settings'),
     },
-  ];
+  ],
+    [navigate]
+  );
 
-  const dashboardMetrics: MetricsGridItem[] = [
+  const dashboardMetrics: MetricsGridItem[] = useMemo(
+    () => [
     {
       title: 'Active workspaces',
       value: String(activeJobs.length),
@@ -608,35 +520,81 @@ const Dashboard: React.FC = () => {
       iconColor: '#f59e0b',
       iconBg: '#fffbeb',
     },
-    {
-      title: 'Session',
-      value: isClockedIn ? elapsedTime : '—',
-      change: isClockedIn ? 'Elapsed today' : 'Clock in to track',
-      icon: Clock,
-      iconColor: '#a855f7',
-      iconBg: '#faf5ff',
-    },
-  ];
+  ],
+    [activeJobs.length, employees.length, departmentCount]
+  );
 
-  const projectTiles =
-    activeJobs.length > 0
-      ? activeJobs.map((job) => ({
-          id: job.id,
-          title: job.name,
-          department: job.client || 'Workspace',
-          progress: job.progress,
-          dueDate: job.startDate ? job.startDate : 'In progress',
-          teamSize: job.assignedMembers?.length ?? 0,
-        }))
-      : MAIN_DASHBOARD_SAMPLE_PROJECTS;
+  const projectTiles = useMemo(
+    () =>
+      activeJobs.length > 0
+        ? activeJobs.map((job) => ({
+            id: job.id,
+            title: job.name,
+            department: job.client || 'Workspace',
+            progress: job.progress,
+            dueDate: job.startDate ? job.startDate : 'In progress',
+            teamSize: job.assignedMembers?.length ?? 0,
+          }))
+        : MAIN_DASHBOARD_SAMPLE_PROJECTS,
+    [activeJobs]
+  );
+
+  const projectHealth = useMemo(() => deriveProjectHealth(projectTiles), [projectTiles]);
+
+  const atRiskCount = useMemo(
+    () => projectHealth.filter((p) => p.status === 'at-risk' || p.status === 'critical').length,
+    [projectHealth]
+  );
+
+  const workforce = useMemo(
+    () => buildWorkforceSnapshot(employees, departmentCount, activeJobs.length, isClockedIn),
+    [employees, departmentCount, activeJobs.length, isClockedIn]
+  );
+
+  const notificationFeed = useMemo(
+    () =>
+      notifications.slice(0, 8).map((n) => ({
+        id: n.id,
+        title: n.title,
+        description: n.description,
+        time: n.time,
+        read: n.read,
+      })),
+    [notifications]
+  );
+
+  const jobNames = useMemo(() => activeJobs.map((j) => j.name), [activeJobs]);
+
+  const liveActivity = useMemo(
+    () =>
+      buildLiveActivityFeed({
+        clockRecords: clockInRecords,
+        jobNames,
+        notificationItems: notificationFeed,
+        legacyActivities: activities,
+      }),
+    [clockInRecords, jobNames, notificationFeed]
+  );
+
+  const attendanceSidebar = useMemo(
+    () => (
+      <PersonalAttendanceTools
+        isClockedIn={isClockedIn}
+        clockInTime={clockInTime || null}
+        records={clockInRecords}
+        onClockIn={handleClockIn}
+        onClockOut={handleClockOut}
+        onOpenTimeTracking={() => navigate('/time-tracking')}
+      />
+    ),
+    [isClockedIn, clockInTime, clockInRecords, handleClockIn, handleClockOut, navigate]
+  );
 
 
   if (!user) {
     return (
       <DashboardLayout>
-        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography variant="h6">Loading user data...</Typography>
-        </Box>
+        <LoadingScreen message="Loading your workspace…" />
       </DashboardLayout>
     );
   }
@@ -695,44 +653,49 @@ const Dashboard: React.FC = () => {
         {/* Page header — gradient matches Calendar page */}
         <Box
           sx={{
-            background: 'linear-gradient(135deg, #2196f3 0%, #e91e63 100%)',
-            pt: { xs: 4, md: 6 },
-            pb: { xs: 3, md: 4 },
+            background: tmGradients.dialogTitle,
+            pt: { xs: 3, md: 4 },
+            pb: { xs: 2.5, md: 3 },
+            borderBottom: `1px solid ${alpha('#fff', 0.12)}`,
+            boxShadow: `0 8px 32px ${alpha('#000', 0.25)}`,
           }}
         >
           <Container maxWidth="xl" disableGutters sx={{ px: { xs: 2, sm: 3, md: 4 } }}>
             <Box sx={{ color: 'white' }}>
               <Typography
+                sx={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  opacity: 0.85,
+                  mb: 1,
+                }}
+              >
+                TimelyMate · Operations
+              </Typography>
+              <Typography
                 variant="h2"
                 component="h1"
                 sx={{
-                  fontWeight: 600,
-                  mb: 1,
-                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                  fontWeight: 700,
+                  mb: 0.75,
+                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' },
+                  letterSpacing: '-0.03em',
                 }}
               >
-                Dashboard
-              </Typography>
-              <Typography
-                variant="h5"
-                sx={{
-                  fontWeight: 600,
-                  opacity: 0.95,
-                  mb: 1.5,
-                  fontSize: { xs: '1.125rem', sm: '1.35rem', md: '1.5rem' },
-                }}
-              >
-                Welcome back, {user.organizationName || user.email || 'User'}
+                Command center
               </Typography>
               <Typography
                 sx={{
                   fontWeight: 400,
-                  opacity: 0.9,
+                  opacity: 0.92,
                   fontSize: { xs: '0.875rem', md: '1rem' },
-                  maxWidth: 560,
+                  maxWidth: 640,
+                  lineHeight: 1.5,
                 }}
               >
-                Here&apos;s what&apos;s happening today — workspaces on the left, your attendance context on the right.
+                AI-assisted oversight of projects, workforce, and live signals — all routes stay one click away in the sidebar.
               </Typography>
             </Box>
           </Container>
@@ -752,118 +715,62 @@ const Dashboard: React.FC = () => {
       )}
 
 
+      {!commandReady ? (
+        <DashboardCommandSkeleton />
+      ) : (
       <MainDashboardContent
         displayName={user.organizationName || user.email || 'User'}
         metrics={dashboardMetrics}
         projects={projectTiles}
-        attendanceSidebar={
-          <PersonalAttendanceTools
-            isClockedIn={isClockedIn}
-            elapsedTime={elapsedTime}
-            clockInTime={clockInTime || null}
-            records={clockInRecords}
-            onClockIn={handleClockIn}
-            onClockOut={handleClockOut}
-            onOpenTimeTracking={() => navigate('/time-tracking')}
-          />
-        }
+        isClockedIn={isClockedIn}
+        clockInTime={clockInTime}
+        atRiskCount={atRiskCount}
+        unreadCount={unreadCount}
+        projectHealth={projectHealth}
+        workforce={workforce}
+        liveActivity={liveActivity}
+        quickActions={quickActions}
+        managementActions={managementTools}
+        attendanceSidebar={attendanceSidebar}
         recentActivity={
-          <>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: '#1e293b', mt: 4, mb: 2 }}>
-              Recent activity
-            </Typography>
-            <Box sx={{ ...workspaceCardSx, p: 2 }}>
+          activities.length > 0 ? (
+            <Box sx={{ pt: 1.5 }}>
+              <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', color: 'text.secondary', mb: 1 }}>
+                Legacy activity log
+              </Typography>
               <List dense disablePadding>
-                {activities.length === 0 ? (
-                  <ListItem disableGutters sx={{ py: 1 }}>
+                {activities.map((activity) => (
+                  <ListItem
+                    key={activity.id}
+                    disableGutters
+                    sx={{ py: 1, cursor: 'pointer', borderRadius: '3px', '&:hover': { bgcolor: 'action.hover' } }}
+                    onClick={() => handleActivityClick(activity.id)}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      {activity.type === 'time_track' && <Timer sx={{ fontSize: 18 }} />}
+                      {activity.type === 'meeting' && <VideoCall sx={{ fontSize: 18 }} />}
+                      {activity.type === 'task' && <CheckCircle sx={{ fontSize: 18 }} />}
+                    </ListItemIcon>
                     <ListItemText
-                      primary={
-                        <Typography sx={{ fontWeight: 500, color: '#64748b' }}>No recent activity</Typography>
-                      }
-                      secondary={
-                        <Typography sx={{ fontSize: '0.8125rem', color: '#94a3b8', mt: 0.25 }}>
-                          Updates will appear here when available.
-                        </Typography>
-                      }
+                      primary={activity.description}
+                      secondary={activity.timestamp}
+                      primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 600 }}
+                      secondaryTypographyProps={{ fontSize: '0.75rem' }}
                     />
+                    <Chip label={activity.status} size="small" sx={{ height: 20, fontSize: '0.625rem' }} />
                   </ListItem>
-                ) : (
-                  activities.map((activity) => (
-                    <ListItem
-                      key={activity.id}
-                      disableGutters
-                      sx={{ py: 1.25, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: '#f8fafc' } }}
-                      onClick={() => handleActivityClick(activity.id)}
-                    >
-                      <ListItemIcon sx={{ minWidth: 40 }}>
-                        {activity.type === 'time_track' && <Timer sx={{ fontSize: 20, color: '#64748b' }} />}
-                        {activity.type === 'meeting' && <VideoCall sx={{ fontSize: 20, color: '#64748b' }} />}
-                        {activity.type === 'task' && <CheckCircle sx={{ fontSize: 20, color: '#64748b' }} />}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1e293b' }}>
-                            {activity.description}
-                          </Typography>
-                        }
-                        secondary={
-                          <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8' }}>{activity.timestamp}</Typography>
-                        }
-                      />
-                      <Chip label={activity.status} size="small" sx={{ height: 22, fontSize: '0.6875rem' }} />
-                    </ListItem>
-                  ))
-                )}
+                ))}
               </List>
-              <Button
-                fullWidth
-                variant="text"
-                onClick={handleViewAllActivities}
-                sx={{ mt: 1, fontWeight: 600, textTransform: 'none', color: '#475569' }}
-              >
-                View all activities
-              </Button>
             </Box>
-          </>
+          ) : undefined
         }
         onViewAllProjects={handleViewAllJobs}
+        onViewAllActivities={handleViewAllActivities}
         onProjectCardClick={handleProjectCardClick}
         onProjectMenuClick={handleProjectMenuClick}
+        onProjectTrackClick={() => navigate('/time-tracking')}
       />
-
-      {/* Quick Actions */}
-      <Container maxWidth="xl" disableGutters sx={{ py: { xs: 3, md: 5 }, px: { xs: 2, sm: 3, md: 4 } }}>
-        <Typography sx={{ fontWeight: 700, fontSize: '1.125rem', color: '#1e293b', mb: 0.5 }}>
-          Quick actions
-        </Typography>
-        <Typography sx={{ fontSize: '0.875rem', color: '#94a3b8', mb: 3 }}>
-          Shortcuts for everyday work.
-        </Typography>
-        <Grid container spacing={{ xs: 2, sm: 2 }}>
-          {quickActions.map((action) => (
-            <Grid item xs={12} sm={6} md={3} key={action.title}>
-              <ActionCard {...action} />
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
-
-      {/* Management Tools */}
-      <Container maxWidth="xl" disableGutters sx={{ py: { xs: 3, md: 5 }, pb: { xs: 6, md: 8 }, px: { xs: 2, sm: 3, md: 4 } }}>
-        <Typography sx={{ fontWeight: 700, fontSize: '1.125rem', color: '#1e293b', mb: 0.5 }}>
-          Management tools
-        </Typography>
-        <Typography sx={{ fontSize: '0.875rem', color: '#94a3b8', mb: 3 }}>
-          Administration and workspace controls.
-        </Typography>
-        <Grid container spacing={{ xs: 2, sm: 2 }}>
-          {managementTools.map((tool) => (
-            <Grid item xs={12} sm={6} md={4} key={tool.title}>
-              <ActionCard {...tool} />
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
+      )}
 
       {/* Job Details Dialog */}
       <Dialog

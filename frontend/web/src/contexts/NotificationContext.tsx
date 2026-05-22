@@ -1,6 +1,20 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useMemo } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import { useAppSelector } from '../store';
 import { getManagerRecipientId } from '../utils/managerReview';
+import {
+  MAX_STORED_NOTIFICATIONS,
+  normalizeLoadedNotifications,
+  sanitizeNotifications,
+} from '../utils/notificationStorage';
 
 // Notification type definition
 export interface NotificationItem {
@@ -9,6 +23,8 @@ export interface NotificationItem {
   title: string;
   description: string;
   time: string;
+  /** Epoch ms — used for sorting (locale time strings are not sortable). */
+  createdAt: number;
   read: boolean;
   avatar?: string;
   icon?: React.ReactNode;
@@ -20,18 +36,21 @@ export interface NotificationItem {
 }
 
 const NOTIFICATIONS_STORAGE_KEY = 'timelymate_notifications';
+const PERSIST_DEBOUNCE_MS = 400;
 
 interface NotificationContextType {
   notifications: NotificationItem[];
   unreadCount: number;
-  addNotification: (notification: Omit<NotificationItem, 'id' | 'read'>) => void;
+  addNotification: (notification: Omit<NotificationItem, 'id' | 'read' | 'createdAt'>) => void;
   addNotificationForRecipient: (
     recipientId: string,
-    notification: Omit<NotificationItem, 'id' | 'read' | 'recipientId'>
+    notification: Omit<NotificationItem, 'id' | 'read' | 'recipientId' | 'createdAt'>
   ) => void;
   markAsRead: (id: number) => void;
+  markManyAsRead: (ids: number[]) => void;
   markAllAsRead: () => void;
   removeNotification: (id: number) => void;
+  removeManyNotifications: (ids: number[]) => void;
   clearAllNotifications: () => void;
   getUnreadCountByType: (type: NotificationItem['type']) => number;
 }
@@ -46,8 +65,7 @@ const loadStoredNotifications = (): NotificationItem[] => {
   try {
     const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as NotificationItem[];
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeLoadedNotifications(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -55,20 +73,26 @@ const loadStoredNotifications = (): NotificationItem[] => {
 
 const persistNotifications = (items: NotificationItem[]) => {
   try {
-    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(
+      NOTIFICATIONS_STORAGE_KEY,
+      JSON.stringify(sanitizeNotifications(items))
+    );
   } catch {
     /* ignore quota errors */
   }
 };
 
+function computeNextId(items: NotificationItem[]): number {
+  if (items.length === 0) return 1;
+  return Math.max(...items.map((n) => n.id), 0) + 1;
+}
+
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
   const { user } = useAppSelector((state) => state.auth);
-  const [allNotifications, setAllNotifications] = useState<NotificationItem[]>(() => loadStoredNotifications());
-  const [nextId, setNextId] = useState(() => {
-    const stored = loadStoredNotifications();
-    if (stored.length === 0) return 1;
-    return Math.max(...stored.map((n) => n.id), 0) + 1;
-  });
+  const initial = useMemo(() => loadStoredNotifications(), []);
+  const [allNotifications, setAllNotifications] = useState<NotificationItem[]>(initial);
+  const [nextId, setNextId] = useState(() => computeNextId(initial));
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentRecipientId = useMemo(() => {
     if (!user) return null;
@@ -76,48 +100,93 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     return id || null;
   }, [user]);
 
-  const notifications = useMemo(() => {
-    return allNotifications.filter(
-      (n) => !n.recipientId || (currentRecipientId && n.recipientId === currentRecipientId)
-    );
-  }, [allNotifications, currentRecipientId]);
+  const notifications = useMemo(
+    () =>
+      allNotifications.filter(
+        (n) => !n.recipientId || (currentRecipientId && n.recipientId === currentRecipientId)
+      ),
+    [allNotifications, currentRecipientId]
+  );
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
 
   useEffect(() => {
-    persistNotifications(allNotifications);
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      persistNotifications(allNotifications);
+      persistTimerRef.current = null;
+    }, PERSIST_DEBOUNCE_MS);
+
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+      }
+    };
   }, [allNotifications]);
 
-  const addNotification = useCallback((notification: Omit<NotificationItem, 'id' | 'read'>) => {
-    const newNotification: NotificationItem = {
-      ...notification,
-      id: nextId,
-      read: false,
-    };
+  const trimAndPrepend = useCallback(
+    (item: NotificationItem, prev: NotificationItem[]) =>
+      [item, ...prev].slice(0, MAX_STORED_NOTIFICATIONS),
+    []
+  );
 
-    setAllNotifications((prev) => [newNotification, ...prev]);
-    setNextId((prev) => prev + 1);
-  }, [nextId]);
+  const addNotification = useCallback(
+    (notification: Omit<NotificationItem, 'id' | 'read' | 'createdAt'>) => {
+      const createdAt = Date.now();
+      const newNotification: NotificationItem = {
+        ...notification,
+        id: nextId,
+        read: false,
+        createdAt,
+        time: notification.time || new Date(createdAt).toLocaleTimeString(),
+      };
+
+      setAllNotifications((prev) => trimAndPrepend(newNotification, prev));
+      setNextId((prev) => prev + 1);
+    },
+    [nextId, trimAndPrepend]
+  );
 
   const addNotificationForRecipient = useCallback(
-    (recipientId: string, notification: Omit<NotificationItem, 'id' | 'read' | 'recipientId'>) => {
+    (
+      recipientId: string,
+      notification: Omit<NotificationItem, 'id' | 'read' | 'recipientId' | 'createdAt'>
+    ) => {
+      const createdAt = Date.now();
       const newNotification: NotificationItem = {
         ...notification,
         recipientId,
         id: nextId,
         read: false,
+        createdAt,
+        time: notification.time || new Date(createdAt).toLocaleTimeString(),
       };
 
-      setAllNotifications((prev) => [newNotification, ...prev]);
+      setAllNotifications((prev) => trimAndPrepend(newNotification, prev));
       setNextId((prev) => prev + 1);
     },
-    [nextId]
+    [nextId, trimAndPrepend]
   );
 
   const markAsRead = useCallback((id: number) => {
     setAllNotifications((prev) =>
       prev.map((notification) =>
         notification.id === id ? { ...notification, read: true } : notification
+      )
+    );
+  }, []);
+
+  const markManyAsRead = useCallback((ids: number[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setAllNotifications((prev) =>
+      prev.map((notification) =>
+        idSet.has(notification.id) ? { ...notification, read: true } : notification
       )
     );
   }, []);
@@ -137,6 +206,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     setAllNotifications((prev) => prev.filter((notification) => notification.id !== id));
   }, []);
 
+  const removeManyNotifications = useCallback((ids: number[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setAllNotifications((prev) => prev.filter((notification) => !idSet.has(notification.id)));
+  }, []);
+
   const clearAllNotifications = useCallback(() => {
     if (!currentRecipientId) {
       setAllNotifications([]);
@@ -147,21 +222,39 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     );
   }, [currentRecipientId]);
 
-  const getUnreadCountByType = useCallback((type: NotificationItem['type']) => {
-    return notifications.filter((n) => !n.read && n.type === type).length;
-  }, [notifications]);
+  const getUnreadCountByType = useCallback(
+    (type: NotificationItem['type']) => notifications.filter((n) => !n.read && n.type === type).length,
+    [notifications]
+  );
 
-  const value: NotificationContextType = {
-    notifications,
-    unreadCount,
-    addNotification,
-    addNotificationForRecipient,
-    markAsRead,
-    markAllAsRead,
-    removeNotification,
-    clearAllNotifications,
-    getUnreadCountByType,
-  };
+  const value = useMemo<NotificationContextType>(
+    () => ({
+      notifications,
+      unreadCount,
+      addNotification,
+      addNotificationForRecipient,
+      markAsRead,
+      markManyAsRead,
+      markAllAsRead,
+      removeNotification,
+      removeManyNotifications,
+      clearAllNotifications,
+      getUnreadCountByType,
+    }),
+    [
+      notifications,
+      unreadCount,
+      addNotification,
+      addNotificationForRecipient,
+      markAsRead,
+      markManyAsRead,
+      markAllAsRead,
+      removeNotification,
+      removeManyNotifications,
+      clearAllNotifications,
+      getUnreadCountByType,
+    ]
+  );
 
   return (
     <NotificationContext.Provider value={value}>
@@ -293,4 +386,4 @@ export const createNotification = {
     time: new Date().toLocaleTimeString(),
     actionUrl: '/projects',
   }),
-}; 
+};

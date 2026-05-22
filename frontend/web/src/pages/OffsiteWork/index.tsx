@@ -1,15 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Container,
   Typography,
-  Grid,
-  Card,
-  CardContent,
   Stack,
   Chip,
   Button,
-  Paper,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -23,87 +19,68 @@ import {
   ListItemSecondaryAction,
   Switch,
   Divider,
-  Tabs,
-  Tab,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
-  QrCode2,
-  CloudUpload,
-  FlightTakeoff,
-  SignalWifiOff,
-  CameraAlt,
-  Construction,
-  Storage,
-  Timeline,
   LocationOn,
-  Speed,
-  Map,
-  PhotoCamera,
-  Scanner,
-  Sync,
+  Storage,
   Visibility,
   NotificationsActive,
   Settings,
-  Add,
-  ArrowForward,
-  CheckCircle,
-  Error,
-  WifiOff,
-  CloudDone,
-  CloudQueue,
-  CloudOff,
   MyLocation,
-  ZoomIn,
-  ZoomOut,
 } from '@mui/icons-material';
 import DashboardLayout from '../../components/DashboardLayout';
 import FeatureGuard from '../../components/FeatureGuard';
 import MapDialog from './MapDialog';
-// No longer need mock data utilities
-
-interface SiteLocation {
-  id: string;
-  name: string;
-  address: string;
-  status: 'active' | 'completed' | 'pending';
-  lastUpdate: string;
-  progress: number;
-  coordinates?: {
-    lat: number;
-    lng: number;
-  };
-}
-
-interface ScannedItem {
-  id: string;
-  type: 'qr' | 'object';
-  data: string;
-  timestamp: string;
-}
-
-interface QueuedItem {
-  id: string;
-  data: string;
-  timestamp: string;
-  status: 'queued' | 'syncing' | 'completed' | 'error';
-  retryCount: number;
-}
-
-// Empty arrays for site locations, scanned items, and queued items - no mock data
-const emptyLocations: SiteLocation[] = [];
-const emptyScannedItems: ScannedItem[] = [];
-const emptyQueuedItems: QueuedItem[] = [];
+import { OffsiteWorkSubNav } from './OffsiteWorkSubNav';
+import { FieldOpsConsole } from './FieldOpsConsole';
+import { LiveFieldOpsDashboard } from './LiveFieldOpsDashboard';
+import { MobileFieldOpsBar } from './MobileFieldOpsBar';
+import { MobileWorkforceToolDialog } from './MobileWorkforceToolDialog';
+import { FieldScannerCapture, type FieldScanResult } from './FieldScannerCapture';
+import { fieldPageContentSx } from './fieldOpsStyles';
+import { useAppSelector } from '../../store';
+import { useEmployees } from '../../contexts/EmployeeContext';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { getAuthUserLabel } from '../../utils/managerReview';
+import { getOffsiteAssignableEmployees } from '../../utils/offsiteWorkers';
+import { notifyJobSubmittedToBriefedBy } from '../../utils/jobLineManager';
+import { createNotification } from '../../contexts/NotificationContext';
+import { notifyFieldWorkSubmitted } from './fieldOpsReview';
+import {
+  createOffsiteAssignment,
+  loadOffsiteAssignments,
+  resolveBriefedByForFieldSubmission,
+  saveOffsiteAssignments,
+  type OffsiteFieldAssignment,
+} from './offsiteAssignments';
+import { recipientIdFromEmail } from '../../utils/taskReview';
+import type { MobileToolSubmitPayload, MobileWorkforceTool } from './mobileWorkforceTypes';
+import type { QueuedItem, ScannedItem, SiteLocation, SiteType } from './types';
 
 const OffsiteWork: React.FC = () => {
+  const user = useAppSelector((state) => state.auth.user);
+  const { employees } = useEmployees();
+  const { addNotification, addNotificationForRecipient } = useNotifications();
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerMode, setScannerMode] = useState<'qr' | 'object'>('qr');
+  const [mobileTool, setMobileTool] = useState<MobileWorkforceTool | null>(null);
+  const [offlineMode, setOfflineMode] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mapDialogOpen, setMapDialogOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<SiteLocation | null>(null);
-  const [currentTab, setCurrentTab] = useState(0);
   const [locations, setLocations] = useState<SiteLocation[]>([]);
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
   const [queuedItems, setQueuedItems] = useState<QueuedItem[]>([]);
+  const [fieldAssignments, setFieldAssignments] = useState<OffsiteFieldAssignment[]>(() =>
+    loadOffsiteAssignments()
+  );
+
+  const offsiteWorkers = useMemo(() => getOffsiteAssignableEmployees(employees), [employees]);
 
   // Settings state
   const [settings, setSettings] = useState({
@@ -113,16 +90,19 @@ const OffsiteWork: React.FC = () => {
   });
 
   // Add Location form state
-  const [newLocation, setNewLocation] = useState({
+  const [newLocation, setNewLocation] = useState<{
+    name: string;
+    address: string;
+    progress: number;
+    siteType: SiteType;
+    coordinates: { lat: number; lng: number };
+  }>({
     name: '',
     address: '',
     progress: 0,
-    coordinates: { lat: 0, lng: 0 }
+    siteType: 'general',
+    coordinates: { lat: 0, lng: 0 },
   });
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setCurrentTab(newValue);
-  };
 
   const handleViewMap = (location: SiteLocation) => {
     setSelectedLocation(location);
@@ -199,6 +179,33 @@ const OffsiteWork: React.FC = () => {
     localStorage.setItem('offsiteWorkLocations', JSON.stringify(locations));
   }, [locations]);
 
+  useEffect(() => {
+    const savedScans = localStorage.getItem('offsiteWorkScans');
+    if (savedScans) {
+      try {
+        setScannedItems(JSON.parse(savedScans));
+      } catch (error) {
+        console.error('Error loading scans:', error);
+      }
+    }
+    const savedQueue = localStorage.getItem('offsiteWorkQueue');
+    if (savedQueue) {
+      try {
+        setQueuedItems(JSON.parse(savedQueue));
+      } catch (error) {
+        console.error('Error loading queue:', error);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('offsiteWorkScans', JSON.stringify(scannedItems));
+  }, [scannedItems]);
+
+  useEffect(() => {
+    localStorage.setItem('offsiteWorkQueue', JSON.stringify(queuedItems));
+  }, [queuedItems]);
+
   // Location management functions
   const handleAddLocation = () => {
     if (!newLocation.name.trim() || !newLocation.address.trim()) {
@@ -213,11 +220,13 @@ const OffsiteWork: React.FC = () => {
       status: 'pending',
       lastUpdate: new Date().toISOString(),
       progress: newLocation.progress,
-      coordinates: newLocation.coordinates
+      coordinates: newLocation.coordinates,
+      siteType: newLocation.siteType,
+      assignedCrew: 'Field crew',
     };
 
     setLocations(prev => [...prev, location]);
-    setNewLocation({ name: '', address: '', progress: 0, coordinates: { lat: 0, lng: 0 } });
+    setNewLocation({ name: '', address: '', progress: 0, siteType: 'general', coordinates: { lat: 0, lng: 0 } });
     setLocationDialogOpen(false);
     
     console.log('Location added successfully:', location);
@@ -229,6 +238,79 @@ const OffsiteWork: React.FC = () => {
         ? { ...loc, status: newStatus, lastUpdate: new Date().toISOString() }
         : loc
     ));
+
+    if (newStatus === 'completed') {
+      const site = locations.find((l) => l.id === locationId);
+      const submitterLabel = getAuthUserLabel(user ?? undefined);
+      const briefedBy = resolveBriefedByForFieldSubmission(employees, user ?? undefined, locationId);
+      notifyJobSubmittedToBriefedBy({
+        briefedBy,
+        submitterEmail: user?.email,
+        employees,
+        notification: {
+          ...createNotification.system(
+            'Site work marked complete',
+            `${submitterLabel} marked "${site?.name ?? 'Field site'}" complete and sent it for your review.`,
+            'high'
+          ),
+          actionUrl: '/offsite-work',
+        },
+        addNotificationForRecipient,
+        addNotification,
+      });
+      setFieldAssignments((prev) => {
+        const next = prev.map((a) =>
+          a.siteId === locationId && a.status !== 'completed'
+            ? { ...a, status: 'pending_review' as const }
+            : a
+        );
+        saveOffsiteAssignments(next);
+        return next;
+      });
+    }
+  };
+
+  const handleAssignFieldWork = (input: {
+    title: string;
+    description?: string;
+    siteId?: string;
+    assigneeIds: string[];
+    dueDate?: string;
+  }) => {
+    const site = input.siteId ? locations.find((l) => l.id === input.siteId) : undefined;
+    const assignment = createOffsiteAssignment({
+      ...input,
+      siteName: site?.name,
+      employees,
+      briefedByUser: user ?? undefined,
+    });
+    setFieldAssignments((prev) => {
+      const next = [assignment, ...prev];
+      saveOffsiteAssignments(next);
+      return next;
+    });
+
+    assignment.assigneeEmails.forEach((email) => {
+      const recipientId = recipientIdFromEmail(email);
+      if (recipientId) {
+        addNotificationForRecipient(
+          recipientId,
+          createNotification.system(
+            'New field assignment',
+            `${getAuthUserLabel(user ?? undefined)} briefed you: "${assignment.title}"${site ? ` at ${site.name}` : ''}.`,
+            'high'
+          )
+        );
+      }
+    });
+
+    addNotification(
+      createNotification.system(
+        'Field work assigned',
+        `"${assignment.title}" briefed to ${assignment.assigneeNames.join(', ')}.`,
+        'medium'
+      )
+    );
   };
 
   const handleLocationProgressUpdate = (locationId: string, progress: number) => {
@@ -243,6 +325,187 @@ const OffsiteWork: React.FC = () => {
     if (window.confirm('Are you sure you want to delete this location?')) {
       setLocations(prev => prev.filter(loc => loc.id !== locationId));
     }
+  };
+
+  const handleOpenScanner = (mode: 'qr' | 'object') => {
+    setScannerMode(mode);
+    setScannerOpen(true);
+  };
+
+  const handleOpenMobileTool = (tool: MobileWorkforceTool) => {
+    setMobileTool(tool);
+  };
+
+  const handleMobileToolSubmit = (payload: MobileToolSubmitPayload) => {
+    const now = new Date().toISOString();
+
+    if (payload.siteId) {
+      setLocations((prev) =>
+        prev.map((loc) => {
+          if (loc.id !== payload.siteId) return loc;
+          const updates: Partial<SiteLocation> = { lastUpdate: now };
+          if (payload.tool === 'gps') {
+            updates.status = 'active';
+          }
+          if (payload.tool === 'inspection' && loc.progress < 100) {
+            updates.progress = Math.min(100, loc.progress + 10);
+          }
+          return { ...loc, ...updates };
+        })
+      );
+    }
+
+    if (payload.tool === 'photo' && payload.photoDataUrl) {
+      const photoRecord = {
+        id: `photo-${Date.now()}`,
+        userId: payload.capturedByUserId,
+        userName: payload.capturedByName,
+        siteId: payload.siteId,
+        siteName: payload.siteName,
+        caption: payload.summary,
+        dataUrl: payload.photoDataUrl,
+        timestamp: now,
+      };
+      try {
+        const existing = JSON.parse(localStorage.getItem('offsiteWorkPhotos') ?? '[]');
+        const photos = Array.isArray(existing) ? existing : [];
+        localStorage.setItem('offsiteWorkPhotos', JSON.stringify([photoRecord, ...photos].slice(0, 40)));
+      } catch {
+        /* storage quota — still log scan row */
+      }
+      setScannedItems((prev) => [
+        {
+          id: photoRecord.id,
+          type: 'object',
+          data: `PHOTO · ${payload.summary}`,
+          timestamp: now,
+          siteId: payload.siteId,
+        },
+        ...prev,
+      ]);
+    }
+
+    if (payload.tool === 'logistics') {
+      const podId = `pod-${Date.now()}`;
+      if (payload.signatureDataUrl) {
+        try {
+          const existing = JSON.parse(localStorage.getItem('offsiteWorkSignatures') ?? '[]');
+          const records = Array.isArray(existing) ? existing : [];
+          localStorage.setItem(
+            'offsiteWorkSignatures',
+            JSON.stringify([
+              {
+                id: podId,
+                recipient: payload.summary,
+                siteName: payload.siteName ?? payload.fieldLocationLabel,
+                dataUrl: payload.signatureDataUrl,
+                capturedBy: payload.capturedByName,
+                timestamp: now,
+              },
+              ...records,
+            ].slice(0, 30))
+          );
+        } catch {
+          /* storage */
+        }
+      }
+      setScannedItems((prev) => [
+        {
+          id: podId,
+          type: 'qr',
+          data: `POD · ${payload.summary}`,
+          timestamp: now,
+          siteId: payload.siteId,
+        },
+        ...prev,
+      ]);
+    }
+
+    if (offlineMode || settings.offlineStorage) {
+      setQueuedItems((prev) => [
+        {
+          id: `q-mobile-${Date.now()}`,
+          data: payload.summary,
+          timestamp: now,
+          status: offlineMode ? 'queued' : 'syncing',
+          retryCount: 0,
+        },
+        ...prev,
+      ]);
+    }
+
+    notifyFieldWorkSubmitted({
+      payload,
+      employees,
+      user: user ?? undefined,
+      addNotificationForRecipient,
+      addNotification,
+    });
+  };
+
+  const handleScannerResult = (result: FieldScanResult) => {
+    const now = new Date().toISOString();
+    const scan: ScannedItem = {
+      id: Date.now().toString(),
+      type: scannerMode,
+      data: result.data,
+      timestamp: now,
+      siteId: locations[0]?.id,
+    };
+
+    if (result.imageDataUrl) {
+      try {
+        const existing = JSON.parse(localStorage.getItem('offsiteWorkScanImages') ?? '[]');
+        const records = Array.isArray(existing) ? existing : [];
+        localStorage.setItem(
+          'offsiteWorkScanImages',
+          JSON.stringify(
+            [
+              {
+                id: scan.id,
+                mode: scannerMode,
+                data: result.data,
+                format: result.format,
+                dataUrl: result.imageDataUrl,
+                capturedBy: getAuthUserLabel(user ?? undefined),
+                timestamp: now,
+              },
+              ...records,
+            ].slice(0, 40)
+          )
+        );
+      } catch {
+        /* storage quota */
+      }
+    }
+
+    setScannedItems((prev) => [scan, ...prev]);
+    if (settings.offlineStorage || offlineMode) {
+      const queued: QueuedItem = {
+        id: `q-${scan.id}`,
+        data: scan.data,
+        timestamp: scan.timestamp,
+        status: offlineMode ? 'queued' : 'syncing',
+        retryCount: 0,
+      };
+      setQueuedItems((prev) => [queued, ...prev]);
+      if (!offlineMode) {
+        window.setTimeout(() => {
+          setQueuedItems((prev) =>
+            prev.map((q) => (q.id === queued.id ? { ...q, status: 'completed' as const } : q))
+          );
+        }, 1200);
+      }
+    }
+
+    addNotification(
+      createNotification.system(
+        scannerMode === 'qr' ? 'QR verified' : 'Material scanned',
+        `${getAuthUserLabel(user ?? undefined)} logged: ${result.data.slice(0, 80)}`,
+        'medium'
+      )
+    );
+    setScannerOpen(false);
   };
 
   const handleGetCurrentLocation = () => {
@@ -279,10 +542,10 @@ const OffsiteWork: React.FC = () => {
           }}
         >
           <Container maxWidth="xl">
-            <Box sx={{ color: 'white', mb: 6 }}>
+            <Box sx={{ color: 'white', mb: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h2" component="h1" sx={{ fontWeight: 600 }}>
-                  Offsite Work
+                  Field Operations
                 </Typography>
                 <IconButton 
                   color="inherit" 
@@ -297,373 +560,101 @@ const OffsiteWork: React.FC = () => {
                 </IconButton>
               </Box>
               <Typography variant="h5" sx={{ fontWeight: 400, opacity: 0.9 }}>
-                Manage and track your remote projects with advanced tools
+                Manage field sites, crews, and live operational signals
               </Typography>
             </Box>
 
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} sm={6} md={3}>
-                <Card sx={{ borderRadius: 4, boxShadow: 2 }}>
-                  <CardContent>
-                    <Stack spacing={2} alignItems="center" textAlign="center">
-                      <LocationOn sx={{ fontSize: 40, color: '#2196f3' }} />
-                      <Typography variant="h4" fontWeight="medium">
-                        {locations.length}
-                      </Typography>
-                      <Typography variant="body1" color="text.secondary">
-                        Active Sites
-                      </Typography>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Card sx={{ borderRadius: 4, boxShadow: 2 }}>
-                  <CardContent>
-                    <Stack spacing={2} alignItems="center" textAlign="center">
-                      <Scanner sx={{ fontSize: 40, color: '#2196f3' }} />
-                      <Typography variant="h4" fontWeight="medium">
-                        {scannedItems.length}
-                      </Typography>
-                      <Typography variant="body1" color="text.secondary">
-                        Items Scanned
-                      </Typography>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Card sx={{ borderRadius: 4, boxShadow: 2 }}>
-                  <CardContent>
-                    <Stack spacing={2} alignItems="center" textAlign="center">
-                      <CloudQueue sx={{ fontSize: 40, color: '#2196f3' }} />
-                      <Typography variant="h4" fontWeight="medium">
-                        {queuedItems.filter(item => item.status === 'queued').length}
-                      </Typography>
-                      <Typography variant="body1" color="text.secondary">
-                        Pending Sync
-                      </Typography>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Card sx={{ borderRadius: 4, boxShadow: 2 }}>
-                  <CardContent>
-                    <Stack spacing={2} alignItems="center" textAlign="center">
-                      <Timeline sx={{ fontSize: 40, color: '#2196f3' }} />
-                      <Typography variant="h4" fontWeight="medium">
-                        {locations.length > 0 ? Math.round(locations.reduce((sum, loc) => sum + loc.progress, 0) / locations.length) : 0}%
-                      </Typography>
-                      <Typography variant="body1" color="text.secondary">
-                        Avg Progress
-                      </Typography>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
+            <OffsiteWorkSubNav />
+
+            <Box sx={{ mt: 2, mb: { xs: 2.5, md: 3 } }}>
+              <LiveFieldOpsDashboard />
+            </Box>
           </Container>
         </Box>
 
-        <Container maxWidth="xl" sx={{ mt: -4 }}>
-          {/* Quick Actions */}
-          <Grid container spacing={3} sx={{ mb: 3 }}>
-            <Grid item xs={12} md={6}>
-              <Paper 
-                sx={{ 
-                  p: 3, 
-                  borderRadius: 4, 
-                  bgcolor: 'background.paper', 
-                  boxShadow: 2,
-                  height: '100%',
-                }}
-              >
-                <Typography variant="h6" fontWeight="medium" sx={{ mb: 3 }}>
-                  Quick Actions
-                </Typography>
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      startIcon={<QrCode2 />}
-                      onClick={() => setScannerOpen(true)}
-                      sx={{ 
-                        p: 2, 
-                        borderRadius: 3,
-                        height: '100%',
-                        borderColor: 'primary.main',
-                        '&:hover': { borderColor: 'primary.dark' },
-                      }}
-                    >
-                      <Stack spacing={1}>
-                        <Typography variant="subtitle1" fontWeight="medium">
-                          Scan QR Code
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Track items and verify locations
-                        </Typography>
-                      </Stack>
-                    </Button>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      startIcon={<Scanner />}
-                      onClick={() => setScannerOpen(true)}
-                      sx={{ 
-                        p: 2, 
-                        borderRadius: 3,
-                        height: '100%',
-                        borderColor: 'secondary.main',
-                        color: 'secondary.main',
-                        '&:hover': { borderColor: 'secondary.dark' },
-                      }}
-                    >
-                      <Stack spacing={1}>
-                        <Typography variant="subtitle1" fontWeight="medium">
-                          Object Scanner
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Identify and log materials
-                        </Typography>
-                      </Stack>
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Paper 
-                sx={{ 
-                  p: 3, 
-                  borderRadius: 4, 
-                  bgcolor: 'background.paper', 
-                  boxShadow: 2,
-                  height: '100%',
-                }}
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                  <Typography variant="h6" fontWeight="medium">
-                    Recent Scans
-                  </Typography>
-                  <Button 
-                    size="small"
-                    endIcon={<ArrowForward />}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    View All
-                  </Button>
-                </Box>
-                {scannedItems.length === 0 ? (
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <Scanner sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      No recent scans
-                    </Typography>
-                  </Box>
-                ) : (
-                  <List dense>
-                    {scannedItems.slice(0, 3).map((item) => (
-                      <ListItem key={item.id} sx={{ px: 0 }}>
-                      <ListItemIcon>
-                          <QrCode2 color="primary" />
-                      </ListItemIcon>
-                      <ListItemText
-                          primary={item.data}
-                          secondary={new Date(item.timestamp).toLocaleString()}
-                        />
-                    </ListItem>
-                  ))}
-                </List>
-                )}
-              </Paper>
-            </Grid>
-          </Grid>
-
-          {/* Location Management */}
-          <Paper sx={{ p: 4, borderRadius: 4, boxShadow: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h5" fontWeight="medium">
-                Site Locations
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => setLocationDialogOpen(true)}
-                sx={{ borderRadius: 2, textTransform: 'none' }}
-              >
-                Add Location
-              </Button>
-            </Box>
-
-            {/* Tabs for different views */}
-            <Tabs value={currentTab} onChange={handleTabChange} sx={{ mb: 3 }}>
-              <Tab label="List View" />
-              <Tab label="Map View" />
-            </Tabs>
-
-            {/* List View */}
-            {currentTab === 0 && (
-              <Grid container spacing={3}>
-                {locations.length === 0 ? (
-                  <Grid item xs={12}>
-                    <Box sx={{ textAlign: 'center', py: 6 }}>
-                      <Map sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                      <Typography variant="h6" color="text.secondary" gutterBottom>
-                        No Site Locations
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Add your first site location to start tracking offsite work
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        startIcon={<Add />}
-                        onClick={() => setLocationDialogOpen(true)}
-                        sx={{ borderRadius: 2, textTransform: 'none' }}
-                      >
-                        Add First Location
-                      </Button>
-                    </Box>
-                  </Grid>
-                ) : (
-                  locations.map((location) => (
-                    <Grid item xs={12} md={6} key={location.id}>
-                      <Card
-                        sx={{
-                          borderRadius: 4,
-                          boxShadow: 1,
-                          '&:hover': {
-                            boxShadow: 4,
-                            transform: 'translateY(-4px)',
-                            transition: 'all 0.2s ease-in-out',
-                          },
-                        }}
-                      >
-                        <CardContent>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                            <Box>
-                              <Typography variant="h6" fontWeight="medium">
-                                {location.name}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {location.address}
-                              </Typography>
-                            </Box>
-                            <Chip
-                              label={location.status}
-                              color={getStatusColor(location.status)}
-                              sx={{ textTransform: 'capitalize' }}
-                            />
-                          </Box>
-                          <Box sx={{ mb: 2 }}>
-                            <Typography variant="body2" color="text.secondary" gutterBottom>
-                              Progress
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Box
-                                sx={{
-                                  flexGrow: 1,
-                                  bgcolor: 'action.hover',
-                                  borderRadius: 3,
-                                  height: 6,
-                                  position: 'relative',
-                                  overflow: 'hidden',
-                                }}
-                              >
-                                <Box
-                                  sx={{
-                                    position: 'absolute',
-                                    left: 0,
-                                    top: 0,
-                                    height: '100%',
-                                    bgcolor: 'primary.main',
-                                    width: `${location.progress}%`,
-                                    borderRadius: 3,
-                                  }}
-                                />
-                              </Box>
-                              <Typography variant="body2" color="text.secondary">
-                                {location.progress}%
-                              </Typography>
-                            </Box>
-                          </Box>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="body2" color="text.secondary">
-                              Last update: {location.lastUpdate}
-                            </Typography>
-                            <Button
-                              variant="outlined"
-                              startIcon={<Map />}
-                              onClick={() => handleViewMap(location)}
-                              sx={{ borderRadius: 2, textTransform: 'none' }}
-                            >
-                              View Map
-                            </Button>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))
-                )}
-              </Grid>
-            )}
-
-            {/* Map View */}
-            {currentTab === 1 && (
-              <Box>
-                {locations.length === 0 ? (
-                  <Box sx={{ textAlign: 'center', py: 6 }}>
-                    <Map sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
-                      No Locations to Display
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      Add site locations to see them on the map
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      startIcon={<Add />}
-                      onClick={() => setLocationDialogOpen(true)}
-                      sx={{ borderRadius: 2, textTransform: 'none' }}
-                    >
-                      Add Location
-                    </Button>
-                  </Box>
-                ) : (
-                  <Box sx={{ height: '400px', borderRadius: 3, overflow: 'hidden', bgcolor: 'grey.100', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Map sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                      <Typography variant="h6" color="text.secondary" gutterBottom>
-                        Map View
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {locations.length} location{locations.length !== 1 ? 's' : ''} available
-                            </Typography>
-                      <Button
-                        variant="outlined"
-                        startIcon={<LocationOn />}
-                        onClick={() => {
-                          if (locations.length > 0) {
-                            setSelectedLocation(locations[0]);
-                            setMapDialogOpen(true);
-                          }
-                        }}
-                        sx={{ borderRadius: 2, textTransform: 'none' }}
-                      >
-                        View First Location
-                      </Button>
-                    </Box>
-                  </Box>
-                )}
-              </Box>
-            )}
-          </Paper>
+        <Container maxWidth="xl" disableGutters sx={{ mt: { xs: 1.5, md: 2 }, ...fieldPageContentSx }}>
+          <FieldOpsConsole
+            locations={locations}
+            scannedItems={scannedItems}
+            queuedItems={queuedItems}
+            employees={employees}
+            offsiteWorkers={offsiteWorkers}
+            fieldAssignments={fieldAssignments}
+            onAssignFieldWork={handleAssignFieldWork}
+            onAddSite={() => setLocationDialogOpen(true)}
+            onViewMap={handleViewMap}
+            onOpenScanner={handleOpenScanner}
+            onOpenMobileTool={handleOpenMobileTool}
+            onDeleteSite={handleDeleteLocation}
+            onStatusChange={handleLocationStatusChange}
+            onProgressChange={handleLocationProgressUpdate}
+            getStatusColor={getStatusColor}
+            offlineMode={offlineMode}
+            onToggleOffline={() => setOfflineMode((v) => !v)}
+            onInsightNotify={(title, description, priority = 'medium') => {
+              addNotification(createNotification.system(title, description, priority));
+            }}
+          />
         </Container>
 
-        {/* Scanner Dialog */}
+        <MobileFieldOpsBar
+          offlineMode={offlineMode}
+          onToggleOffline={() => setOfflineMode((v) => !v)}
+          onQuickCheckIn={() => handleOpenMobileTool('gps')}
+          onQuickScan={() => handleOpenScanner('qr')}
+          onVoiceNote={() => {
+            addNotification(
+              createNotification.system(
+                'Voice note',
+                'Voice capture will attach to your active field assignment (coming soon).',
+                'low'
+              )
+            );
+          }}
+          onImageUpload={() => handleOpenMobileTool('photo')}
+          onGpsVerify={() => handleOpenMobileTool('gps')}
+          onEmergency={() => handleOpenMobileTool('escalate')}
+          onWhatsApp={() => {
+            addNotification(
+              createNotification.system(
+                'WhatsApp dispatch',
+                'Crew WhatsApp bridge will open your briefing thread (integration placeholder).',
+                'low'
+              )
+            );
+          }}
+          onCompleteTask={() => {
+            const active = fieldAssignments.find((a) => a.status === 'assigned' || a.status === 'in_progress');
+            if (active) {
+              addNotification(
+                createNotification.system(
+                  'Task completion',
+                  `Mark "${active.title}" complete from Task Management or submit site sign-off.`,
+                  'medium'
+                )
+              );
+            } else {
+              addNotification(
+                createNotification.system(
+                  'Task completion',
+                  'No active field assignments — assign work or complete a site from the console.',
+                  'low'
+                )
+              );
+            }
+          }}
+        />
+
+        <MobileWorkforceToolDialog
+          tool={mobileTool}
+          open={mobileTool !== null}
+          onClose={() => setMobileTool(null)}
+          locations={locations}
+          offlineMode={offlineMode}
+          onSubmit={handleMobileToolSubmit}
+        />
+
+        {/* Scanner Dialog — live camera QR / material scan */}
         <Dialog
           open={scannerOpen}
           onClose={() => setScannerOpen(false)}
@@ -671,42 +662,33 @@ const OffsiteWork: React.FC = () => {
           fullWidth
           PaperProps={{ sx: { borderRadius: 3 } }}
         >
-          <DialogTitle>
-            <Typography variant="h6" fontWeight="medium">
-              Scanner
+          <DialogTitle sx={{ pb: 1 }}>
+            <Typography variant="h6" fontWeight={700}>
+              {scannerMode === 'qr' ? 'QR verify' : 'Material scan'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {scannerMode === 'qr'
+                ? 'Your device camera opens automatically to verify site codes'
+                : 'Scan barcodes, QR tags, or material labels with your phone camera'}
             </Typography>
           </DialogTitle>
-          <DialogContent>
-            <Box
-              sx={{
-                aspectRatio: '4/3',
-                bgcolor: 'action.hover',
-                borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                mb: 2,
-              }}
-            >
-              <PhotoCamera sx={{ fontSize: 48, color: 'text.secondary' }} />
-            </Box>
-            <Typography variant="body2" color="text.secondary" align="center">
-              Point your camera at a QR code or object to scan
-            </Typography>
+          <DialogContent sx={{ pt: 1 }}>
+            <FieldScannerCapture
+              active={scannerOpen}
+              mode={scannerMode}
+              userName={getAuthUserLabel(user ?? undefined)}
+              accentColor={scannerMode === 'qr' ? '#6366f1' : '#f59e0b'}
+              onScan={handleScannerResult}
+            />
+            {offlineMode && (
+              <Typography variant="caption" color="warning.main" display="block" textAlign="center" sx={{ mt: 1.5 }}>
+                Offline mode — scans queue for sync when back online
+              </Typography>
+            )}
           </DialogContent>
-          <DialogActions sx={{ p: 3 }}>
-            <Button
-              onClick={() => setScannerOpen(false)}
-              sx={{ borderRadius: 2, textTransform: 'none' }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<CameraAlt />}
-              sx={{ borderRadius: 2, textTransform: 'none' }}
-            >
-              Take Photo
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setScannerOpen(false)} sx={{ borderRadius: 2, textTransform: 'none' }}>
+              Close
             </Button>
           </DialogActions>
         </Dialog>
@@ -721,7 +703,7 @@ const OffsiteWork: React.FC = () => {
         >
           <DialogTitle>
             <Typography variant="h6" fontWeight="medium">
-              Offsite Work Settings
+              Field Operations Settings
             </Typography>
           </DialogTitle>
           <DialogContent>
@@ -824,7 +806,7 @@ const OffsiteWork: React.FC = () => {
               Add New Location
             </Typography>
                 <Typography variant="subtitle1" sx={{ opacity: 0.9, fontWeight: 500 }}>
-                  Create a new offsite work location
+                  Create a new field site location
                 </Typography>
               </Box>
             </Box>
@@ -849,6 +831,20 @@ const OffsiteWork: React.FC = () => {
                 required
                 sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
               />
+              <FormControl fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}>
+                <InputLabel>Operation type</InputLabel>
+                <Select
+                  label="Operation type"
+                  value={newLocation.siteType}
+                  onChange={(e) => setNewLocation((prev) => ({ ...prev, siteType: e.target.value as SiteType }))}
+                >
+                  <MenuItem value="visit">Site visit</MenuItem>
+                  <MenuItem value="installation">Installation</MenuItem>
+                  <MenuItem value="inspection">Inspection</MenuItem>
+                  <MenuItem value="logistics">Logistics</MenuItem>
+                  <MenuItem value="general">Field task</MenuItem>
+                </Select>
+              </FormControl>
               <TextField
                 label="Initial Progress (%)"
                 type="number"

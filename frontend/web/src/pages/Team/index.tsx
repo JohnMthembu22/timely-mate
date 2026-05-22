@@ -48,6 +48,7 @@ import {
   Videocam as VideocamIcon,
 } from '@mui/icons-material';
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { Link as RouterLink } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import TeamDirectoryConsole, {
   type TeamDirectoryRow,
@@ -496,6 +497,15 @@ const Team: React.FC = () => {
             <Typography variant="h5" sx={{ fontWeight: 400, opacity: 0.9 }}>
               Comprehensive team performance and workload analysis
             </Typography>
+            <Button
+              component={RouterLink}
+              to="/workforce-intelligence"
+              variant="contained"
+              size="small"
+              sx={{ mt: 2, textTransform: 'none', bgcolor: 'rgba(255,255,255,0.2)', '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' } }}
+            >
+              Open Workforce Intelligence
+            </Button>
           </Box>
 
           <Grid container spacing={3} sx={{ mb: 4 }}>
