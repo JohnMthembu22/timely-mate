@@ -1,6 +1,9 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import authService, { LoginCredentials, SignupData } from '../../services/auth';
-import { getDefaultPermissions, UserRole, Department } from '../../types/auth';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import authService, { LoginCredentials, SignupData, AuthResponse, EmailConfirmationRequiredError } from '../../services/auth';
+import authServiceSupabase from '../../services/authSupabase';
+import { isSupabaseAuthEnabled } from '../../utils/authConfig';
+import { getUserPermissions, UserRole, Department, UserPermissions, MANAGER_PERMISSIONS, isManagerRole } from '../../types/auth';
+import { clearAuthStorage, readStoredAuth } from '../../utils/authSession';
 
 interface AuthState {
   user: any;
@@ -10,10 +13,21 @@ interface AuthState {
   error: string | null;
 }
 
+function mergeUserPermissions(user: AuthResponse['user']): AuthResponse['user'] {
+  const userRole = (user.role as UserRole) || 'employee';
+  const userDepartment = (user.department as Department) || 'other';
+  if (isManagerRole(userRole, userDepartment)) {
+    return { ...user, permissions: { ...MANAGER_PERMISSIONS } };
+  }
+  return { ...user, permissions: getUserPermissions(userRole, userDepartment) };
+}
+
+const stored = readStoredAuth();
+
 const initialState: AuthState = {
-  user: null,
-  token: null,
-  isAuthenticated: false,
+  user: stored ? mergeUserPermissions(stored.user) : null,
+  token: stored?.token ?? null,
+  isAuthenticated: !!stored,
   loading: false,
   error: null,
 };
@@ -22,10 +36,10 @@ export const login = createAsyncThunk(
   'auth/login',
   async (credentials: LoginCredentials, { rejectWithValue }) => {
     try {
-      const response = await authService.login(credentials);
-      return response;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Login failed');
+      return await authService.login(credentials);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Login failed';
+      return rejectWithValue(message);
     }
   }
 );
@@ -34,10 +48,44 @@ export const signup = createAsyncThunk(
   'auth/signup',
   async (data: SignupData, { rejectWithValue }) => {
     try {
-      const response = await authService.signup(data);
-      return response;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Signup failed');
+      return await authService.signup(data);
+    } catch (error: unknown) {
+      if (error instanceof EmailConfirmationRequiredError) {
+        return rejectWithValue({
+          code: 'EMAIL_CONFIRMATION',
+          email: error.email,
+          message: error.message,
+        });
+      }
+      const message = error instanceof Error ? error.message : 'Signup failed';
+      return rejectWithValue({ code: 'ERROR', message });
+    }
+  }
+);
+
+export const hydrateAuth = createAsyncThunk(
+  'auth/hydrate',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      if (!isSupabaseAuthEnabled()) {
+        dispatch(restoreFromStorage());
+        return null;
+      }
+
+      const authenticated = await authServiceSupabase.isAuthenticated();
+      if (!authenticated) {
+        clearAuthStorage();
+        return null;
+      }
+
+      const token = await authServiceSupabase.getToken();
+      const user = await authServiceSupabase.getCurrentUser();
+      if (!token || !user) return null;
+
+      return { token, user } as AuthResponse;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Session restore failed';
+      return rejectWithValue(message);
     }
   }
 );
@@ -45,7 +93,8 @@ export const signup = createAsyncThunk(
 export const logout = createAsyncThunk(
   'auth/logout',
   async () => {
-    authService.logout();
+    await authService.logout();
+    clearAuthStorage();
   }
 );
 
@@ -54,6 +103,32 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     clearError: (state) => {
+      state.error = null;
+    },
+    restoreFromStorage: (state) => {
+      const session = readStoredAuth();
+      if (!session) return;
+      state.token = session.token;
+      state.user = mergeUserPermissions(session.user);
+      state.isAuthenticated = true;
+      state.loading = false;
+      state.error = null;
+    },
+    setSession: (
+      state,
+      action: PayloadAction<{ user: AuthResponse['user']; token: string }>
+    ) => {
+      state.token = action.payload.token;
+      state.user = mergeUserPermissions(action.payload.user);
+      state.isAuthenticated = true;
+      state.loading = false;
+      state.error = null;
+    },
+    clearSession: (state) => {
+      state.user = null;
+      state.token = null;
+      state.isAuthenticated = false;
+      state.loading = false;
       state.error = null;
     },
   },
@@ -66,50 +141,7 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
-        // Ensure user has permissions - always use default permissions based on role
-        const user = action.payload.user;
-        if (user) {
-          const userRole = (user.role as UserRole) || 'employee';
-          const userDepartment = (user.department as Department) || 'other';
-          const defaultPermissions = getDefaultPermissions(userRole, userDepartment);
-          
-          // For admin, manager, and executive users, always ensure ALL permissions are set
-          // For other users, merge stored permissions with defaults
-          const isAdmin = userRole === 'admin';
-          const isManager = userRole === 'team_leader';
-          const isExecutive = userDepartment === 'executive';
-          
-          if (isAdmin || isManager || isExecutive) {
-            // Admin, Manager, and Executive always get ALL permissions
-            user.permissions = {
-              canCreateTasks: true,
-              canEditTasks: true,
-              canDeleteTasks: true,
-              canAssignTasks: true,
-              canViewAllTasks: true,
-              canManageTeam: true,
-              canAccessReports: true,
-              canModifySettings: true,
-              canManageUsers: true,
-              canAccessHR: true,
-              canAccessFinance: true,
-              canAccessProjects: true,
-              canAccessTimeTracking: true,
-              canAccessExpenses: true,
-              canAccessProcurement: true,
-              canAccessLearning: true,
-            };
-          } else {
-            // Merge stored permissions with defaults, but prefer defaults if stored is empty
-            if (!user.permissions || Object.keys(user.permissions).length === 0) {
-              user.permissions = defaultPermissions;
-            } else {
-              // Merge to ensure all permission keys exist
-              user.permissions = { ...defaultPermissions, ...user.permissions };
-            }
-          }
-        }
-        state.user = user;
+        state.user = mergeUserPermissions(action.payload.user);
         state.token = action.payload.token;
       })
       .addCase(login.rejected, (state, action) => {
@@ -123,63 +155,39 @@ const authSlice = createSlice({
       .addCase(signup.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
-        // Ensure user has permissions - always use default permissions based on role
-        const user = action.payload.user;
-        if (user) {
-          const userRole = (user.role as UserRole) || 'employee';
-          const userDepartment = (user.department as Department) || 'other';
-          const defaultPermissions = getDefaultPermissions(userRole, userDepartment);
-          
-          // For admin, manager, and executive users, always ensure ALL permissions are set
-          // For other users, merge stored permissions with defaults
-          const isAdmin = userRole === 'admin';
-          const isManager = userRole === 'team_leader';
-          const isExecutive = userDepartment === 'executive';
-          
-          if (isAdmin || isManager || isExecutive) {
-            // Admin, Manager, and Executive always get ALL permissions
-            user.permissions = {
-              canCreateTasks: true,
-              canEditTasks: true,
-              canDeleteTasks: true,
-              canAssignTasks: true,
-              canViewAllTasks: true,
-              canManageTeam: true,
-              canAccessReports: true,
-              canModifySettings: true,
-              canManageUsers: true,
-              canAccessHR: true,
-              canAccessFinance: true,
-              canAccessProjects: true,
-              canAccessTimeTracking: true,
-              canAccessExpenses: true,
-              canAccessProcurement: true,
-              canAccessLearning: true,
-            };
-          } else {
-            // Merge stored permissions with defaults, but prefer defaults if stored is empty
-            if (!user.permissions || Object.keys(user.permissions).length === 0) {
-              user.permissions = defaultPermissions;
-            } else {
-              // Merge to ensure all permission keys exist
-              user.permissions = { ...defaultPermissions, ...user.permissions };
-            }
-          }
-        }
-        state.user = user;
+        state.user = mergeUserPermissions(action.payload.user);
         state.token = action.payload.token;
       })
       .addCase(signup.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload as string;
+        const payload = action.payload as { code?: string; message?: string } | string | undefined;
+        if (typeof payload === 'string') {
+          state.error = payload;
+        } else if (payload?.code === 'EMAIL_CONFIRMATION') {
+          state.error = null;
+        } else {
+          state.error = payload?.message ?? 'Signup failed';
+        }
       })
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
         state.token = null;
         state.isAuthenticated = false;
+      })
+      .addCase(hydrateAuth.fulfilled, (state, action) => {
+        if (!action.payload) {
+          state.user = null;
+          state.token = null;
+          state.isAuthenticated = false;
+          return;
+        }
+        state.loading = false;
+        state.isAuthenticated = true;
+        state.user = mergeUserPermissions(action.payload.user);
+        state.token = action.payload.token;
       });
   },
 });
 
-export const { clearError } = authSlice.actions;
+export const { clearError, restoreFromStorage, setSession, clearSession } = authSlice.actions;
 export default authSlice.reducer;

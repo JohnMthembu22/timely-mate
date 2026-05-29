@@ -67,41 +67,6 @@ export function buildSmartAssignmentInsights(
   const insights: SmartAssignmentInsight[] = [];
   const depts = [...new Set(employees.map((e) => e.department))];
 
-  const designProject = projects.find((p) => /design|ui|creative/i.test(p.name));
-  const opsProject = projects.find((p) => /operation|process/i.test(p.name));
-  const legalProject = projects.find((p) => /legal|hr|compliance/i.test(p.name));
-
-  insights.push({
-    id: 'sug-design',
-    type: 'suggestion',
-    headline: 'Suggested: Assign Design tasks to Creative Team.',
-    detail: '3 open design tasks match Creative department capacity with 22% spare bandwidth.',
-    department: 'Design',
-    confidence: 86,
-  });
-
-  if (opsProject) {
-    insights.push({
-      id: 'sug-ops',
-      type: 'rebalance',
-      headline: `Suggested: Move 2 resources from ${opsProject.name}.`,
-      detail: 'Operations lane is at 94% utilization — reassign to Platform or QA squads.',
-      department: 'Operations',
-      confidence: 79,
-    });
-  }
-
-  insights.push({
-    id: 'warn-legal',
-    type: 'warning',
-    headline: 'Warning: Legal team currently overloaded.',
-    detail: legalProject
-      ? `${legalProject.name} has approval bottlenecks and 2 overdue dependencies.`
-      : 'Compliance approvals are blocking 2 downstream deliverables.',
-    department: 'Legal',
-    confidence: 91,
-  });
-
   const unassigned = projects.reduce(
     (n, p) => n + p.projectTasks.filter((t) => !t.assignee && t.status !== 'completed').length,
     0
@@ -115,17 +80,6 @@ export function buildSmartAssignmentInsights(
       confidence: 88,
     });
   }
-
-  depts.slice(0, 1).forEach((d) => {
-    insights.push({
-      id: `sug-${d}`,
-      type: 'suggestion',
-      headline: `Prioritize ${d} high-impact work this sprint.`,
-      detail: 'Model recommends locking deadlines for top 2 P1 items in this lane.',
-      department: d,
-      confidence: 72,
-    });
-  });
 
   return insights.slice(0, 5);
 }
@@ -152,33 +106,7 @@ export function buildAssignmentQueue(projects: HubProject[]): AssignmentQueueIte
         });
       });
   });
-  if (queue.length === 0) {
-    return [
-      {
-        id: 'demo-1',
-        title: 'Brand guidelines review',
-        projectId: 'demo',
-        projectName: 'UI/UX Redesign',
-        projectColor: '#8b5cf6',
-        department: 'Design',
-        priority: 'high',
-        dueDate: new Date().toISOString().split('T')[0],
-        dependency: 'Legal sign-off',
-        assigneeSuggestion: 'Creative lead',
-      },
-      {
-        id: 'demo-2',
-        title: 'API contract finalization',
-        projectId: 'demo',
-        projectName: 'Platform Development',
-        projectColor: '#3b82f6',
-        department: 'Engineering',
-        priority: 'medium',
-        dueDate: new Date().toISOString().split('T')[0],
-        assigneeSuggestion: 'Senior developer',
-      },
-    ];
-  }
+  if (queue.length === 0) return [];
   return queue.slice(0, 8);
 }
 

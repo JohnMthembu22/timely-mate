@@ -25,58 +25,6 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import TeamMemberStatus from '../TeamMemberStatus';
 import { UserStatus } from '../../contexts/UserStatusContext';
 
-// Sample team member data
-const mockTeamMembers = [
-  {
-    id: '1',
-    name: 'Jane Smith',
-    status: 'available' as UserStatus,
-    avatar: '/avatars/avatar-1.jpg',
-    department: 'Design',
-    lastActiveTime: new Date(Date.now() - 5 * 60000) // 5 minutes ago
-  },
-  {
-    id: '2',
-    name: 'John Doe',
-    status: 'busy' as UserStatus,
-    avatar: '/avatars/avatar-2.jpg',
-    department: 'Engineering',
-    lastActiveTime: new Date(Date.now() - 15 * 60000) // 15 minutes ago
-  },
-  {
-    id: '3',
-    name: 'Michael Johnson',
-    status: 'inMeeting' as UserStatus,
-    avatar: '/avatars/avatar-3.jpg',
-    department: 'Product',
-    lastActiveTime: new Date(Date.now() - 30 * 60000) // 30 minutes ago
-  },
-  {
-    id: '4',
-    name: 'Emily Davis',
-    status: 'away' as UserStatus,
-    avatar: '/avatars/avatar-4.jpg',
-    department: 'Marketing',
-    lastActiveTime: new Date(Date.now() - 120 * 60000) // 2 hours ago
-  },
-  {
-    id: '5',
-    name: 'Robert Wilson',
-    status: 'doNotDisturb' as UserStatus,
-    avatar: '/avatars/avatar-5.jpg',
-    department: 'Engineering',
-    lastActiveTime: new Date(Date.now() - 45 * 60000) // 45 minutes ago
-  },
-  {
-    id: '6',
-    name: 'Samantha Lee',
-    status: 'offline' as UserStatus,
-    avatar: '/avatars/avatar-6.jpg',
-    department: 'HR',
-    lastActiveTime: new Date(Date.now() - 24 * 60 * 60000) // 1 day ago
-  }
-];
-
 export interface TeamMember {
   id: string;
   name: string;
@@ -93,8 +41,13 @@ interface TeamStatusDashboardProps {
 const TeamStatusDashboard: React.FC<TeamStatusDashboardProps> = ({ 
   title = 'Team Status' 
 }) => {
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
-  const [filteredMembers, setFilteredMembers] = useState<TeamMember[]>(mockTeamMembers);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [filteredMembers, setFilteredMembers] = useState<TeamMember[]>([]);
+
+  useEffect(() => {
+    setTeamMembers([]);
+    setFilteredMembers([]);
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTab, setSelectedTab] = useState(0);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);

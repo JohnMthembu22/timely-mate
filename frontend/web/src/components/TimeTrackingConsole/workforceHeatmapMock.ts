@@ -1,3 +1,4 @@
+
 export type HeatmapView =
   | 'department'
   | 'productivity'
@@ -28,6 +29,7 @@ function seededValue(seed: number, max: number) {
 }
 
 export function buildHeatmapData(view: HeatmapView): WorkforceHeatmapData {
+  return { rows: [], cols: [], cells: [], maxValue: 0 };
   switch (view) {
     case 'department': {
       const rows = ['Engineering', 'UI/UX', 'Operations', 'Field', 'Creative'];

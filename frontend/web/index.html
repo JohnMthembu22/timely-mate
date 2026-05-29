@@ -2,8 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -22,6 +26,25 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Route Supabase email hash tokens before the app bundle loads -->
+    <script>
+      (function () {
+        var hash = window.location.hash;
+        if (!hash || hash === '#') return;
+        var params = new URLSearchParams(hash.charAt(0) === '#' ? hash.slice(1) : hash);
+        var hasPayload =
+          params.has('access_token') || params.has('error') || params.has('error_description') || params.has('code');
+        if (!hasPayload) return;
+        var type = params.get('type');
+        var path =
+          type === 'recovery' || params.has('error') || params.has('error_description')
+            ? '/auth/reset-password'
+            : '/auth/callback';
+        if (!window.location.pathname.startsWith(path)) {
+          window.location.replace(path + hash);
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

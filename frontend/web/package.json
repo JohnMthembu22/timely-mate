@@ -6,6 +6,7 @@
   "main": "electron/main.cjs",
   "homepage": "./",
   "scripts": {
+    "setup:env": "node -e \"const fs=require('fs');const t='.env.example';const p='.env';if(fs.existsSync(p)){console.log('✓',p,'already exists');process.exit(0)}if(!fs.existsSync(t)){console.error('Missing',t);process.exit(1)}fs.copyFileSync(t,p);console.log('Created',p,'— add your VITE_SUPABASE_ANON_KEY from Supabase Dashboard → Settings → API')\"",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",

@@ -42,7 +42,8 @@ import {
   type FieldIncidentReport,
   type IncidentStatus,
 } from '../incidentReportTypes';
-import { saveIncidentReports, seedIncidentReportsIfEmpty } from '../incidentReportStorage';
+import { isPresentationIncidentId } from '../../../utils/legacyDemoCleanup';
+import { loadIncidentReports, saveIncidentReports } from '../incidentReportStorage';
 import {
   buildIncidentReportFromForm,
   defaultIncidentFormState,
@@ -102,7 +103,12 @@ const IncidentReportsPage: React.FC = () => {
   const user = useAppSelector((state) => state.auth.user);
   const { employees } = useEmployees();
   const { addNotification, addNotificationForRecipient } = useNotifications();
-  const [reports, setReports] = useState<FieldIncidentReport[]>(() => seedIncidentReportsIfEmpty());
+  const filterRealReports = (list: FieldIncidentReport[]) =>
+    list.filter((r) => !isPresentationIncidentId(r.id));
+
+  const [reports, setReports] = useState<FieldIncidentReport[]>(() =>
+    filterRealReports(loadIncidentReports())
+  );
   const [statusFilter, setStatusFilter] = useState<IncidentStatus | 'all'>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailReport, setDetailReport] = useState<FieldIncidentReport | null>(null);
@@ -110,6 +116,15 @@ const IncidentReportsPage: React.FC = () => {
 
   const [form, setForm] = useState<IncidentReportFormState>(defaultIncidentFormState);
   const [formValidationMessage, setFormValidationMessage] = useState<string | undefined>();
+
+  useEffect(() => {
+    const raw = loadIncidentReports();
+    const loaded = filterRealReports(raw);
+    setReports(loaded);
+    if (loaded.length !== raw.length) {
+      saveIncidentReports(loaded);
+    }
+  }, []);
 
   useEffect(() => {
     try {

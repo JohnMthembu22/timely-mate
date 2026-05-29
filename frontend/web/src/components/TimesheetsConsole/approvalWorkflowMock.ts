@@ -1,3 +1,5 @@
+import { emptyApprovalWorkflow } from '../../utils/emptyData';
+
 export type ApprovalQueueType =
   | 'pending'
   | 'manager_review'
@@ -30,6 +32,21 @@ export interface ApprovalWorkflowBundle {
 
 export function buildApprovalWorkflow(entries: { id: string; project: string; duration: string; status: string }[]): ApprovalWorkflowBundle {
   const pending = entries.filter((e) => e.status === 'Pending' || e.status === 'Draft');
+  return {
+      ...emptyApprovalWorkflow(),
+      items: pending.map((e, i) => ({
+        id: e.id,
+        type: 'pending' as ApprovalQueueType,
+        employeeName: e.project,
+        project: e.project,
+        hours: e.duration,
+        submittedAt: 'Pending review',
+        severity: 'info' as const,
+        aiRecommendation: 'Review hours against project allocation.',
+        entryId: e.id,
+      })),
+      pendingCount: pending.length,
+    };
   const names = ['Alex Rivera', 'Jordan Kim', 'Sam Patel', 'Taylor Brooks', 'Morgan Lee'];
 
   const items: ApprovalQueueItem[] = [

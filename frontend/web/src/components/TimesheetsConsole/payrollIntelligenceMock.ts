@@ -1,3 +1,5 @@
+import { EMPTY_PAYROLL_INTELLIGENCE } from '../../utils/emptyData';
+
 export type PayrollInsightSeverity = 'info' | 'warning' | 'critical';
 
 export type PayrollInsightCategory =
@@ -43,6 +45,7 @@ export function buildPayrollIntelligenceBundle(
   approvedHours: string,
   pendingHours: string
 ): PayrollIntelligenceBundle {
+  return EMPTY_PAYROLL_INTELLIGENCE;
   return {
     projectedPayroll: {
       amount: 'R 4 892 000',

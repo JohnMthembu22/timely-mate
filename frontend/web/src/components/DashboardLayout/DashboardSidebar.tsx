@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -22,8 +22,9 @@ import {
 } from '@mui/icons-material';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { logout } from '../../store/slices/authSlice';
+import { performAppLogout } from '../../utils/authSession';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { UserPermissions } from '../../types/auth';
 import { useNotifications } from '../../contexts/NotificationContext';
 import {
@@ -78,7 +79,8 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   const { user, loading } = useAppSelector((state) => state.auth);
   const { unreadCount } = useNotifications();
   const isClockedIn = localStorage.getItem('clockInToday') === new Date().toDateString();
-  const { canCreateTasks, isEmployee, hasPermission, isAdmin } = usePermissions();
+  const { canCreateProjects, isManager, isEmployee, hasPermission } = usePermissions();
+  const { hasFeature } = useSubscription();
 
   const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>(() => {
     try {
@@ -117,26 +119,14 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
       if (isAuthenticated && loading) return true;
       if (!isAuthenticated || !user) return true;
 
-      const isManager = user.role === 'team_leader';
-      const isExecutive = user.department === 'executive';
-      if (isAdmin() || isManager || isExecutive) return true;
-      if (TESTING_MODE_UNLOCK_ALL) return true;
+      if (isManager() || TESTING_MODE_UNLOCK_ALL) return true;
       if (!item.permission) return true;
 
-      try {
-        const hasAccess = hasPermission(item.permission as keyof UserPermissions);
-        if (!hasAccess) {
-          const basicPermissions = ['canAccessTimeTracking'];
-          if (basicPermissions.includes(item.permission)) return true;
-          return false;
-        }
-        return true;
-      } catch (error) {
-        console.warn('Error checking permission:', error);
-        return true;
-      }
+      if (!hasPermission(item.permission as keyof UserPermissions)) return false;
+      if (item.subscriptionFeature && !hasFeature(item.subscriptionFeature)) return false;
+      return true;
     },
-    [user, loading, isAdmin, hasPermission]
+    [user, loading, isManager, hasPermission, hasFeature]
   );
 
   const visibleGroups = useMemo(
@@ -152,10 +142,35 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
 
   const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'TimelyMate';
   const accountLabel = user?.role ? String(user.role).replace(/_/g, ' ') : 'Account';
+  const navScrollRef = useRef<HTMLDivElement>(null);
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const activeGroup = visibleGroups.find((group) =>
+      group.items.some((item) => isNavItemActive(location.pathname, item.path))
+    );
+    if (activeGroup) {
+      setExpandedGroups((prev) => {
+        if (prev[activeGroup.group]) return prev;
+        const next = { ...prev, [activeGroup.group]: true };
+        persistGroups(next);
+        return next;
+      });
+    }
+  }, [location.pathname, visibleGroups, persistGroups]);
+
+  useEffect(() => {
+    const el = activeItemRef.current;
+    const container = navScrollRef.current;
+    if (!el || !container) return;
+    const frame = requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [location.pathname, collapsed]);
 
   const handleLogout = async () => {
-    await dispatch(logout());
-    navigate('/login');
+    await performAppLogout(dispatch, navigate);
   };
 
   const goTo = (path: string) => {
@@ -170,6 +185,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
 
     const button = (
       <ListItemButton
+        ref={selected ? activeItemRef : undefined}
         data-tour={NAV_TOUR_ATTR[item.path]}
         onClick={() => goTo(item.path)}
         selected={selected}
@@ -234,13 +250,9 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
             <ListItemText
               primary={item.text}
               secondary={
-                item.restricted && item.path === '/projects' && isEmployee() ? (
+                item.path === '/projects' ? (
                   <Typography component="span" variant="caption" sx={{ fontSize: '0.65rem', color: T.muted, lineHeight: 1.2 }}>
-                    View only
-                  </Typography>
-                ) : item.description && item.path === '/projects' ? (
-                  <Typography component="span" variant="caption" sx={{ fontSize: '0.65rem', color: T.muted, lineHeight: 1.2 }}>
-                    {canCreateTasks() ? 'Create & manage' : 'Assigned tasks'}
+                    {canCreateProjects() ? 'Create & manage' : 'View assigned work'}
                   </Typography>
                 ) : undefined
               }
@@ -289,8 +301,8 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           />
         )}
 
-        {!collapsed && item.path === '/projects' && isEmployee() && (
-          <Tooltip title="Limited to assigned tasks">
+        {!collapsed && item.path === '/projects' && isEmployee() && !canCreateProjects() && (
+          <Tooltip title="View only — managers create and assign projects">
             <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }} />
           </Tooltip>
         )}
@@ -390,10 +402,12 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
     <Box
       sx={{
         height: '100%',
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         bgcolor: T.bg,
         color: T.text,
+        overflow: 'hidden',
       }}
     >
       {/* Brand header */}
@@ -517,10 +531,12 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
 
       {/* Navigation */}
       <Box
+        ref={navScrollRef}
         component="nav"
         aria-label="Dashboard"
         sx={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           overflowX: 'hidden',
           py: 2,

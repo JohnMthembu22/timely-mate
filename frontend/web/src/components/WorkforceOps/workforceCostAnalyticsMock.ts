@@ -1,3 +1,4 @@
+
 export type CostAnalyticsView =
   | 'department'
   | 'project'
@@ -34,6 +35,22 @@ export function buildWorkforceCostAnalytics(
   approvedHours: string,
   pendingHours: string
 ): WorkforceCostAnalyticsBundle {
+  return {
+      totalLaborCost: 0,
+      overtimeSpend: 0,
+      utilizationEfficiency: 0,
+      forecastVariance: '—',
+      operationalMargin: 0,
+      aiSummary: `Labor analytics will populate from approved (${approvedHours}) and pending (${pendingHours}) hours.`,
+      departmentCosts: [],
+      projectCosts: [],
+      overtimeTrend: [],
+      utilizationByDept: [],
+      forecastTrend: [],
+      productivityVsCost: [],
+      profitability: [],
+      costTrendWeekly: [],
+    };
   return {
     totalLaborCost: 284200,
     overtimeSpend: 42800,

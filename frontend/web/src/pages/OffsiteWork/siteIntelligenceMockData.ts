@@ -28,10 +28,27 @@ function riskFromProgress(progress: number, status: SiteLocation['status']): Sit
 }
 
 export function buildSiteIntelligence(loc: SiteLocation): SiteIntelligence {
-  const h = hashId(loc.id);
   const coords = mockCoords(loc);
   const progress = loc.progress;
   const risk = riskFromProgress(progress, loc.status);
+  return {
+      siteId: loc.id,
+      healthScore: progress,
+      completionStatus: loc.status === 'completed' ? 'Complete' : 'In progress',
+      supervisor: loc.assignedCrew ?? '—',
+      workforceCount: 0,
+      riskLevel: risk,
+      estimatedCompletion: '—',
+      weather: { tempC: 0, condition: '—', windKph: 0, icon: 'sun' },
+      safetyAlerts: [],
+      activeTasks: [],
+      materialDelivery: { status: 'scheduled', eta: '—', items: 0, carrier: '—' },
+      checkLogs: [],
+      sitePhotos: [],
+      droneImages: [],
+      mapCoords: coords,
+    };
+  const h = hashId(loc.id);
   const health = Math.max(42, Math.min(98, 55 + Math.round(progress * 0.38) - (risk === 'high' ? 18 : risk === 'medium' ? 8 : 0)));
 
   const workforce = loc.status === 'active' ? 3 + (h % 5) : loc.status === 'pending' ? 0 : 1 + (h % 2);

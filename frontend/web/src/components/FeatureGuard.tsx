@@ -1,4 +1,5 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogTitle,
@@ -14,65 +15,84 @@ import {
   List,
   ListItem,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  CircularProgress,
 } from '@mui/material';
 import {
   Lock as LockIcon,
   Upgrade as UpgradeIcon,
   Check as CheckIcon,
-  Star as StarIcon
+  Star as StarIcon,
 } from '@mui/icons-material';
 import { useSubscription } from '../contexts/SubscriptionContext';
-import { PlanFeatures, getRequiredPlanForEmployeeCount } from '../types/subscription';
+import { PlanFeatures, getRecommendedUpgradePlan } from '../types/subscription';
+import { useNotifications, createNotification } from '../contexts/NotificationContext';
 
 interface FeatureGuardProps {
   feature: keyof PlanFeatures;
   children: ReactNode;
   fallback?: ReactNode;
-  showUpgradePrompt?: boolean;
+  /** When false, hides upgrade UI (rare). Defaults to true. */
+  allowUpgradePrompt?: boolean;
 }
 
 const FeatureGuard: React.FC<FeatureGuardProps> = ({
   feature,
   children,
   fallback,
-  showUpgradePrompt = true
+  allowUpgradePrompt = true,
 }) => {
-  const { 
-    hasFeature, 
-    currentPlan, 
-    companyProfile, 
-    showUpgradePrompt: showUpgrade,
-    setShowUpgradePrompt,
-    updateSubscription
-  } = useSubscription();
+  const navigate = useNavigate();
+  const { hasFeature, currentPlan, updateSubscription } = useSubscription();
+  const { addNotification } = useNotifications();
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
 
-  const [upgradeDialogOpen, setUpgradeDialogOpen] = React.useState(false);
+  const recommendedPlan = getRecommendedUpgradePlan(currentPlan?.id, feature);
 
-  const canAccess = hasFeature(feature);
-
-  if (canAccess) {
+  if (hasFeature(feature)) {
     return <>{children}</>;
   }
 
+  const goToPricing = () => {
+    setUpgradeDialogOpen(false);
+    navigate('/pricing', { state: { highlightPlan: recommendedPlan.id } });
+  };
+
   const handleUpgradeClick = () => {
-    if (showUpgradePrompt) {
-      setUpgradeDialogOpen(true);
-    }
+    if (!allowUpgradePrompt) return;
+    (document.activeElement as HTMLElement | null)?.blur();
+    setUpgradeDialogOpen(true);
   };
 
   const handleUpgradeConfirm = async () => {
-    if (companyProfile) {
-      const requiredPlan = getRequiredPlanForEmployeeCount(companyProfile.employeeCount);
-      const success = await updateSubscription(requiredPlan.id);
+    setUpgrading(true);
+    try {
+      const success = await updateSubscription(recommendedPlan.id);
       if (success) {
+        addNotification(
+          createNotification.system(
+            'Plan upgraded',
+            `You are now on the ${recommendedPlan.name} plan.`,
+            'low'
+          )
+        );
         setUpgradeDialogOpen(false);
-        setShowUpgradePrompt(false);
+      } else {
+        addNotification(
+          createNotification.system(
+            'Upgrade failed',
+            'Could not update your plan. Try again from the pricing page.',
+            'high'
+          )
+        );
       }
+    } finally {
+      setUpgrading(false);
     }
   };
 
-  const getFeatureName = (feature: keyof PlanFeatures): string => {
+  const getFeatureName = (f: keyof PlanFeatures): string => {
     const featureNames: Record<keyof PlanFeatures, string> = {
       timeTracking: 'Time Tracking',
       basicReporting: 'Basic Reporting',
@@ -105,20 +125,18 @@ const FeatureGuard: React.FC<FeatureGuardProps> = ({
       learningPortal: 'Learning Portal',
       storageGB: 'Storage',
       monthlyReports: 'Monthly Reports',
-      integrationLimit: 'Integration Limit'
+      integrationLimit: 'Integration Limit',
     };
-    return featureNames[feature] || feature;
+    return featureNames[f] || f;
   };
 
   const defaultFallback = (
-    <Card 
-      sx={{ 
+    <Card
+      sx={{
         border: '2px dashed',
         borderColor: 'grey.300',
         bgcolor: 'grey.50',
-        cursor: showUpgradePrompt ? 'pointer' : 'default'
       }}
-      onClick={handleUpgradeClick}
     >
       <CardContent sx={{ textAlign: 'center', py: 4 }}>
         <LockIcon sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
@@ -126,20 +144,30 @@ const FeatureGuard: React.FC<FeatureGuardProps> = ({
           {getFeatureName(feature)} Not Available
         </Typography>
         <Typography variant="body2" color="text.secondary" paragraph>
-          This feature requires a higher subscription plan.
+          This feature requires the <strong>{recommendedPlan.name}</strong> plan or higher.
         </Typography>
-        {showUpgradePrompt && (
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<UpgradeIcon />}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleUpgradeClick();
+        {allowUpgradePrompt && (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 1.5,
+              justifyContent: 'center',
+              alignItems: 'center',
             }}
           >
-            Upgrade Plan
-          </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<UpgradeIcon />}
+              onClick={handleUpgradeClick}
+            >
+              Upgrade Plan
+            </Button>
+            <Button variant="outlined" onClick={goToPricing}>
+              View Plans
+            </Button>
+          </Box>
         )}
       </CardContent>
     </Card>
@@ -148,10 +176,9 @@ const FeatureGuard: React.FC<FeatureGuardProps> = ({
   return (
     <>
       {fallback || defaultFallback}
-      
-      {/* Upgrade Dialog */}
-      <Dialog 
-        open={upgradeDialogOpen} 
+
+      <Dialog
+        open={upgradeDialogOpen}
         onClose={() => setUpgradeDialogOpen(false)}
         maxWidth="md"
         fullWidth
@@ -162,79 +189,79 @@ const FeatureGuard: React.FC<FeatureGuardProps> = ({
             <Typography variant="h6">Upgrade Required</Typography>
           </Box>
         </DialogTitle>
-        
+
         <DialogContent>
           <Alert severity="info" sx={{ mb: 3 }}>
-            <AlertTitle>Feature Not Available</AlertTitle>
+            <AlertTitle>Feature not available</AlertTitle>
             <strong>{getFeatureName(feature)}</strong> is not included in your current{' '}
-            <strong>{currentPlan?.name}</strong> plan.
+            <strong>{currentPlan?.name ?? 'plan'}</strong>.
           </Alert>
 
-          {companyProfile && (
-            <Card sx={{ border: '2px solid', borderColor: 'primary.main' }}>
-              <CardContent>
-                <Box display="flex" alignItems="center" gap={1} mb={2}>
-                  <StarIcon color="primary" />
-                  <Typography variant="h6" fontWeight="bold">
-                    Recommended: {getRequiredPlanForEmployeeCount(companyProfile.employeeCount).name}
-                  </Typography>
-                </Box>
-
-                <Typography variant="body1" color="text.secondary" paragraph>
-                  Based on your company size of {companyProfile.employeeCount} employees.
+          <Card sx={{ border: '2px solid', borderColor: 'primary.main' }}>
+            <CardContent>
+              <Box display="flex" alignItems="center" gap={1} mb={2}>
+                <StarIcon color="primary" />
+                <Typography variant="h6" fontWeight="bold">
+                  Recommended: {recommendedPlan.name}
                 </Typography>
+              </Box>
 
-                <Typography variant="subtitle2" gutterBottom>
-                  What you'll get:
-                </Typography>
-                
-                <List dense>
-                  <ListItem disablePadding>
-                    <ListItemIcon><CheckIcon color="success" fontSize="small" /></ListItemIcon>
-                    <ListItemText primary={`${getFeatureName(feature)} feature`} />
-                  </ListItem>
-                  <ListItem disablePadding>
-                    <ListItemIcon><CheckIcon color="success" fontSize="small" /></ListItemIcon>
-                    <ListItemText primary="All current plan features" />
-                  </ListItem>
-                  <ListItem disablePadding>
-                    <ListItemIcon><CheckIcon color="success" fontSize="small" /></ListItemIcon>
-                    <ListItemText primary="Increased limits and storage" />
-                  </ListItem>
-                  <ListItem disablePadding>
-                    <ListItemIcon><CheckIcon color="success" fontSize="small" /></ListItemIcon>
-                    <ListItemText primary="Priority customer support" />
-                  </ListItem>
-                </List>
+              <Typography variant="body1" color="text.secondary" paragraph>
+                {recommendedPlan.description}
+              </Typography>
 
-                <Box mt={2}>
-                  <Typography variant="h5" color="primary" fontWeight="bold">
-                    {getRequiredPlanForEmployeeCount(companyProfile.employeeCount).price === 0 
-                      ? 'Free' 
-                      : `R${getRequiredPlanForEmployeeCount(companyProfile.employeeCount).price}`}
-                    <Typography variant="body2" component="span" color="text.secondary">
-                      {getRequiredPlanForEmployeeCount(companyProfile.employeeCount).price === 0 
-                        ? ' Forever' 
-                        : ' per person per month'}
-                    </Typography>
+              <Typography variant="subtitle2" gutterBottom>
+                What you&apos;ll get:
+              </Typography>
+
+              <List dense>
+                <ListItem disablePadding>
+                  <ListItemIcon>
+                    <CheckIcon color="success" fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary={`${getFeatureName(feature)}`} />
+                </ListItem>
+                <ListItem disablePadding>
+                  <ListItemIcon>
+                    <CheckIcon color="success" fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary="All features from your current plan" />
+                </ListItem>
+                <ListItem disablePadding>
+                  <ListItemIcon>
+                    <CheckIcon color="success" fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary="Higher limits and storage" />
+                </ListItem>
+              </List>
+
+              <Box mt={2}>
+                <Typography variant="h5" color="primary" fontWeight="bold">
+                  {recommendedPlan.price === 0 ? 'Free' : `R${recommendedPlan.price}`}
+                  <Typography variant="body2" component="span" color="text.secondary" sx={{ ml: 0.5 }}>
+                    {recommendedPlan.price === 0 ? ' forever' : ' per person / month'}
                   </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          )}
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
         </DialogContent>
 
-        <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setUpgradeDialogOpen(false)}>
+        <DialogActions sx={{ p: 3, flexWrap: 'wrap', gap: 1 }}>
+          <Button onClick={() => setUpgradeDialogOpen(false)} disabled={upgrading}>
             Maybe Later
           </Button>
-          <Button 
-            variant="contained" 
+          <Button variant="outlined" onClick={goToPricing} disabled={upgrading}>
+            Compare Plans
+          </Button>
+          <Button
+            variant="contained"
             onClick={handleUpgradeConfirm}
-            startIcon={<UpgradeIcon />}
+            startIcon={upgrading ? <CircularProgress size={18} color="inherit" /> : <UpgradeIcon />}
             size="large"
+            disabled={upgrading || currentPlan?.id === recommendedPlan.id}
           >
-            Upgrade Now
+            {upgrading ? 'Upgrading…' : 'Upgrade Now'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -242,4 +269,4 @@ const FeatureGuard: React.FC<FeatureGuardProps> = ({
   );
 };
 
-export default FeatureGuard; 
+export default FeatureGuard;

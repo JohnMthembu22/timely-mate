@@ -129,8 +129,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
           zIndex: theme.zIndex.drawer,
           height: '100dvh',
           maxHeight: '100dvh',
-          overflowY: 'auto',
-          overflowX: 'hidden',
+          overflow: 'hidden',
         }}
       >
         {sidebar}

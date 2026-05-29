@@ -46,6 +46,36 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import AdminUserManager from '../../components/AdminUserManager';
+import { useNotifications, createNotification } from '../../contexts/NotificationContext';
+import { useAppAction } from '../../hooks/useAppAction';
+import { notifyActionSuccess, notifyActionError } from '../../utils/appFeedback';
+
+const SETTINGS_STORAGE_KEY = 'timelymate_app_settings';
+
+const defaultSettings = {
+  language: 'en',
+  timeZone: 'Africa/Johannesburg',
+  dateFormat: 'DD/MM/YYYY',
+  notifications: {
+    email: true,
+    push: true,
+    desktop: false,
+  },
+  security: {
+    twoFactor: true,
+    sessionTimeout: 30,
+  },
+};
+
+function loadStoredSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return defaultSettings;
+    return { ...defaultSettings, ...JSON.parse(raw) };
+  } catch {
+    return defaultSettings;
+  }
+}
 
 const Settings: React.FC = () => {
   const location = useLocation();
@@ -53,24 +83,20 @@ const Settings: React.FC = () => {
   const { currency, setCurrency, isLoading, error, detectedCountry } = useCurrency();
   const { mode, setMode } = useTheme();
   const { canManageUsers } = usePermissions();
-  const [settings, setSettings] = useState({
-    language: 'en',
-    timeZone: 'Africa/Johannesburg',
-    dateFormat: 'DD/MM/YYYY',
-    notifications: {
-      email: true,
-      push: true,
-      desktop: false,
-    },
-    security: {
-      twoFactor: true,
-      sessionTimeout: 30,
-    },
-  });
+  const { addNotification } = useNotifications();
+  const { loading: saving, run: runSave, error: saveError } = useAppAction();
+  const [settings, setSettings] = useState(loadStoredSettings);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const handleSaveSettings = () => {
-    // Here you would typically make an API call to save the settings
-    console.log('Saving settings:', settings);
+    void runSave(async () => {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      setSaveSuccess(true);
+      notifyActionSuccess(addNotification, 'Settings saved', 'Your preferences are stored on this device.');
+      window.setTimeout(() => setSaveSuccess(false), 4000);
+    }).catch(() => {
+      notifyActionError(addNotification, 'Could not save settings');
+    });
   };
 
   useEffect(() => {
@@ -146,6 +172,16 @@ const Settings: React.FC = () => {
 
       {/* Main Content */}
       <Container maxWidth="xl" sx={{ mt: -4, mb: 4 }}>
+        {saveSuccess && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Settings saved successfully.
+          </Alert>
+        )}
+        {saveError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {saveError}
+          </Alert>
+        )}
         <Grid container spacing={3}>
           {/* Left Column - Main Settings */}
           <Grid item xs={12} md={8}>
@@ -427,8 +463,9 @@ const Settings: React.FC = () => {
                   size="large"
                   startIcon={<Save />}
                   onClick={handleSaveSettings}
+                  disabled={saving}
                 >
-                  Save Changes
+                  {saving ? 'Saving…' : 'Save Changes'}
                 </Button>
                 <Button
                   variant="outlined"

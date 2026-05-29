@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback, startTransition } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -107,6 +107,7 @@ interface User {
 
 const Messages: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const currentUser = useAppSelector((state) => state.auth.user);
   const { employees } = useEmployees();
   const [userSearchOpen, setUserSearchOpen] = useState(false);
@@ -283,6 +284,33 @@ const Messages: React.FC = () => {
       )
       .sort((a, b) => compareNotifications(a, b, sortOrder));
   }, [notifications, activeNotificationTab, filterType, sortOrder]);
+
+  // Open conversation when navigated from Team (or other pages) with recipient state
+  useEffect(() => {
+    const state = location.state as { recipientEmail?: string; draft?: string } | null;
+    if (!state?.recipientEmail || availableUsers.length === 0) return;
+    const user = availableUsers.find((u) => u.email === state.recipientEmail);
+    if (!user) return;
+    setActiveMainTab(MainTab.MESSAGES);
+    const existing = conversations.find((c) => c.participant_id === user.id);
+    if (existing) {
+      setActiveConversation(existing);
+    } else {
+      const newConversation: ChatConversation = {
+        id: `conv-${user.id}`,
+        participant_id: user.id,
+        participant_name: user.name,
+        participant_email: user.email,
+        participant_avatar: user.avatar,
+        unread_count: 0,
+        last_activity: new Date().toISOString(),
+      };
+      setConversations((prev) => [...prev, newConversation]);
+      setActiveConversation(newConversation);
+    }
+    if (state.draft) setNewMessage(state.draft);
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.state, location.pathname, availableUsers, conversations, navigate]);
 
   const handleStartConversation = async (user: User) => {
     // Find existing conversation

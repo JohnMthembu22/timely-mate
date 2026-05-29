@@ -1,5 +1,6 @@
 import { UserRole, UserPermissions, getUserPermissions, Department } from '../types/auth';
 import { CompanyProfile } from '../types/subscription';
+import { isSupabaseAuthEnabled } from '../utils/authConfig';
 
 export interface RegisteredUser {
   id: string;
@@ -15,6 +16,14 @@ export interface RegisteredUser {
 }
 
 const USERS_KEY = 'timelymate_registered_users';
+
+function assertLocalAuthOnly(operation: string): void {
+  if (isSupabaseAuthEnabled()) {
+    throw new Error(
+      `${operation} is disabled: accounts are stored in Supabase Auth, not browser localStorage.`
+    );
+  }
+}
 
 // Helper function to determine user role based on email or explicit assignment
 const determineUserRole = (email: string, explicitRole?: UserRole): UserRole => {
@@ -64,6 +73,7 @@ export const userStorageService = {
     companyProfile?: CompanyProfile;
     selectedPlan?: string;
   }): RegisteredUser {
+    assertLocalAuthOnly('Local registration');
     const users = this.getAllUsers();
     
     // Check if user already exists
@@ -99,6 +109,7 @@ export const userStorageService = {
 
   // Validate user credentials
   validateCredentials(email: string, password: string): RegisteredUser | null {
+    assertLocalAuthOnly('Local sign-in');
     const user = this.findUserByEmail(email);
     if (!user) return null;
     

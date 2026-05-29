@@ -81,11 +81,14 @@ import { buildProjectHubRow } from '../../components/ProjectsConsole/projectHubM
 import {
   CreateWorkspaceDialog,
   type CreateWorkspaceMode,
+  type NewProjectForm,
+  type NewTaskForm,
   type StarterTaskDraft,
 } from './components/CreateWorkspaceDialog';
 import { useEmployees } from '../../contexts/EmployeeContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useArrayPersistence } from '../../hooks/usePersistence';
-import { generateProjectsFromEmployees } from '../../utils/projectSeed';
+import { isPresentationProjectRecord } from '../../utils/legacyDemoCleanup';
 import { format, parseISO, differenceInDays } from 'date-fns';
 // @ts-ignore
 import { saveAs } from 'file-saver';
@@ -216,6 +219,7 @@ const Projects: React.FC = () => {
   const { employees } = useEmployees();
   const { user } = useAppSelector((state) => state.auth);
   const { addNotification, addNotificationForRecipient } = useNotifications();
+  const { canCreateProjects, canCreateTasks, canAssignTasks } = usePermissions();
   const [arDialogOpen, setArDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -273,12 +277,17 @@ const Projects: React.FC = () => {
   const [selectedProjectForNotes, setSelectedProjectForNotes] = useState<Project | null>(null);
   const [viewMode, setViewMode] = useState<ProjectViewMode>('grid');
 
-  // Seed starter projects once when roster exists and nothing is saved yet
+  // Drop auto-seeded portfolio rows once when not in presentation mode
   useEffect(() => {
-    if (projectsSeeded || employees.length === 0 || projects.length > 0) return;
-    setProjects(generateProjectsFromEmployees(employees) as Project[]);
+    setProjects((prev) => {
+      if (!prev.some((p) => isPresentationProjectRecord(p))) return prev;
+      return prev.filter((p) => !isPresentationProjectRecord(p));
+    });
+  }, [setProjects]);
+
+  useEffect(() => {
     setProjectsSeeded(true);
-  }, [employees, projects.length, projectsSeeded, setProjects]);
+  }, [setProjectsSeeded]);
 
   const handleScanProject = () => {
     setIsScanning(true);
@@ -310,6 +319,7 @@ const Projects: React.FC = () => {
   };
 
   const handleNewProjectOpen = () => {
+    if (!canCreateProjects()) return;
     setCreateWorkspaceMode('project');
     setNewProject(initialNewProject);
     setStarterTasks([]);
@@ -342,15 +352,18 @@ const Projects: React.FC = () => {
     }));
   };
 
-  const handleNewProjectSubmit = () => {
+  const handleNewProjectSubmit = (
+    project: NewProjectForm = newProject,
+    starters: StarterTaskDraft[] = starterTasks
+  ) => {
     const newId = `project-${Date.now()}`;
     
     // Create team members based on selected members
     const team: TeamMember[] = [];
     
     // If specific members are selected, use them first
-    if (newProject.selectedMembers && newProject.selectedMembers.length > 0) {
-      newProject.selectedMembers.forEach(employeeId => {
+    if (project.selectedMembers && project.selectedMembers.length > 0) {
+      project.selectedMembers.forEach(employeeId => {
         const employee = employees.find(emp => emp.id === employeeId);
         if (employee) {
           // Find the best matching role for this employee
@@ -396,7 +409,7 @@ const Projects: React.FC = () => {
     });
     }
 
-    const validStarters = starterTasks.filter((t) => t.title.trim());
+    const validStarters = starters.filter((t) => t.title.trim());
     const starterProjectTasks: Task[] = validStarters.map((t) => ({
       id: `task-${Date.now()}-${t.id}`,
       title: t.title.trim(),
@@ -414,17 +427,17 @@ const Projects: React.FC = () => {
 
     const projectToAdd: Project = {
       id: newId,
-      name: newProject.name,
-      description: newProject.description,
+      name: project.name,
+      description: project.description,
       progress: 0,
-      color: newProject.color,
+      color: project.color,
       team,
       tasks: starterProjectTasks.length,
       completedTasks: 0,
-      startDate: newProject.startDate,
-      endDate: newProject.endDate,
-      startTime: newProject.startTime,
-      endTime: newProject.endTime,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      startTime: project.startTime,
+      endTime: project.endTime,
       projectTasks: starterProjectTasks,
       notes: [],
       createdAt: new Date().toISOString(),
@@ -590,6 +603,7 @@ const Projects: React.FC = () => {
   });
 
   const handleNewTask = (project?: Project) => {
+    if (!canCreateTasks()) return;
     setSelectedProject(project || null);
     setCreateWorkspaceMode('task');
     setNewTask(resetNewTaskForm(project));
@@ -608,12 +622,12 @@ const Projects: React.FC = () => {
     setNewTask((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleTaskSubmit = () => {
-    const targetProjectId = newTask.projectId;
+  const handleTaskSubmit = (task: NewTaskForm = newTask) => {
+    const targetProjectId = task.projectId;
     if (!targetProjectId) return;
 
     const taskToAdd: Task = {
-      ...newTask,
+      ...task,
       isProjectTask: true,
       projectId: targetProjectId,
       createdBy: user?.email ?? 'admin@timelymate.com',
@@ -783,7 +797,7 @@ const Projects: React.FC = () => {
     } | null;
     if (!state) return;
 
-    if (state.openCreateProject) {
+    if (state.openCreateProject && canCreateProjects()) {
       setCreateWorkspaceMode('project');
       setNewProject(initialNewProject);
       setStarterTasks([]);
@@ -908,6 +922,7 @@ const Projects: React.FC = () => {
   );
 
   const handleQuickAssign = (item: AssignmentQueueItem, employeeId: string) => {
+    if (!canAssignTasks()) return;
     if (!item.taskId || item.projectId === 'demo') {
       return;
     }
@@ -1155,15 +1170,9 @@ const Projects: React.FC = () => {
           mode={createWorkspaceMode}
           onModeChange={setCreateWorkspaceMode}
           onClose={handleCreateWorkspaceClose}
-          newProject={newProject}
-          onProjectChange={handleNewProjectChange}
-          onProjectField={handleNewProjectField}
-          onMemberToggle={handleMemberSelection}
-          starterTasks={starterTasks}
-          onStarterTasksChange={setStarterTasks}
-          newTask={newTask}
-          onTaskChange={handleTaskChange}
-          onTaskField={handleTaskField}
+          initialProject={newProject}
+          initialStarterTasks={starterTasks}
+          initialTask={newTask}
           employees={employees}
           projects={projects.map((p) => ({
             id: p.id,
@@ -1636,6 +1645,7 @@ const Projects: React.FC = () => {
                   </Typography>
                 </Box>
               </Box>
+              {canCreateTasks() && (
               <Button
                 variant="contained"
                 startIcon={<Add />}
@@ -1657,6 +1667,7 @@ const Projects: React.FC = () => {
               >
                 New Task
               </Button>
+              )}
             </Box>
           </DialogTitle>
           <DialogContent sx={{ p: 4, background: 'transparent' }}>
@@ -2404,6 +2415,7 @@ const Projects: React.FC = () => {
                     Quick Actions
                   </Typography>
                   <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 2 }}>
+                    {canCreateTasks() && (
                     <Button
                       variant="contained"
                       startIcon={<Add />}
@@ -2426,6 +2438,7 @@ const Projects: React.FC = () => {
                     >
                       Add Task
                     </Button>
+                    )}
                     <Button
                       variant="outlined"
                       startIcon={<VideoCall />}

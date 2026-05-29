@@ -54,6 +54,7 @@ import { useAppSelector } from '../../store';
 import { userProfileApi } from '../../services/api';
 import timezoneService from '../../services/timezoneService';
 import jsPDF from 'jspdf';
+import { getBrowserNotificationPermission, requestBrowserNotificationPermission } from '../../utils/browserNotifications';
 
 interface Payslip {
   id: string;
@@ -229,13 +230,30 @@ const Profile: React.FC = () => {
   }, [user]);
 
   const handleNotificationChange = async (type: keyof typeof notifications) => {
+    const enabling = !notifications[type];
+
+    if (type === 'push' && enabling) {
+      const permission = await requestBrowserNotificationPermission();
+      if (permission !== 'granted') {
+        const blocked = permission === 'denied';
+        setMessage({
+          type: 'warning',
+          text: blocked
+            ? 'Browser notifications are blocked. Reset them in your browser’s site settings (lock icon next to the URL), then try again.'
+            : 'Browser notification permission was not granted.',
+        });
+        setTimeout(() => setMessage(null), 6000);
+        return;
+      }
+    }
+
     const newNotifications = {
       ...notifications,
-      [type]: !notifications[type],
+      [type]: enabling,
     };
-    
+
     setNotifications(newNotifications);
-    
+
     // Auto-save notification settings
     try {
       setSaving(true);
@@ -246,7 +264,6 @@ const Profile: React.FC = () => {
       console.error('Failed to save notification settings:', error);
       setMessage({ type: 'error', text: 'Failed to save notification settings' });
       setTimeout(() => setMessage(null), 3000);
-      // Revert the change
       setNotifications(notifications);
     } finally {
       setSaving(false);
@@ -669,7 +686,11 @@ Location: ${profile.location}
                   </ListItemIcon>
                   <ListItemText
                     primary="Push Notifications"
-                    secondary="Receive push notifications"
+                    secondary={
+                      getBrowserNotificationPermission() === 'denied'
+                        ? 'Blocked in browser — enable in site settings to use push notifications'
+                        : 'Receive push notifications'
+                    }
                   />
                   <ListItemSecondaryAction>
                     <Switch

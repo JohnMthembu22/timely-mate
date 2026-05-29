@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -44,6 +44,7 @@ import {
   popupNestedPanelSx,
   popupPrimaryButtonSx,
 } from '../../../theme/popupSurfaces';
+import { lightSurfaceFormSx } from '../../../theme/formFieldStyles';
 
 export type CreateWorkspaceMode = 'project' | 'task';
 
@@ -123,41 +124,68 @@ export interface CreateWorkspaceDialogProps {
   mode: CreateWorkspaceMode;
   onModeChange: (mode: CreateWorkspaceMode) => void;
   onClose: () => void;
-  newProject: NewProjectForm;
-  onProjectChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onProjectField: <K extends keyof NewProjectForm>(key: K, value: NewProjectForm[K]) => void;
-  onMemberToggle: (employeeId: string) => void;
-  starterTasks: StarterTaskDraft[];
-  onStarterTasksChange: (tasks: StarterTaskDraft[]) => void;
-  newTask: NewTaskForm;
-  onTaskChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onTaskField: <K extends keyof NewTaskForm>(key: K, value: NewTaskForm[K]) => void;
+  /** Seeds the form when the dialog opens */
+  initialProject: NewProjectForm;
+  initialStarterTasks: StarterTaskDraft[];
+  initialTask: NewTaskForm;
   employees: Employee[];
   projects: ProjectOption[];
-  onSubmitProject: () => void;
-  onSubmitTask: () => void;
+  onSubmitProject: (project: NewProjectForm, starterTasks: StarterTaskDraft[]) => void;
+  onSubmitTask: (task: NewTaskForm) => void;
 }
 
-export function CreateWorkspaceDialog({
+function CreateWorkspaceDialogComponent({
   open,
   mode,
   onModeChange,
   onClose,
-  newProject,
-  onProjectChange,
-  onProjectField,
-  onMemberToggle,
-  starterTasks,
-  onStarterTasksChange,
-  newTask,
-  onTaskChange,
-  onTaskField,
+  initialProject,
+  initialStarterTasks,
+  initialTask,
   employees,
   projects,
   onSubmitProject,
   onSubmitTask,
 }: CreateWorkspaceDialogProps) {
   const [teamExpanded, setTeamExpanded] = useState(false);
+  const [draftProject, setDraftProject] = useState(initialProject);
+  const [draftStarterTasks, setDraftStarterTasks] = useState(initialStarterTasks);
+  const [draftTask, setDraftTask] = useState(initialTask);
+
+  useEffect(() => {
+    if (open) {
+      setDraftProject(initialProject);
+      setDraftStarterTasks(initialStarterTasks);
+      setDraftTask(initialTask);
+    }
+  }, [open, initialProject, initialStarterTasks, initialTask]);
+
+  const handleProjectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setDraftProject((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleProjectField = <K extends keyof NewProjectForm>(key: K, value: NewProjectForm[K]) => {
+    setDraftProject((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleMemberToggle = (employeeId: string) => {
+    setDraftProject((prev) => ({
+      ...prev,
+      selectedMembers: prev.selectedMembers?.includes(employeeId)
+        ? prev.selectedMembers.filter((id) => id !== employeeId)
+        : [...(prev.selectedMembers || []), employeeId],
+    }));
+  };
+
+  const handleTaskChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setDraftTask((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleTaskField = <K extends keyof NewTaskForm>(key: K, value: NewTaskForm[K]) => {
+    setDraftTask((prev) => ({ ...prev, [key]: value }));
+  };
 
   const departments = useMemo(
     () => [...new Set(employees.map((e) => e.department))].sort(),
@@ -165,34 +193,34 @@ export function CreateWorkspaceDialog({
   );
 
   const filteredEmployees = useMemo(() => {
-    if (!newProject.department) return employees;
-    return employees.filter((e) => e.department === newProject.department);
-  }, [employees, newProject.department]);
+    if (!draftProject.department) return employees;
+    return employees.filter((e) => e.department === draftProject.department);
+  }, [employees, draftProject.department]);
 
-  const selectedProject = projects.find((p) => p.id === newTask.projectId);
+  const selectedProject = projects.find((p) => p.id === draftTask.projectId);
   const assigneeOptions = selectedProject?.team ?? [];
 
-  const canSubmitProject = Boolean(newProject.name.trim() && newProject.description.trim());
-  const canSubmitTask = Boolean(newTask.title.trim() && (newTask.projectId || projects.length === 0));
+  const canSubmitProject = Boolean(draftProject.name.trim() && draftProject.description.trim());
+  const canSubmitTask = Boolean(draftTask.title.trim() && (draftTask.projectId || projects.length === 0));
 
   const addStarterTask = () => {
-    onStarterTasksChange([
-      ...starterTasks,
+    setDraftStarterTasks((prev) => [
+      ...prev,
       {
         id: `st-${Date.now()}`,
         title: '',
-        dueDate: newProject.endDate || new Date().toISOString().split('T')[0],
+        dueDate: draftProject.endDate || new Date().toISOString().split('T')[0],
         priority: 'medium',
       },
     ]);
   };
 
   const updateStarter = (id: string, patch: Partial<StarterTaskDraft>) => {
-    onStarterTasksChange(starterTasks.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    setDraftStarterTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   };
 
   const removeStarter = (id: string) => {
-    onStarterTasksChange(starterTasks.filter((t) => t.id !== id));
+    setDraftStarterTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
   return (
@@ -313,7 +341,14 @@ export function CreateWorkspaceDialog({
         </Box>
       </Box>
 
-      <DialogContent sx={{ px: { xs: 2.5, md: 3 }, py: 3, bgcolor: '#fff' }}>
+      <DialogContent
+        sx={{
+          px: { xs: 2.5, md: 3 },
+          py: 3,
+          bgcolor: '#fff',
+          ...lightSurfaceFormSx,
+        }}
+      >
         {mode === 'project' ? (
           <Stack spacing={3.5}>
             <Alert severity="info" sx={{ borderRadius: 2, '& .MuiAlert-message': { fontSize: '0.8125rem' } }}>
@@ -328,8 +363,8 @@ export function CreateWorkspaceDialog({
                   <Typography sx={popupFormLabelSx}>Project name *</Typography>
                   <TextField
                     name="name"
-                    value={newProject.name}
-                    onChange={onProjectChange}
+                    value={draftProject.name}
+                    onChange={handleProjectChange}
                     fullWidth
                     required
                     placeholder="e.g. Platform Development Q2"
@@ -340,8 +375,8 @@ export function CreateWorkspaceDialog({
                   <Typography sx={popupFormLabelSx}>Description *</Typography>
                   <TextField
                     name="description"
-                    value={newProject.description}
-                    onChange={onProjectChange}
+                    value={draftProject.description}
+                    onChange={handleProjectChange}
                     fullWidth
                     multiline
                     rows={3}
@@ -353,9 +388,9 @@ export function CreateWorkspaceDialog({
                   <Typography sx={popupFormLabelSx}>Department / owner lane</Typography>
                   <FormControl fullWidth size="small">
                     <Select
-                      value={newProject.department}
+                      value={draftProject.department}
                       displayEmpty
-                      onChange={(e) => onProjectField('department', e.target.value)}
+                      onChange={(e) => handleProjectField('department', e.target.value)}
                     >
                       <MenuItem value="">
                         <em>Select department</em>
@@ -374,14 +409,14 @@ export function CreateWorkspaceDialog({
                     {COLOR_PRESETS.map((c) => (
                       <Box
                         key={c}
-                        onClick={() => onProjectField('color', c)}
+                        onClick={() => handleProjectField('color', c)}
                         sx={{
                           width: 28,
                           height: 28,
                           borderRadius: 1.5,
                           bgcolor: c,
                           cursor: 'pointer',
-                          border: newProject.color === c ? '3px solid #4f46e5' : '2px solid #fff',
+                          border: draftProject.color === c ? '3px solid #4f46e5' : '2px solid #fff',
                           boxShadow: '0 2px 6px rgba(15,23,42,0.12)',
                           transition: 'transform 120ms ease',
                           '&:hover': { transform: 'scale(1.08)' },
@@ -392,8 +427,8 @@ export function CreateWorkspaceDialog({
                   <TextField
                     name="color"
                     type="color"
-                    value={newProject.color}
-                    onChange={onProjectChange}
+                    value={draftProject.color}
+                    onChange={handleProjectChange}
                     fullWidth
                     size="small"
                     sx={{ '& input': { height: 36, cursor: 'pointer' } }}
@@ -410,8 +445,8 @@ export function CreateWorkspaceDialog({
                     label="Start date"
                     name="startDate"
                     type="date"
-                    value={newProject.startDate}
-                    onChange={onProjectChange}
+                    value={draftProject.startDate}
+                    onChange={handleProjectChange}
                     fullWidth
                     size="small"
                     InputLabelProps={{ shrink: true }}
@@ -422,8 +457,8 @@ export function CreateWorkspaceDialog({
                     label="Target end date"
                     name="endDate"
                     type="date"
-                    value={newProject.endDate}
-                    onChange={onProjectChange}
+                    value={draftProject.endDate}
+                    onChange={handleProjectChange}
                     fullWidth
                     size="small"
                     InputLabelProps={{ shrink: true }}
@@ -434,8 +469,8 @@ export function CreateWorkspaceDialog({
                     label="Workday start"
                     name="startTime"
                     type="time"
-                    value={newProject.startTime}
-                    onChange={onProjectChange}
+                    value={draftProject.startTime}
+                    onChange={handleProjectChange}
                     fullWidth
                     size="small"
                     InputLabelProps={{ shrink: true }}
@@ -446,8 +481,8 @@ export function CreateWorkspaceDialog({
                     label="Workday end"
                     name="endTime"
                     type="time"
-                    value={newProject.endTime}
-                    onChange={onProjectChange}
+                    value={draftProject.endTime}
+                    onChange={handleProjectChange}
                     fullWidth
                     size="small"
                     InputLabelProps={{ shrink: true }}
@@ -463,7 +498,7 @@ export function CreateWorkspaceDialog({
                 hint="Pick who owns delivery. Filter by department or expand advanced role matching."
               />
               <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
-                {(newProject.selectedMembers ?? []).map((id) => {
+                {(draftProject.selectedMembers ?? []).map((id) => {
                   const emp = employees.find((e) => e.id === id);
                   if (!emp) return null;
                   return (
@@ -471,12 +506,12 @@ export function CreateWorkspaceDialog({
                       key={id}
                       avatar={<Avatar src={emp.avatar} sx={{ width: 24, height: 24 }}>{emp.name[0]}</Avatar>}
                       label={emp.name}
-                      onDelete={() => onMemberToggle(id)}
+                      onDelete={() => handleMemberToggle(id)}
                       sx={{ fontWeight: 600, fontSize: '0.75rem' }}
                     />
                   );
                 })}
-                {(newProject.selectedMembers?.length ?? 0) === 0 && (
+                {(draftProject.selectedMembers?.length ?? 0) === 0 && (
                   <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8' }}>
                     No members selected — defaults will be generated from roles.
                   </Typography>
@@ -484,11 +519,11 @@ export function CreateWorkspaceDialog({
               </Stack>
               <Stack spacing={1} sx={{ maxHeight: 200, overflow: 'auto', pr: 0.5 }}>
                 {filteredEmployees.map((employee) => {
-                  const selected = newProject.selectedMembers?.includes(employee.id);
+                  const selected = draftProject.selectedMembers?.includes(employee.id);
                   return (
                     <Box
                       key={employee.id}
-                      onClick={() => onMemberToggle(employee.id)}
+                      onClick={() => handleMemberToggle(employee.id)}
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
@@ -550,8 +585,8 @@ export function CreateWorkspaceDialog({
                               key={emp.id}
                               size="small"
                               label={emp.name}
-                              onClick={() => onMemberToggle(emp.id)}
-                              variant={newProject.selectedMembers?.includes(emp.id) ? 'filled' : 'outlined'}
+                              onClick={() => handleMemberToggle(emp.id)}
+                              variant={draftProject.selectedMembers?.includes(emp.id) ? 'filled' : 'outlined'}
                               sx={{ mr: 0.5, mb: 0.5, fontSize: '0.6875rem' }}
                             />
                           ))}
@@ -579,7 +614,7 @@ export function CreateWorkspaceDialog({
                   Add task
                 </Button>
               </Stack>
-              {starterTasks.length === 0 ? (
+              {draftStarterTasks.length === 0 ? (
                 <Box
                   sx={{
                     py: 3,
@@ -595,7 +630,7 @@ export function CreateWorkspaceDialog({
                 </Box>
               ) : (
                 <Stack spacing={1.5}>
-                  {starterTasks.map((task, index) => (
+                  {draftStarterTasks.map((task, index) => (
                     <Box
                       key={task.id}
                       sx={{
@@ -669,11 +704,11 @@ export function CreateWorkspaceDialog({
                 <InputLabel>Project workspace</InputLabel>
                 <Select
                   label="Project workspace"
-                  value={newTask.projectId ?? ''}
+                  value={draftTask.projectId ?? ''}
                   onChange={(e) => {
                     const projectId = e.target.value;
-                    onTaskField('projectId', projectId);
-                    onTaskField('isProjectTask', Boolean(projectId));
+                    handleTaskField('projectId', projectId);
+                    handleTaskField('isProjectTask', Boolean(projectId));
                   }}
                 >
                   {projects.length === 0 ? (
@@ -700,8 +735,8 @@ export function CreateWorkspaceDialog({
                 <TextField
                   label="Task title *"
                   name="title"
-                  value={newTask.title}
-                  onChange={onTaskChange}
+                  value={draftTask.title}
+                  onChange={handleTaskChange}
                   fullWidth
                   size="small"
                   placeholder="What needs to be done?"
@@ -709,8 +744,8 @@ export function CreateWorkspaceDialog({
                 <TextField
                   label="Description"
                   name="description"
-                  value={newTask.description}
-                  onChange={onTaskChange}
+                  value={draftTask.description}
+                  onChange={handleTaskChange}
                   fullWidth
                   multiline
                   rows={3}
@@ -723,8 +758,8 @@ export function CreateWorkspaceDialog({
                       label="Due date"
                       name="dueDate"
                       type="date"
-                      value={newTask.dueDate}
-                      onChange={onTaskChange}
+                      value={draftTask.dueDate}
+                      onChange={handleTaskChange}
                       fullWidth
                       size="small"
                       InputLabelProps={{ shrink: true }}
@@ -735,9 +770,9 @@ export function CreateWorkspaceDialog({
                       <InputLabel>Priority</InputLabel>
                       <Select
                         name="priority"
-                        value={newTask.priority}
+                        value={draftTask.priority}
                         label="Priority"
-                        onChange={(e) => onTaskField('priority', e.target.value as NewTaskForm['priority'])}
+                        onChange={(e) => handleTaskField('priority', e.target.value as NewTaskForm['priority'])}
                       >
                         <MenuItem value="low">Low</MenuItem>
                         <MenuItem value="medium">Medium</MenuItem>
@@ -750,11 +785,11 @@ export function CreateWorkspaceDialog({
                       <FormControl fullWidth size="small">
                         <InputLabel>Assignee</InputLabel>
                         <Select
-                          value={newTask.assignee ? JSON.stringify(newTask.assignee) : ''}
+                          value={draftTask.assignee ? JSON.stringify(draftTask.assignee) : ''}
                           label="Assignee"
                           onChange={(e) => {
                             const value = e.target.value;
-                            onTaskField('assignee', value ? JSON.parse(value) : null);
+                            handleTaskField('assignee', value ? JSON.parse(value) : null);
                           }}
                         >
                           <MenuItem value="">Unassigned</MenuItem>
@@ -788,8 +823,8 @@ export function CreateWorkspaceDialog({
       >
         <Typography sx={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>
           {mode === 'project'
-            ? `${starterTasks.filter((t) => t.title.trim()).length} starter task(s) will be created`
-            : newTask.projectId
+            ? `${draftStarterTasks.filter((t) => t.title.trim()).length} starter task(s) will be created`
+            : draftTask.projectId
               ? `Task will be added to ${selectedProject?.name ?? 'project'}`
               : 'Select a project to continue'}
         </Typography>
@@ -800,7 +835,7 @@ export function CreateWorkspaceDialog({
           {mode === 'project' ? (
             <Button
               variant="contained"
-              onClick={onSubmitProject}
+              onClick={() => onSubmitProject(draftProject, draftStarterTasks)}
               disabled={!canSubmitProject}
               sx={popupPrimaryButtonSx}
             >
@@ -809,8 +844,8 @@ export function CreateWorkspaceDialog({
           ) : (
             <Button
               variant="contained"
-              onClick={onSubmitTask}
-              disabled={!canSubmitTask || (projects.length > 0 && !newTask.projectId)}
+              onClick={() => onSubmitTask(draftTask)}
+              disabled={!canSubmitTask || (projects.length > 0 && !draftTask.projectId)}
               sx={popupPrimaryButtonSx}
             >
               Create task
@@ -821,3 +856,5 @@ export function CreateWorkspaceDialog({
     </Dialog>
   );
 }
+
+export const CreateWorkspaceDialog = React.memo(CreateWorkspaceDialogComponent);

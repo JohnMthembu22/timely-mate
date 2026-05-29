@@ -34,7 +34,9 @@ import { useAppSelector } from '../../store';
 import DashboardLayout from '../../components/DashboardLayout';
 import LoadingScreen from '../../components/LoadingScreen';
 import { DashboardCommandSkeleton } from './DashboardCommandSkeleton';
-import { MainDashboardContent, MAIN_DASHBOARD_SAMPLE_PROJECTS } from '../../components/MainDashboardContent/MainDashboardContent';
+import {
+  MainDashboardContent,
+} from '../../components/MainDashboardContent/MainDashboardContent';
 import { PersonalAttendanceTools } from '../../components/PersonalAttendanceTools/PersonalAttendanceTools';
 import JobChat from '../../components/JobChat';
 import { useEmployees } from '../../contexts/EmployeeContext';
@@ -42,6 +44,7 @@ import { Briefcase, Users, Building2 } from 'lucide-react';
 import type { MetricsGridItem } from '../../components/MetricsGrid/MetricsGrid';
 import { useArrayPersistence } from '../../hooks/usePersistence';
 import { useGuidedTour } from '../../contexts/GuidedTourContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { TOUR_AUTO_START_KEY, TOUR_COMPLETED_KEY } from '../../config/guidedTour';
 import {
@@ -111,6 +114,8 @@ const Dashboard: React.FC = () => {
   const { user } = useAppSelector((state) => state.auth);
   const { startTour } = useGuidedTour();
   const { notifications, unreadCount } = useNotifications();
+  const { canCreateProjects, canAccessReports, canAccessMeetings, canManageTeam, canModifySettings } =
+    usePermissions();
   
   // Call hooks - they should be available via context providers
   const [activeJobs] = useArrayPersistence<Job>('timelymate_active_jobs', []);
@@ -441,57 +446,66 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const quickActions = useMemo(
-    () => [
-    {
-      icon: <Timer />,
-      title: 'Track Time',
-      description: 'Start tracking time for your current task',
-      onClick: () => navigate('/time-tracking'),
-    },
-    {
-      icon: <AddIcon />,
-      title: 'New Project',
-      description: 'Create a new project for your team',
-      onClick: () => navigate('/projects', { state: { openCreateProject: true } }),
-    },
-    {
-      icon: <Assessment />,
-      title: 'View Reports',
-      description: 'Check your team\'s performance metrics',
-      onClick: () => navigate('/reports'),
-    },
-    {
-      icon: <VideoCall />,
-      title: 'Team Meeting',
-      description: 'Start or join a video meeting',
-      onClick: () => navigate('/meetings'),
-    },
-  ],
-    [navigate]
+    () =>
+      [
+        {
+          icon: <Timer />,
+          title: 'Track Time',
+          description: 'Start tracking time for your current task',
+          onClick: () => navigate('/time-tracking'),
+          show: true,
+        },
+        {
+          icon: <AddIcon />,
+          title: 'New Project',
+          description: 'Create a new project for your team',
+          onClick: () => navigate('/projects', { state: { openCreateProject: true } }),
+          show: canCreateProjects(),
+        },
+        {
+          icon: <Assessment />,
+          title: 'View Reports',
+          description: "Check your team's performance metrics",
+          onClick: () => navigate('/reports'),
+          show: canAccessReports(),
+        },
+        {
+          icon: <VideoCall />,
+          title: 'Team Meeting',
+          description: 'Start or join a video meeting',
+          onClick: () => navigate('/meetings'),
+          show: canAccessMeetings(),
+        },
+      ].filter((action) => action.show),
+    [navigate, canCreateProjects, canAccessReports, canAccessMeetings]
   );
 
   const managementTools = useMemo(
-    () => [
-    {
-      icon: <Group />,
-      title: 'Team',
-      description: 'Manage your team members and roles',
-      onClick: () => navigate('/team'),
-    },
-    {
-      icon: <Security />,
-      title: 'Security',
-      description: 'Review and update security settings',
-      onClick: () => navigate('/settings', { state: { focusSection: 'security' } }),
-    },
-    {
-      icon: <Settings />,
-      title: 'Settings',
-      description: 'Configure your workspace preferences',
-      onClick: () => navigate('/settings'),
-    },
-  ],
-    [navigate]
+    () =>
+      [
+        {
+          icon: <Group />,
+          title: 'Team',
+          description: 'Manage your team members and roles',
+          onClick: () => navigate('/team'),
+          show: canManageTeam(),
+        },
+        {
+          icon: <Security />,
+          title: 'Security',
+          description: 'Review and update security settings',
+          onClick: () => navigate('/settings', { state: { focusSection: 'security' } }),
+          show: canModifySettings(),
+        },
+        {
+          icon: <Settings />,
+          title: 'Settings',
+          description: 'Configure your workspace preferences',
+          onClick: () => navigate('/settings'),
+          show: canModifySettings(),
+        },
+      ].filter((tool) => tool.show),
+    [navigate, canManageTeam, canModifySettings]
   );
 
   const dashboardMetrics: MetricsGridItem[] = useMemo(
@@ -524,20 +538,19 @@ const Dashboard: React.FC = () => {
     [activeJobs.length, employees.length, departmentCount]
   );
 
-  const projectTiles = useMemo(
-    () =>
-      activeJobs.length > 0
-        ? activeJobs.map((job) => ({
-            id: job.id,
-            title: job.name,
-            department: job.client || 'Workspace',
-            progress: job.progress,
-            dueDate: job.startDate ? job.startDate : 'In progress',
-            teamSize: job.assignedMembers?.length ?? 0,
-          }))
-        : MAIN_DASHBOARD_SAMPLE_PROJECTS,
-    [activeJobs]
-  );
+  const projectTiles = useMemo(() => {
+    if (activeJobs.length > 0) {
+      return activeJobs.map((job) => ({
+        id: job.id,
+        title: job.name,
+        department: job.client || 'Workspace',
+        progress: job.progress,
+        dueDate: job.startDate ? job.startDate : 'In progress',
+        teamSize: job.assignedMembers?.length ?? 0,
+      }));
+    }
+    return [];
+  }, [activeJobs]);
 
   const projectHealth = useMemo(() => deriveProjectHealth(projectTiles), [projectTiles]);
 

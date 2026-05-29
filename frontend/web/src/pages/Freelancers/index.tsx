@@ -80,6 +80,7 @@ import { tabA11yProps, tabPanelA11yProps } from '../../utils/tabA11y';
 import FeatureGuard from '../../components/FeatureGuard';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useEmployees, Employee } from '../../contexts/EmployeeContext';
+import { isPresentationEmployeeRecord } from '../../utils/legacyDemoCleanup';
 import { useNotifications, createNotification } from '../../contexts/NotificationContext';
 // No longer need mock data utilities
 
@@ -301,57 +302,41 @@ const Freelancers: React.FC = () => {
     console.log('Employees with employmentType freelancer:', employees.filter(emp => emp.employmentType === 'freelancer'));
     
     const convertedFreelancers: Freelancer[] = employees
-      .filter(employee => employee.employmentType === 'freelancer')
-      .map((employee, index) => {
-        // Convert benefits to skills array
+      .filter((employee) => employee.employmentType === 'freelancer' && !isPresentationEmployeeRecord(employee))
+      .map((employee) => {
         let skills: string[] = [];
         if (employee.benefits) {
           if (typeof employee.benefits === 'string') {
-            // Split by commas and clean up
-            skills = employee.benefits.split(',').map(skill => skill.trim()).filter(skill => skill.length > 0);
+            skills = employee.benefits.split(',').map((skill) => skill.trim()).filter((skill) => skill.length > 0);
           } else if (Array.isArray(employee.benefits)) {
             skills = employee.benefits;
           }
         }
-        
-        // If no skills from benefits, generate some based on position
-        if (skills.length === 0) {
-          const positionSkills: { [key: string]: string[] } = {
-            'Developer': ['JavaScript', 'React', 'Node.js', 'TypeScript'],
-            'Designer': ['UI/UX Design', 'Figma', 'Adobe Creative Suite', 'Prototyping'],
-            'Project Manager': ['Agile', 'Scrum', 'JIRA', 'Team Leadership'],
-            'QA Engineer': ['Testing', 'Automation', 'Selenium', 'Quality Assurance'],
-            'DevOps Engineer': ['Docker', 'Kubernetes', 'AWS', 'CI/CD'],
-            'Business Analyst': ['Requirements Analysis', 'SQL', 'Process Modeling', 'Stakeholder Management'],
-            'Product Owner': ['Product Strategy', 'User Stories', 'Backlog Management', 'Market Research'],
-            'Scrum Master': ['Agile Coaching', 'Sprint Planning', 'Retrospectives', 'Team Facilitation']
-          };
-          
-          skills = positionSkills[employee.position] || ['Problem Solving', 'Communication', 'Teamwork'];
-        }
+
+        const hourlyRate = employee.salary > 0 ? Math.round(employee.salary / 2080) : 0;
 
         return {
           id: employee.id,
           name: employee.name,
-          avatar: employee.avatar || `https://i.pravatar.cc/150?u=${employee.id}`,
+          avatar: employee.avatar || '',
           title: employee.position,
-          skills: skills,
-          hourlyRate: Math.floor(employee.salary / 2080), // Convert annual salary to hourly rate
-          rating: Math.floor(Math.random() * 2) + 4, // Random rating between 4-5
-          location: 'Remote',
-          availability: 'Available',
+          skills,
+          hourlyRate,
+          rating: 0,
+          location: '',
+          availability: employee.status === 'active' ? 'Available' : 'Unavailable',
           joinDate: employee.joinDate,
-          projectsCompleted: Math.floor(Math.random() * 20) + 5,
-          ongoingProjects: Math.floor(Math.random() * 3) + 1,
-          totalHours: Math.floor(Math.random() * 1000) + 500,
+          projectsCompleted: 0,
+          ongoingProjects: 0,
+          totalHours: 0,
           status: employee.status,
-          email: employee.email || `${employee.name.toLowerCase().replace(/\s+/g, '.')}@company.com`,
-          phone: `+1-555-${Math.floor(Math.random() * 9000) + 1000}`,
+          email: employee.email || '',
+          phone: employee.phone || '',
           contract: {
             startDate: employee.joinDate,
-            endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            type: 'Full-time',
-            terms: 'Standard employment contract',
+            endDate: '',
+            type: employee.employmentType,
+            terms: '',
           },
         };
       });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -134,6 +135,7 @@ const mapMemberStatus = (status: UserStatus, isOnline: boolean): TeamMemberStatu
 };
 
 const Team: React.FC = () => {
+  const navigate = useNavigate();
   const { employees, getEmployeesByDepartment } = useEmployees();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [newMemberDialog, setNewMemberDialog] = useState(false);
@@ -158,42 +160,43 @@ const Team: React.FC = () => {
     skills: ''
   });
 
-  // Convert employees to team members
+  // Map HR roster to team directory (no synthetic metrics — zeros until real tracking data exists)
   useEffect(() => {
     const convertedTeamMembers: TeamMember[] = employees
-      .filter(employee => employee.employmentType === 'permanent' || employee.employmentType === 'contract')
-      .map((employee, index) => ({
+      .filter((employee) => employee.employmentType === 'permanent' || employee.employmentType === 'contract')
+      .map((employee) => ({
         id: employee.id,
         name: employee.name,
         role: employee.position,
-        avatar: employee.avatar || `https://i.pravatar.cc/150?u=${employee.id}`,
-        email: employee.email || `${employee.name.toLowerCase().replace(/\s+/g, '.')}@company.com`,
-        linkedIn: `https://linkedin.com/in/${employee.name.toLowerCase().replace(/\s+/g, '')}`,
-        github: `https://github.com/${employee.name.toLowerCase().replace(/\s+/g, '')}`,
-        skills: employee.benefits || [],
-        projects: Math.floor(Math.random() * 5) + 1,
-        tasksCompleted: Math.floor(Math.random() * 50) + 10,
-        activeProjects: [`Project ${index + 1}`, `Project ${index + 2}`],
-        availability: Math.floor(Math.random() * 30) + 70,
-        workload: Math.floor(Math.random() * 40) + 60,
-        overtime: Math.floor(Math.random() * 20),
-        performance: Math.floor(Math.random() * 30) + 70,
-        hoursWorked: Math.floor(Math.random() * 200) + 160,
-        leaveTaken: Math.floor(Math.random() * 20),
-        isOnline: Math.random() > 0.3,
-        status: Math.random() > 0.3 ? 'available' : 'offline',
-        lastActive: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-        workLocation: ['office', 'remote', 'hybrid'][Math.floor(Math.random() * 3)] as 'office' | 'remote' | 'hybrid',
+        avatar: employee.avatar || '',
+        email: employee.email || '',
+        skills: Array.isArray(employee.benefits) ? employee.benefits : [],
+        projects: 0,
+        tasksCompleted: 0,
+        activeProjects: [],
+        availability: 100,
+        workload: 0,
+        overtime: 0,
+        performance: 0,
+        hoursWorked: 0,
+        leaveTaken: 0,
+        isOnline: employee.status === 'active',
+        status: employee.status === 'active' ? 'available' : 'offline',
+        lastActive: new Date().toISOString(),
+        workLocation: (employee.workLocation === 'offsite' ? 'remote' : employee.workLocation ?? 'office') as
+          | 'office'
+          | 'remote'
+          | 'hybrid',
         yearStats: {
-          projects: Math.floor(Math.random() * 10) + 5,
-          tasksCompleted: Math.floor(Math.random() * 100) + 50,
-          overtime: Math.floor(Math.random() * 100),
-          performance: Math.floor(Math.random() * 30) + 70,
-          hoursWorked: Math.floor(Math.random() * 2000) + 1600,
-          leaveTaken: Math.floor(Math.random() * 160),
+          projects: 0,
+          tasksCompleted: 0,
+          overtime: 0,
+          performance: 0,
+          hoursWorked: 0,
+          leaveTaken: 0,
         },
       }));
-    
+
     setTeamMembers(convertedTeamMembers);
   }, [employees]);
 
@@ -390,11 +393,14 @@ const Team: React.FC = () => {
   };
 
   const handleSendMessage = () => {
-    if (messageText.trim() && selectedMemberForMessage) {
-      // In a real app, this would send the message to the backend
-      console.log(`Sending message to ${selectedMemberForMessage.name}: ${messageText}`);
-      handleCloseMessageDialog();
+    if (!messageText.trim() || !selectedMemberForMessage) return;
+    const email = selectedMemberForMessage.email;
+    handleCloseMessageDialog();
+    if (email) {
+      navigate('/messages', { state: { recipientEmail: email, draft: messageText.trim() } });
+      return;
     }
+    navigate('/messages');
   };
 
   const handleOpenRecommendations = (member: TeamMember) => {
@@ -441,18 +447,19 @@ const Team: React.FC = () => {
     workLocationFilter === 'all' || member.workLocation === workLocationFilter
   );
 
-  const roleData = [
-    { name: 'Project Manager', value: 1 },
-    { name: 'Senior Developer', value: 1 },
-    { name: 'UI/UX Designer', value: 1 },
-  ];
+  const roleData = useMemo(() => {
+    const counts = new Map<string, number>();
+    teamMembers.forEach((m) => counts.set(m.role, (counts.get(m.role) ?? 0) + 1));
+    return [...counts.entries()].map(([name, value]) => ({ name, value }));
+  }, [teamMembers]);
 
-  const projectData = [
-    { name: 'Website Redesign', value: 3 },
-    { name: 'Mobile App Development', value: 2 },
-    { name: 'API Integration', value: 2 },
-    { name: 'Performance Optimization', value: 1 },
-  ];
+  const projectData = useMemo(() => {
+    const counts = new Map<string, number>();
+    teamMembers.forEach((m) => {
+      m.activeProjects.forEach((p) => counts.set(p, (counts.get(p) ?? 0) + 1));
+    });
+    return [...counts.entries()].map(([name, value]) => ({ name, value }));
+  }, [teamMembers]);
 
   const workloadData = [
     { name: 'Low (< 50%)', value: teamMembers.filter(m => m.workload < 50).length },
@@ -463,9 +470,10 @@ const Team: React.FC = () => {
 
   const calculatePercentage = (data: { name: string; value: number }[]) => {
     const total = data.reduce((sum, item) => sum + item.value, 0);
-    return data.map(item => ({
+    if (total === 0) return [];
+    return data.map((item) => ({
       ...item,
-      percentage: ((item.value / total) * 100).toFixed(1)
+      percentage: ((item.value / total) * 100).toFixed(1),
     }));
   };
 

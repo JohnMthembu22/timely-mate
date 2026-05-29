@@ -1,4 +1,5 @@
 import React, { Component, Suspense, type ReactNode } from 'react';
+import { Box } from '@mui/material';
 import LoadingScreen from '../LoadingScreen';
 
 function isChunkLoadError(error: unknown): boolean {
@@ -50,11 +51,24 @@ class ChunkLoadErrorBoundary extends Component<
   }
 }
 
-/** Wraps lazy-loaded pages so navigation shows feedback while chunks load. */
+/** Wraps lazy-loaded public pages. Uses a minimal fallback to avoid full-screen flashes. */
 export function LazyRoute({ children }: { children: ReactNode }) {
   return (
     <ChunkLoadErrorBoundary>
-      <Suspense fallback={<LoadingScreen message="Loading page…" />}>
+      <Suspense
+        fallback={
+          <Box
+            sx={{
+              minHeight: '40vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <LoadingScreen message="Loading…" />
+          </Box>
+        }
+      >
         {children}
       </Suspense>
     </ChunkLoadErrorBoundary>

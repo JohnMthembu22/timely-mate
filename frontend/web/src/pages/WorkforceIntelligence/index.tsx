@@ -53,7 +53,7 @@ const WorkforceIntelligence: React.FC = () => {
   const { employees } = useEmployees();
 
   const data = useMemo(
-    () => buildWorkforceIntelligenceData(employees.map((e) => e.name)),
+    () => buildWorkforceIntelligenceData(),
     [employees]
   );
 

@@ -6,6 +6,6 @@
  * - Mock subscription uses the enterprise plan (no HR free-tier employee cap messaging).
  * - Pricing page hides tier comparison (testing stub instead).
  *
- * Set to false before production or wire to import.meta.env when you split environments.
+ * Enable only in local dev: set VITE_TESTING_MODE=true in .env.local
  */
-export const TESTING_MODE_UNLOCK_ALL = true;
+export const TESTING_MODE_UNLOCK_ALL = import.meta.env.VITE_TESTING_MODE === 'true';

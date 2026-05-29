@@ -2,9 +2,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Provider } from 'react-redux'
 import { BrowserRouter } from 'react-router-dom'
+import './utils/authHashBootstrap'
 import './index.css'
+import { bootstrapAppStorage } from './utils/storageBootstrap'
 import App from './App.tsx'
 import { store } from './store'
+
+bootstrapAppStorage()
 
 if (import.meta.env.DEV) {
   void import('./utils/clearLocalStorage.js')

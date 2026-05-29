@@ -58,84 +58,6 @@ function inferDepartment(projectName: string): string {
   return 'Operations';
 }
 
-const MOCK_STREAM: Omit<OperationsFeedItem, 'id' | 'timestamp'>[] = [
-  {
-    kind: 'assignment',
-    actor: 'Sarah Chen',
-    message: 'assigned',
-    highlight: 'Homepage wireframes',
-    projectName: 'UI/UX Redesign',
-    projectId: 'stream',
-    department: 'Design',
-    isLive: true,
-  },
-  {
-    kind: 'milestone',
-    actor: 'System',
-    message: 'completed milestone',
-    highlight: 'Sprint 12 delivery',
-    projectName: 'Platform Development',
-    projectId: 'stream',
-    department: 'Engineering',
-  },
-  {
-    kind: 'overdue',
-    actor: 'Ops Monitor',
-    message: 'flagged overdue',
-    highlight: 'Compliance packet',
-    projectName: 'Legal Initiative',
-    projectId: 'stream',
-    department: 'Legal',
-    isLive: true,
-  },
-  {
-    kind: 'approval',
-    actor: 'James Okonkwo',
-    message: 'requested approval on',
-    highlight: 'Budget reforecast',
-    projectName: 'Financial Analysis',
-    projectId: 'stream',
-    department: 'Finance',
-  },
-  {
-    kind: 'project_update',
-    actor: 'Maria Lopez',
-    message: 'updated project status for',
-    highlight: 'Process Improvement',
-    projectName: 'Process Improvement',
-    projectId: 'stream',
-    department: 'Operations',
-  },
-  {
-    kind: 'comment',
-    actor: 'Alex Kim',
-    message: 'commented on',
-    highlight: 'Need design review by Thursday',
-    projectName: 'Brand Campaign',
-    projectId: 'stream',
-    department: 'Marketing',
-  },
-  {
-    kind: 'risk',
-    actor: 'AI Sentinel',
-    message: 'raised risk alert on',
-    highlight: 'Schedule slip +4 days',
-    projectName: 'Platform Development',
-    projectId: 'stream',
-    department: 'Engineering',
-    isLive: true,
-  },
-  {
-    kind: 'allocation',
-    actor: 'Workforce Hub',
-    message: 'moved 2 resources to',
-    highlight: 'QA lane',
-    projectName: 'Operations Initiative',
-    projectId: 'stream',
-    department: 'Operations',
-  },
-];
-
 export function buildOperationsFeed(projects: FeedProject[]): OperationsFeedItem[] {
   const items: OperationsFeedItem[] = [];
   const now = new Date();
@@ -212,16 +134,6 @@ export function buildOperationsFeed(projects: FeedProject[]): OperationsFeedItem
         department: dept,
         timestamp: new Date(now.getTime() - pi * 60000 * 90),
       });
-    });
-  });
-
-  MOCK_STREAM.forEach((m, i) => {
-    items.push({
-      ...m,
-      id: `mock-${i}`,
-      timestamp: new Date(now.getTime() - i * 60000 * 2),
-      projectId: projects[i % Math.max(projects.length, 1)]?.id ?? 'mock',
-      projectName: projects[i % Math.max(projects.length, 1)]?.name ?? m.projectName,
     });
   });
 

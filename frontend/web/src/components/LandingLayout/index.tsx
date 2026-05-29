@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  AppBar, 
-  Box, 
-  Button, 
-  Container, 
-  Toolbar, 
-  Typography, 
+import {
+  AppBar,
+  Box,
+  Button,
+  Container,
+  Toolbar,
+  Typography,
   useTheme,
   Stack,
   useMediaQuery,
@@ -13,134 +13,193 @@ import {
   Drawer,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
-  Divider
+  Divider,
+  alpha,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import { mobileMenuButtonSx } from '../../theme/layout';
+import MarketingFooter from '../MarketingFooter';
+import { tmColors } from '../../theme/designTokens';
+import { useAppSelector } from '../../store';
+
+type NavItem = { text: string; href: string; isRoute?: boolean };
+
+const LANDING_NAV: NavItem[] = [
+  { text: 'Features', href: '#features' },
+  { text: 'How It Works', href: '#how-it-works' },
+  { text: 'Testimonials', href: '#testimonials' },
+  { text: 'Pricing', href: '/pricing', isRoute: true },
+];
+
+const MARKETING_NAV: NavItem[] = [
+  { text: 'Features', href: '/features', isRoute: true },
+  { text: 'Pricing', href: '/pricing', isRoute: true },
+  { text: 'About', href: '/about', isRoute: true },
+  { text: 'Contact', href: '/contact', isRoute: true },
+];
 
 interface LandingLayoutProps {
   children: React.ReactNode;
+  /** Show site footer with product/company links */
+  showFooter?: boolean;
+  /** Landing uses hash anchors; marketing pages use routes */
+  navVariant?: 'landing' | 'marketing';
 }
 
-const LandingLayout: React.FC<LandingLayoutProps> = ({ children }) => {
+const LandingLayout: React.FC<LandingLayoutProps> = ({
+  children,
+  showFooter = false,
+  navVariant = 'landing',
+}) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isDark = theme.palette.mode === 'dark';
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
 
-  const navigationItems = [
-    { text: 'Features', href: '#features' },
-    { text: 'How It Works', href: '#how-it-works' },
-    { text: 'Testimonials', href: '#testimonials' },
-    { text: 'Pricing', href: '/pricing', isRoute: true }
-  ];
+  const navigationItems = navVariant === 'landing' ? LANDING_NAV : MARKETING_NAV;
+  const isPricingPage = location.pathname === '/pricing';
 
-  const toggleMobileMenu = () => {
-    setMobileMenuOpen(!mobileMenuOpen);
-  };
+  const toggleMobileMenu = () => setMobileMenuOpen((open) => !open);
 
   const handleNavigation = (href: string, isRoute?: boolean) => {
     if (isRoute) {
-      // Navigate with state to allow access to pricing page
-      navigate(href, { state: { fromLandingPage: true } });
-      if (isMobile) {
-        setMobileMenuOpen(false);
-      }
+      navigate(href);
+      if (isMobile) setMobileMenuOpen(false);
       return;
     }
-    const element = document.querySelector(href);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+    if (navVariant === 'landing') {
+      const element = document.querySelector(href);
+      if (element) element.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      navigate('/');
     }
-    if (isMobile) {
-      setMobileMenuOpen(false);
-    }
+    if (isMobile) setMobileMenuOpen(false);
   };
 
+  const headerBg = isDark
+    ? alpha(tmColors.charcoal900, 0.85)
+    : alpha('#ffffff', 0.88);
+
   return (
-    <Box sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', width: '100%', overflowX: 'hidden' }}>
-      <AppBar 
-        position="fixed" 
-        elevation={0} 
-        sx={{ 
-          backgroundColor: 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(10px)',
-          borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
+    <Box
+      sx={{
+        minHeight: '100dvh',
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%',
+        overflowX: 'hidden',
+      }}
+    >
+      <AppBar
+        component="header"
+        position="fixed"
+        elevation={0}
+        sx={{
+          backgroundColor: headerBg,
+          backdropFilter: 'blur(14px)',
+          borderBottom: '1px solid',
+          borderColor: isDark ? tmColors.borderSubtle : alpha('#000', 0.06),
           transition: 'all 0.3s',
         }}
       >
         <Container maxWidth="xl">
-          <Toolbar disableGutters sx={{ py: { xs: 1, md: 1 } }}>
-            <Typography 
-              variant="h6" 
-              component="div" 
-              sx={{ 
-                flexGrow: 1, 
-                fontWeight: 700,
-                color: theme.palette.primary.main,
-                fontSize: { xs: '1.1rem', sm: '1.3rem', md: '1.5rem' }
+          <Toolbar disableGutters sx={{ py: { xs: 0.5, md: 0.75 }, minHeight: { xs: 56, md: 64 } }}>
+            <Typography
+              variant="h6"
+              component="button"
+              onClick={() => navigate('/')}
+              sx={{
+                flexGrow: 1,
+                fontWeight: 800,
+                letterSpacing: '-0.02em',
+                color: 'primary.main',
+                fontSize: { xs: '1.15rem', md: '1.35rem' },
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                textAlign: 'left',
+                p: 0,
               }}
             >
               Timely Mate
             </Typography>
 
             {isMobile ? (
-              <IconButton
-                aria-label="Open menu"
-                edge="end"
-                onClick={toggleMobileMenu}
-                sx={mobileMenuButtonSx}
-              >
+              <IconButton aria-label="Open menu" edge="end" onClick={toggleMobileMenu} sx={mobileMenuButtonSx}>
                 <MenuIcon />
               </IconButton>
             ) : (
               <>
-                <Stack direction="row" spacing={4} sx={{ mx: 4 }}>
-                  {navigationItems.map((item, index) => (
-                    <Typography 
-                      key={index}
-                      variant="body1" 
-                      sx={{ 
-                        cursor: 'pointer', 
-                        color: 'primary.main',
-                        '&:hover': { color: 'primary.dark' },
-                        fontWeight: 500,
-                        fontSize: { sm: '0.9rem', md: '1rem' }
-                      }}
-                      onClick={() => handleNavigation(item.href, (item as any).isRoute)}
-                    >
-                      {item.text}
-                    </Typography>
-                  ))}
+                <Stack direction="row" spacing={{ md: 3, lg: 4 }} sx={{ mx: 2 }}>
+                  {navigationItems.map((item) => {
+                    const active = item.isRoute && location.pathname === item.href;
+                    return (
+                      <Typography
+                        key={item.text}
+                        variant="body2"
+                        sx={{
+                          cursor: 'pointer',
+                          color: active ? 'primary.main' : 'text.secondary',
+                          fontWeight: active ? 700 : 500,
+                          fontSize: { md: '0.9rem', lg: '0.95rem' },
+                          position: 'relative',
+                          '&:hover': { color: 'primary.main' },
+                          ...(active && {
+                            '&::after': {
+                              content: '""',
+                              position: 'absolute',
+                              left: 0,
+                              right: 0,
+                              bottom: -6,
+                              height: 2,
+                              borderRadius: 1,
+                              bgcolor: 'primary.main',
+                            },
+                          }),
+                        }}
+                        onClick={() => handleNavigation(item.href, item.isRoute)}
+                      >
+                        {item.text}
+                      </Typography>
+                    );
+                  })}
                 </Stack>
 
-                <Stack direction="row" spacing={2}>
-                  <Button 
-                    color="primary" 
-                    onClick={() => navigate('/login')}
-                    sx={{ 
-                      fontWeight: 500,
-                      fontSize: { sm: '0.85rem', md: '0.9rem' },
-                      color: 'primary.main',
-                      '&:hover': { color: 'primary.dark' }
-                    }}
-                  >
-                    Log In
-                  </Button>
-                  <Button 
-                    variant="contained" 
-                    color="primary"
-                    onClick={() => navigate('/signup')}
-                    sx={{ 
-                      borderRadius: 2,
-                      fontWeight: 500,
-                      fontSize: { sm: '0.85rem', md: '0.9rem' }
-                    }}
-                  >
-                    Sign Up
-                  </Button>
+                <Stack direction="row" spacing={1.5}>
+                  {isAuthenticated ? (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={() => navigate('/dashboard')}
+                      sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none', px: 2.5 }}
+                    >
+                      Go to dashboard
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        color="primary"
+                        onClick={() => navigate('/login')}
+                        sx={{ fontWeight: 600, textTransform: 'none' }}
+                      >
+                        Log in
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => navigate('/signup')}
+                        sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none', px: 2.5 }}
+                      >
+                        {isPricingPage ? 'Start free' : 'Sign up'}
+                      </Button>
+                    </>
+                  )}
                 </Stack>
               </>
             )}
@@ -148,87 +207,71 @@ const LandingLayout: React.FC<LandingLayoutProps> = ({ children }) => {
         </Container>
       </AppBar>
 
-      {/* Mobile Menu Drawer */}
       <Drawer
         anchor="right"
         open={mobileMenuOpen}
         onClose={toggleMobileMenu}
         sx={{
           '& .MuiDrawer-paper': {
-            width: '75%',
-            maxWidth: '300px',
+            width: '80%',
+            maxWidth: 320,
             boxSizing: 'border-box',
-            paddingTop: 2
+            pt: 2,
           },
         }}
       >
-        <Box sx={{ textAlign: 'center', px: 2, py: 3 }}>
-          <Typography 
-            variant="h6" 
-            component="div" 
-            sx={{ 
-              fontWeight: 700,
-              color: theme.palette.primary.main,
-              mb: 2
-            }}
-          >
+        <Box sx={{ px: 2, py: 2 }}>
+          <Typography variant="h6" fontWeight={800} color="primary.main" sx={{ mb: 2, textAlign: 'center' }}>
             Timely Mate
           </Typography>
           <Divider sx={{ mb: 2 }} />
-          <List>
-            {navigationItems.map((item, index) => (
-              <ListItem 
-                button 
-                key={index} 
-                onClick={() => handleNavigation(item.href, (item as any).isRoute)}
-              >
-                <ListItemText 
-                  primary={item.text} 
-                  sx={{ textAlign: 'center', color: 'primary.main' }}
-                />
+          <List disablePadding>
+            {navigationItems.map((item) => (
+              <ListItem key={item.text} disablePadding>
+                <ListItemButton onClick={() => handleNavigation(item.href, item.isRoute)}>
+                  <ListItemText primary={item.text} sx={{ textAlign: 'center' }} />
+                </ListItemButton>
               </ListItem>
             ))}
-            <Divider sx={{ my: 2 }} />
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, px: 2 }}>
-              <Button 
-                variant="outlined" 
-                fullWidth
-                onClick={() => {
-                  navigate('/login');
-                  setMobileMenuOpen(false);
-                }}
-                sx={{ color: 'primary.main', borderColor: 'primary.main', '&:hover': { borderColor: 'primary.dark', color: 'primary.dark' } }}
-              >
-                Log In
-              </Button>
-              <Button 
-                variant="contained" 
-                color="primary" 
-                fullWidth
-                onClick={() => {
-                  navigate('/signup');
-                  setMobileMenuOpen(false);
-                }}
-                sx={{ borderRadius: 2 }}
-              >
-                Sign Up
-              </Button>
-            </Box>
           </List>
+          <Divider sx={{ my: 2 }} />
+          <Stack spacing={1.5}>
+            {isAuthenticated ? (
+              <Button variant="contained" fullWidth onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }}>
+                Go to dashboard
+              </Button>
+            ) : (
+              <>
+                <Button variant="outlined" fullWidth onClick={() => { navigate('/login'); setMobileMenuOpen(false); }}>
+                  Log in
+                </Button>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  onClick={() => { navigate('/signup'); setMobileMenuOpen(false); }}
+                  sx={{ borderRadius: 2 }}
+                >
+                  Sign up
+                </Button>
+              </>
+            )}
+          </Stack>
         </Box>
       </Drawer>
 
-      <Box 
-        component="main" 
-        sx={{ 
+      <Box
+        component="main"
+        sx={{
           flexGrow: 1,
-          pt: { xs: '56px', sm: '64px' } // Offset for fixed AppBar
+          pt: { xs: '56px', sm: '64px' },
         }}
       >
         {children}
       </Box>
+
+      {showFooter ? <MarketingFooter /> : null}
     </Box>
   );
 };
 
-export default LandingLayout; 
+export default LandingLayout;

@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'team_leader' | 'employee';
 
-export type Department = 
+export type Department =
   | 'executive'
   | 'hr'
   | 'finance'
@@ -15,6 +15,11 @@ export type Department =
   | 'other';
 
 export interface UserPermissions {
+  canAccessDashboard: boolean;
+  canAccessCalendar: boolean;
+  canAccessMeetings: boolean;
+  canCreateMeetings: boolean;
+  canAccessMessages: boolean;
   canCreateTasks: boolean;
   canEditTasks: boolean;
   canDeleteTasks: boolean;
@@ -27,7 +32,10 @@ export interface UserPermissions {
   canAccessHR: boolean;
   canAccessFinance: boolean;
   canAccessProjects: boolean;
+  canCreateProjects: boolean;
   canAccessTimeTracking: boolean;
+  canAccessFieldOps: boolean;
+  canAccessIncidentReports: boolean;
   canAccessExpenses: boolean;
   canAccessProcurement: boolean;
   canAccessLearning: boolean;
@@ -50,205 +58,85 @@ export interface AuthState {
   error: string | null;
 }
 
-// Helper function to get default permissions based on role and department
-export const getDefaultPermissions = (role: UserRole, department: Department): UserPermissions => {
-  const basePermissions = {
-    canCreateTasks: false,
-    canEditTasks: false,
-    canDeleteTasks: false,
-    canAssignTasks: false,
-    canViewAllTasks: false,
-    canManageTeam: false,
-    canAccessReports: false,
-    canModifySettings: false,
-    canManageUsers: false,
-    canAccessHR: false,
-    canAccessFinance: false,
-    canAccessProjects: false,
-    canAccessTimeTracking: true, // Everyone can track their own time
-    canAccessExpenses: false,
-    canAccessProcurement: false,
-    canAccessLearning: true, // Everyone can access learning
-  };
-
-  // Role-based permissions
-  switch (role) {
-    case 'admin':
-      return {
-        ...basePermissions,
-        canCreateTasks: true,
-        canEditTasks: true,
-        canDeleteTasks: true,
-        canAssignTasks: true,
-        canViewAllTasks: true,
-        canManageTeam: true,
-        canAccessReports: true,
-        canModifySettings: true,
-        canManageUsers: true,
-        canAccessHR: true,
-        canAccessFinance: true,
-        canAccessProjects: true,
-        canAccessExpenses: true,
-        canAccessProcurement: true,
-      };
-    case 'team_leader':
-      // Managers/Team Leaders get comprehensive access (almost admin-level)
-      return {
-        ...basePermissions,
-        canCreateTasks: true,
-        canEditTasks: true,
-        canDeleteTasks: true, // Managers can delete tasks
-        canAssignTasks: true,
-        canViewAllTasks: true,
-        canManageTeam: true,
-        canAccessReports: true,
-        canModifySettings: true, // Managers can modify settings
-        canManageUsers: true, // Managers can manage users
-        canAccessHR: true, // Managers can access HR
-        canAccessFinance: true, // Managers can access finance
-        canAccessProjects: true,
-        canAccessExpenses: true,
-        canAccessProcurement: true, // Managers can access procurement
-      };
-    case 'employee':
-      return {
-        ...basePermissions,
-        canCreateTasks: false,
-        canEditTasks: false, // Employees can only edit their own assigned tasks
-        canDeleteTasks: false,
-        canAssignTasks: false,
-        canViewAllTasks: false, // Employees can only see their own tasks
-        canManageTeam: false,
-        canAccessReports: false,
-        canModifySettings: false,
-        canManageUsers: false,
-        canAccessProjects: false, // Employees can only see projects they're assigned to
-        canAccessExpenses: false, // Employees can only see their own expenses
-      };
-    default:
-      return basePermissions;
-  }
+/** Managers and admins — full product access */
+export const MANAGER_PERMISSIONS: UserPermissions = {
+  canAccessDashboard: true,
+  canAccessCalendar: true,
+  canAccessMeetings: true,
+  canCreateMeetings: true,
+  canAccessMessages: true,
+  canCreateTasks: true,
+  canEditTasks: true,
+  canDeleteTasks: true,
+  canAssignTasks: true,
+  canViewAllTasks: true,
+  canManageTeam: true,
+  canAccessReports: true,
+  canModifySettings: true,
+  canManageUsers: true,
+  canAccessHR: true,
+  canAccessFinance: true,
+  canAccessProjects: true,
+  canCreateProjects: true,
+  canAccessTimeTracking: true,
+  canAccessFieldOps: true,
+  canAccessIncidentReports: true,
+  canAccessExpenses: true,
+  canAccessProcurement: true,
+  canAccessLearning: true,
 };
 
-// Helper function to get department-specific permissions
-export const getDepartmentPermissions = (department: Department): Partial<UserPermissions> => {
-  switch (department) {
-    case 'executive':
-      // Executives get FULL comprehensive access (admin-level)
-      return {
-        canCreateTasks: true,
-        canEditTasks: true,
-        canDeleteTasks: true,
-        canAssignTasks: true,
-        canViewAllTasks: true,
-        canManageTeam: true,
-        canAccessHR: true,
-        canAccessFinance: true,
-        canAccessReports: true,
-        canModifySettings: true,
-        canManageUsers: true,
-        canAccessProjects: true,
-        canAccessExpenses: true,
-        canAccessProcurement: true,
-      };
-    case 'hr':
-      return {
-        canAccessHR: true,
-        canAccessReports: true,
-        canManageUsers: true,
-        canAccessProjects: true, // HR needs to see projects for resource planning
-      };
-    case 'finance':
-      return {
-        canAccessFinance: true,
-        canAccessExpenses: true,
-        canAccessReports: true,
-        canAccessProjects: true, // Finance needs to see projects for budgeting
-      };
-    case 'engineering':
-    case 'design':
-      return {
-        canAccessProjects: true,
-        canCreateTasks: true,
-        canEditTasks: true,
-        canViewAllTasks: true, // Engineers/Designers can see all tasks in their projects
-      };
-    case 'operations':
-      return {
-        canAccessProcurement: true,
-        canAccessExpenses: true,
-        canAccessProjects: true,
-        canCreateTasks: true,
-        canEditTasks: true,
-      };
-    case 'marketing':
-    case 'sales':
-      return {
-        canAccessProjects: true,
-        canAccessExpenses: true,
-        canCreateTasks: true,
-        canEditTasks: true,
-      };
-    case 'it':
-      return {
-        canModifySettings: true,
-        canAccessProjects: true,
-        canCreateTasks: true,
-        canEditTasks: true,
-      };
-    case 'legal':
-      return {
-        canAccessReports: true,
-        canAccessProjects: true,
-      };
-    case 'customer_success':
-      return {
-        canAccessProjects: true,
-        canCreateTasks: true,
-        canEditTasks: true,
-      };
-    default:
-      return {};
-  }
+type PermissionOptions = {
+  isFieldWorker?: boolean;
 };
 
-// Combined function to get permissions based on both role and department
-export const getUserPermissions = (role: UserRole, department: Department): UserPermissions => {
-  const rolePermissions = getDefaultPermissions(role, department);
-  const departmentPermissions = getDepartmentPermissions(department);
-  
-  // For executives, admins, and managers, ensure they get FULL comprehensive access
-  const isExecutive = department === 'executive';
-  const isAdmin = role === 'admin';
-  const isManager = role === 'team_leader';
-  
-  // Merge role and department permissions, with department permissions taking precedence
-  let mergedPermissions = {
-    ...rolePermissions,
-    ...departmentPermissions,
-  };
-  
-  // If user is executive, admin, or manager, ensure ALL permissions are enabled
-  if (isExecutive || isAdmin || isManager) {
-    mergedPermissions = {
-      canCreateTasks: true,
-      canEditTasks: true,
-      canDeleteTasks: true,
-      canAssignTasks: true,
-      canViewAllTasks: true,
-      canManageTeam: true,
-      canAccessReports: true,
-      canModifySettings: true,
-      canManageUsers: true,
-      canAccessHR: true,
-      canAccessFinance: true,
-      canAccessProjects: true,
-      canAccessTimeTracking: true,
-      canAccessExpenses: true,
-      canAccessProcurement: true,
-      canAccessLearning: true,
-    };
+export const isManagerRole = (role: UserRole, department: Department): boolean =>
+  role === 'admin' || role === 'team_leader' || department === 'executive';
+
+/** Default permissions for standard employees (limited nav + no create/assign on projects/jobs) */
+export const getEmployeePermissions = (options: PermissionOptions = {}): UserPermissions => ({
+  canAccessDashboard: true,
+  canAccessCalendar: true,
+  canAccessMeetings: true,
+  canCreateMeetings: true,
+  canAccessMessages: true,
+  canAccessTimeTracking: true,
+  canAccessProjects: true,
+  canCreateProjects: false,
+  canCreateTasks: false,
+  canEditTasks: false,
+  canDeleteTasks: false,
+  canAssignTasks: false,
+  canViewAllTasks: false,
+  canManageTeam: false,
+  canAccessReports: false,
+  canModifySettings: false,
+  canManageUsers: false,
+  canAccessHR: false,
+  canAccessFinance: false,
+  canAccessExpenses: false,
+  canAccessProcurement: false,
+  canAccessLearning: true,
+  canAccessFieldOps: Boolean(options.isFieldWorker),
+  canAccessIncidentReports: Boolean(options.isFieldWorker),
+});
+
+export const getDefaultPermissions = (
+  role: UserRole,
+  department: Department,
+  options: PermissionOptions = {}
+): UserPermissions => {
+  if (isManagerRole(role, department)) {
+    return { ...MANAGER_PERMISSIONS };
   }
-  
-  return mergedPermissions;
+  return getEmployeePermissions(options);
 };
+
+/** @deprecated Department boosts apply only to managers; employees use strict employee permissions */
+export const getDepartmentPermissions = (_department: Department): Partial<UserPermissions> => ({});
+
+export const getUserPermissions = (
+  role: UserRole,
+  department: Department,
+  options: PermissionOptions = {}
+): UserPermissions => getDefaultPermissions(role, department, options);

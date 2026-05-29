@@ -8,65 +8,69 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import SessionRestoreProvider from './components/SessionRestoreProvider';
 import { GuidedTourProvider } from './contexts/GuidedTourContext';
+import AuthBootstrap from './components/AuthBootstrap';
+import AuthHashRedirect from './components/AuthHashRedirect';
 import { useElectron, useElectronMenu, useElectronTray } from './hooks/useElectron';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const AppContent = () => {
-  const { isElectron, showNotification } = useElectron();
+  const { showNotification } = useElectron();
+  const navigate = useNavigate();
 
-  // Handle menu actions
   useElectronMenu((action) => {
     switch (action) {
       case 'menu-new-employee':
-        // Navigate to HR page and open new employee dialog
-        window.location.href = '/hr';
+        navigate('/hr');
         break;
       case 'menu-import-data':
-        // Navigate to appropriate import page
-        window.location.href = '/hr';
+        navigate('/hr');
         break;
       case 'menu-export-report':
-        // Trigger export functionality
-        showNotification('Export Report', 'Export functionality will be implemented');
+        navigate('/reports');
         break;
     }
   });
 
-  // Handle tray actions
   useElectronTray(() => {
-    // Trigger clock in/out functionality
     showNotification('Clock Action', 'Clock in/out triggered from system tray');
   });
 
-  // Request notification permission on app start
   useEffect(() => {
-    if (!isElectron && 'Notification' in window) {
-      Notification.requestPermission();
-    }
-  }, [isElectron]);
+    const onAuthExpired = () => navigate('/login', { replace: true });
+    window.addEventListener('timelymate:auth-expired', onAuthExpired);
+    return () => window.removeEventListener('timelymate:auth-expired', onAuthExpired);
+  }, [navigate]);
 
-  return <AppRoutes />;
+  return (
+    <>
+      <AuthHashRedirect />
+      <AppRoutes />
+    </>
+  );
 };
 
 const App = () => {
   return (
     <ErrorBoundary>
       <SessionRestoreProvider>
-        <ThemeProvider>
-          <CurrencyProvider>
-            <UserStatusProvider>
-              <SubscriptionProvider>
-                <EmployeeProvider>
-                  <NotificationProvider>
-                    <GuidedTourProvider>
-                      <AppContent />
-                    </GuidedTourProvider>
-                  </NotificationProvider>
-                </EmployeeProvider>
-              </SubscriptionProvider>
-            </UserStatusProvider>
-          </CurrencyProvider>
-        </ThemeProvider>
+        <AuthBootstrap>
+          <ThemeProvider>
+            <CurrencyProvider>
+              <UserStatusProvider>
+                <SubscriptionProvider>
+                  <EmployeeProvider>
+                    <NotificationProvider>
+                      <GuidedTourProvider>
+                        <AppContent />
+                      </GuidedTourProvider>
+                    </NotificationProvider>
+                  </EmployeeProvider>
+                </SubscriptionProvider>
+              </UserStatusProvider>
+            </CurrencyProvider>
+          </ThemeProvider>
+        </AuthBootstrap>
       </SessionRestoreProvider>
     </ErrorBoundary>
   );

@@ -13,9 +13,15 @@ __pycache__/
 # macOS
 .DS_Store
 
-# Environment
+# Environment (secrets — never commit)
 .env
-.env.*
+.env.local
+.env.development
+.env.staging
+.env.production
+.env.*.local
+# Keep the template visible in the repo and IDE
+!.env.example
 
 # Logs
 *.log

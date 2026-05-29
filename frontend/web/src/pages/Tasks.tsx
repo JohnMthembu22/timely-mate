@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -22,11 +22,11 @@ import { notifyTaskSubmittedToBriefedBy } from '../utils/taskReview';
 import { getOfficeAssignableEmployees } from '../utils/offsiteWorkers';
 import { getAuthUserLabel } from '../utils/managerReview';
 import type { AiTaskSuggestion, Task, TaskFiltersState, TaskFormValues, TaskGroupMode, TaskPriority, TaskStatus } from './Tasks/types';
-import { INITIAL_TASKS, MOCK_AI_TASK_SUGGESTIONS } from './Tasks/tasksMockData';
 import { filterTasks, groupTasks } from './Tasks/taskUtils';
 import { TaskFiltersBar } from './Tasks/components/TaskFiltersBar';
 import { TaskAiSuggestions } from './Tasks/components/TaskAiSuggestions';
 import { TaskCard } from './Tasks/components/TaskCard';
+import { useArrayPersistence } from '../hooks/usePersistence';
 
 function daysFromNow(n: number): string {
   const d = new Date();
@@ -47,7 +47,7 @@ export const Tasks: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [groupMode, setGroupMode] = useState<TaskGroupMode>('status');
-  const [aiSuggestions, setAiSuggestions] = useState(MOCK_AI_TASK_SUGGESTIONS);
+  const [aiSuggestions, setAiSuggestions] = useState<AiTaskSuggestion[]>([]);
   const [filters, setFilters] = useState<TaskFiltersState>({
     search: '',
     statuses: [],
@@ -68,7 +68,7 @@ export const Tasks: React.FC = () => {
     isEmployee,
   } = usePermissions();
 
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useArrayPersistence<Task>('timelymate_tasks', []);
 
   const assigneeOptions = useMemo(() => {
     const fromTasks = tasks.map((t) => ({ email: t.assignee, name: t.assigneeName }));

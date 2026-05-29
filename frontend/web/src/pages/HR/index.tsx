@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users, Briefcase, AlertCircle, DollarSign } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -288,6 +289,7 @@ const availableBenefits = [
 const HR: React.FC = () => {
   const { employees, addEmployee, addEmployees, updateEmployee } = useEmployees();
   const { addNotification } = useNotifications();
+  const navigate = useNavigate();
   const { currentPlan } = useSubscription();
   const user = useAppSelector((state) => state.auth.user);
   const [currentTab, setCurrentTab] = useState(0);
@@ -350,45 +352,6 @@ const HR: React.FC = () => {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Generate sample leave requests from imported employees
-  useEffect(() => {
-    if (employees.length > 0) {
-      const sampleLeaveRequests: LeaveRequest[] = employees
-        .filter(employee => employee.status === 'active') // Only active employees can request leave
-        .slice(0, Math.min(employees.length, 10)) // Limit to 10 sample requests
-        .map((employee, index) => {
-          const leaveTypes = ['Annual Leave', 'Sick Leave', 'Personal Leave', 'Maternity Leave', 'Paternity Leave'];
-          const statuses: ('pending' | 'approved' | 'rejected')[] = ['pending', 'approved', 'rejected'];
-          
-          // Generate random dates within the last 3 months
-          const startDate = new Date();
-          startDate.setDate(startDate.getDate() - Math.floor(Math.random() * 90));
-          const endDate = new Date(startDate);
-          endDate.setDate(endDate.getDate() + Math.floor(Math.random() * 14) + 1); // 1-15 days leave
-          
-          const daysRequested = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-          
-          return {
-            id: `leave-${employee.id}-${index}`,
-            employeeName: employee.name,
-            employeeId: employee.id,
-            type: leaveTypes[Math.floor(Math.random() * leaveTypes.length)],
-            startDate: startDate.toISOString().split('T')[0],
-            endDate: endDate.toISOString().split('T')[0],
-            status: statuses[Math.floor(Math.random() * statuses.length)],
-            avatar: employee.avatar || `https://i.pravatar.cc/150?u=${employee.id}`,
-            reason: 'Sample leave request',
-            daysRequested,
-            submittedDate: startDate.toISOString().split('T')[0],
-          };
-        });
-      
-      setLeaveRequests(sampleLeaveRequests);
-    } else {
-      setLeaveRequests([]);
-    }
-  }, [employees]);
-
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
   };
@@ -416,8 +379,9 @@ const HR: React.FC = () => {
     if (currentPlan?.id === 'free' && employees.length >= 5) {
       addNotification(createNotification.employee(
         'Employee Limit Reached',
-        'Free tier is limited to 5 employees. Please upgrade to add more employees.'
+        'Free tier is limited to 5 employees. Upgrade your plan to add more.'
       ));
+      navigate('/pricing', { state: { highlightPlan: 'starter' } });
       return;
     }
     
@@ -2722,9 +2686,20 @@ const HR: React.FC = () => {
                     Manage your team members and their information
                   </Typography>
                   {currentPlan?.id === 'free' && (
-                    <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
-                      Free tier: {employees.length}/5 employees. Upgrade to add more.
-                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                      <Typography variant="caption" color="warning.main">
+                        Free tier: {employees.length}/5 employees.
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        sx={{ py: 0, minHeight: 28 }}
+                        onClick={() => navigate('/pricing', { state: { highlightPlan: 'starter' } })}
+                      >
+                        Upgrade Plan
+                      </Button>
+                    </Stack>
                   )}
                 </Box>
                 <Stack direction="row" spacing={2}>

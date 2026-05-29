@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo } from 'react';
 import { useArrayPersistence } from '../hooks/usePersistence';
-import { seedDemoEmployeesIfEmpty } from '../utils/demoSeed';
+import { isPresentationEmployeeRecord, stripLegacyEmployees } from '../utils/legacyDemoCleanup';
 
 export interface Employee {
   id: string;
@@ -8,21 +8,21 @@ export interface Employee {
   position: string;
   department: string;
   joinDate: string;
-  startDate?: string; // Alternative to joinDate
+  startDate?: string;
   status: 'active' | 'on-leave' | 'terminated';
   avatar: string;
   salary: number;
   benefits: string[];
   level: 'junior' | 'mid' | 'senior' | 'lead';
   email?: string;
-  phone?: string; // Phone number
+  phone?: string;
   employmentType: 'permanent' | 'contract' | 'freelancer';
-  /** office = default roster; offsite = only on Field Operations page; hybrid = both */
   workLocation?: 'office' | 'offsite' | 'hybrid';
 }
 
 interface EmployeeContextType {
   employees: Employee[];
+  setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
   addEmployee: (employee: Employee) => void;
   addEmployees: (newEmployees: Employee[]) => void;
   updateEmployee: (id: string, updates: Partial<Employee>) => void;
@@ -54,8 +54,15 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({ children }) 
   const [employees, setEmployees] = useArrayPersistence<Employee>('timelymate_employees', []);
 
   useEffect(() => {
-    seedDemoEmployeesIfEmpty(employees, (list) => setEmployees((prev) => [...prev, ...list]));
-  }, [employees.length, setEmployees]);
+    setEmployees((prev) => {
+      if (!prev.some(isPresentationEmployeeRecord)) return prev;
+      return stripLegacyEmployees(prev);
+    });
+  }, [setEmployees]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('timelymate:employees-changed'));
+  }, [employees.length]);
 
   const addEmployee = useCallback((employee: Employee) => {
     setEmployees((prev) => [...prev, employee]);
@@ -112,6 +119,7 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({ children }) 
   const value = useMemo<EmployeeContextType>(
     () => ({
       employees,
+      setEmployees,
       addEmployee,
       addEmployees,
       updateEmployee,
@@ -126,6 +134,7 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({ children }) 
     }),
     [
       employees,
+      setEmployees,
       addEmployee,
       addEmployees,
       updateEmployee,
@@ -140,9 +149,5 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({ children }) 
     ]
   );
 
-  return (
-    <EmployeeContext.Provider value={value}>
-      {children}
-    </EmployeeContext.Provider>
-  );
-}; 
+  return <EmployeeContext.Provider value={value}>{children}</EmployeeContext.Provider>;
+};

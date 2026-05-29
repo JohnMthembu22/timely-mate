@@ -18,6 +18,17 @@
 
 ### Step 2: Add Environment Variables
 
+**Where is `.env`?** It lives at `frontend/web/.env` (not the repo root). It is listed in `.gitignore`, so Cursor/VS Code may hide it — enable **“Show ignored files”** in the file explorer, or open it directly: `frontend/web/.env`.
+
+**Create it if missing:**
+
+```bash
+cd frontend/web
+npm run setup:env
+```
+
+Then edit `frontend/web/.env` and paste your anon key.
+
 Update your `.env` file in `frontend/web/`:
 
 ```env

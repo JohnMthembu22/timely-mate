@@ -1,6 +1,13 @@
+import { AuthError, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { UserRole, UserPermissions, Department, getDefaultPermissions } from '../types/auth';
+import { UserRole, UserPermissions, Department, getUserPermissions, isManagerRole } from '../types/auth';
 import { CompanyProfile } from '../types/subscription';
+import {
+  getAuthCallbackUrl,
+  getPasswordResetRedirectUrl,
+  isSupabaseAuthEnabled,
+} from '../utils/authConfig';
+import { persistAuthSnapshot } from '../utils/authSession';
 
 export interface LoginCredentials {
   email: string;
@@ -31,270 +38,251 @@ export interface AuthResponse {
   };
 }
 
-// Check if Supabase is configured
-const isSupabaseConfigured = (): boolean => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return !!(url && key && url !== '' && key !== '');
+export class EmailConfirmationRequiredError extends Error {
+  readonly email: string;
+
+  constructor(email: string) {
+    super(
+      'Account created. Check your inbox for a confirmation email from Timely Mate before signing in.'
+    );
+    this.name = 'EmailConfirmationRequiredError';
+    this.email = email;
+  }
+}
+
+type ProfileRow = {
+  id: string;
+  email: string;
+  organization_name?: string | null;
+  role?: string | null;
+  department?: string | null;
+  permissions?: UserPermissions | null;
+  company_profile?: CompanyProfile | null;
+  selected_plan?: string | null;
 };
+
+function resolvePermissions(
+  userRole: UserRole,
+  userDepartment: Department,
+  _storedPermissions?: UserPermissions | null
+): UserPermissions {
+  return getUserPermissions(userRole, userDepartment);
+}
+
+export async function buildAuthResponseFromSession(session: Session): Promise<AuthResponse> {
+  const userId = session.user.id;
+  const fallbackEmail = session.user.email ?? '';
+
+  const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+
+  const userProfile: ProfileRow = profile ?? {
+    id: userId,
+    email: fallbackEmail,
+    organization_name: (session.user.user_metadata?.organization_name as string) ?? '',
+    role: (session.user.user_metadata?.role as string) ?? 'employee',
+    department: (session.user.user_metadata?.department as string) ?? 'general',
+    permissions: {},
+  };
+
+  const userRole = (userProfile.role as UserRole) || 'employee';
+  const userDepartment = (userProfile.department as Department) || 'general';
+
+  return {
+    token: session.access_token,
+    user: {
+      id: userId,
+      email: userProfile.email || fallbackEmail,
+      organizationName: userProfile.organization_name || '',
+      role: userRole,
+      department: userDepartment,
+      permissions: resolvePermissions(userRole, userDepartment, userProfile.permissions),
+      companyProfile: userProfile.company_profile ?? undefined,
+      selectedPlan: userProfile.selected_plan ?? undefined,
+    },
+  };
+}
+
+/** Map Supabase Auth API errors (often HTTP 400) to clear user-facing messages. */
+export function mapSupabaseAuthError(error: AuthError): string {
+  const code = error.code ?? '';
+  const msg = (error.message ?? '').toLowerCase();
+
+  if (code === 'email_not_confirmed' || msg.includes('email not confirmed')) {
+    return 'Please confirm your email first. Check your inbox (and spam) for a message from Timely Mate, then try again.';
+  }
+  if (code === 'invalid_credentials' || msg.includes('invalid login credentials')) {
+    return 'Invalid email or password. If you registered before Supabase was enabled, create a new account via Register.';
+  }
+  if (code === 'user_banned' || msg.includes('banned')) {
+    return 'This account has been disabled. Contact your administrator.';
+  }
+  if (code === 'too_many_requests' || msg.includes('rate limit')) {
+    return 'Too many sign-in attempts. Please wait a few minutes and try again.';
+  }
+  if (msg.includes('email') && msg.includes('invalid')) {
+    return 'Please enter a valid email address.';
+  }
+
+  return error.message || 'Sign-in failed. Please check your email and password.';
+}
+
+async function upsertProfile(userId: string, data: SignupData): Promise<void> {
+  const { error } = await supabase.from('profiles').upsert(
+    {
+      id: userId,
+      email: data.email,
+      organization_name: data.organizationName,
+      role: data.role || 'employee',
+      department: data.department || 'general',
+      permissions: {},
+      company_profile: data.companyProfile ?? null,
+      selected_plan: data.selectedPlan ?? null,
+    },
+    { onConflict: 'id' }
+  );
+
+  if (error) {
+    throw new Error(error.message || 'Failed to save your profile');
+  }
+}
 
 const authServiceSupabase = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Supabase is not configured. Please check your environment variables.');
+    if (!isSupabaseAuthEnabled()) {
+      throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
     }
 
-    try {
-      // Sign in with Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: credentials.email,
-        password: credentials.password,
-      });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: credentials.email.trim().toLowerCase(),
+      password: credentials.password,
+    });
 
-      if (error) {
-        throw new Error(error.message || 'Invalid email or password');
-      }
-
-      if (!data.user || !data.session) {
-        throw new Error('Login failed. Please try again.');
-      }
-
-      // Get user profile from profiles table
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        // PGRST116 is "not found" - we'll create profile if it doesn't exist
-        console.warn('Profile not found, will create one:', profileError);
-      }
-
-      // If profile doesn't exist, create a default one
-      const userProfile = profile || {
-        id: data.user.id,
-        email: data.user.email || credentials.email,
-        organization_name: '',
-        role: 'employee' as UserRole,
-        department: 'general' as Department,
-        permissions: {},
-      };
-
-      // Get default permissions based on role
-      const userRole = (userProfile.role as UserRole) || 'employee';
-      const userDepartment = (userProfile.department as Department) || 'general';
-      const defaultPermissions = getDefaultPermissions(userRole, userDepartment);
-      const isAdmin = userRole === 'admin';
-      const isManager = userRole === 'team_leader';
-      const isExecutive = userDepartment === 'executive';
-      
-      // For admin, manager, and executive users, always use ALL permissions
-      // For other users, merge stored permissions with defaults
-      let finalPermissions: UserPermissions;
-      if (isAdmin || isManager || isExecutive) {
-        // Admin, Manager, and Executive always get ALL permissions
-        finalPermissions = {
-          canCreateTasks: true,
-          canEditTasks: true,
-          canDeleteTasks: true,
-          canAssignTasks: true,
-          canViewAllTasks: true,
-          canManageTeam: true,
-          canAccessReports: true,
-          canModifySettings: true,
-          canManageUsers: true,
-          canAccessHR: true,
-          canAccessFinance: true,
-          canAccessProjects: true,
-          canAccessTimeTracking: true,
-          canAccessExpenses: true,
-          canAccessProcurement: true,
-          canAccessLearning: true,
-        };
-      } else {
-        const storedPermissions = (userProfile.permissions as UserPermissions) || {};
-        if (Object.keys(storedPermissions).length > 0) {
-          finalPermissions = { ...defaultPermissions, ...storedPermissions };
-        } else {
-          finalPermissions = defaultPermissions;
-        }
-      }
-
-      const authResponse: AuthResponse = {
-        token: data.session.access_token,
-        user: {
-          id: data.user.id,
-          email: userProfile.email,
-          organizationName: userProfile.organization_name || '',
-          role: userRole,
-          department: userDepartment,
-          permissions: finalPermissions,
-          companyProfile: userProfile.company_profile as CompanyProfile | undefined,
-          selectedPlan: userProfile.selected_plan,
-        },
-      };
-
-      return authResponse;
-    } catch (error: any) {
-      console.error('Supabase login error:', error);
-      throw new Error(error.message || 'Login failed. Please try again.');
+    if (error) {
+      throw new Error(mapSupabaseAuthError(error));
     }
+
+    if (!data.user || !data.session) {
+      throw new Error('Login failed. Please try again.');
+    }
+
+    const response = await buildAuthResponseFromSession(data.session);
+    persistAuthSnapshot(response);
+    return response;
   },
 
   async signup(data: SignupData): Promise<AuthResponse> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Supabase is not configured. Please check your environment variables.');
+    if (!isSupabaseAuthEnabled()) {
+      throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
     }
 
-    try {
-      // Check if user already exists
-      const { data: existingUser } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('email', data.email)
-        .single();
+    const email = data.email.trim().toLowerCase();
 
-      if (existingUser) {
-        throw new Error('An account with this email already exists. Please use a different email or login instead.');
-      }
-
-      // Sign up user with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-      });
-
-      if (authError) {
-        throw new Error(authError.message || 'Account creation failed');
-      }
-
-      if (!authData.user) {
-        throw new Error('Failed to create user account');
-      }
-
-      // Create user profile in profiles table
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: authData.user.id,
-          email: data.email,
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password: data.password,
+      options: {
+        emailRedirectTo: getAuthCallbackUrl(),
+        data: {
           organization_name: data.organizationName,
           role: data.role || 'employee',
           department: data.department || 'general',
-          permissions: {},
-          company_profile: data.companyProfile,
-          selected_plan: data.selectedPlan,
-        });
+          company_profile: data.companyProfile ?? null,
+          selected_plan: data.selectedPlan ?? null,
+        },
+      },
+    });
 
-      if (profileError) {
-        // If profile creation fails, try to delete the auth user
-        await supabase.auth.admin.deleteUser(authData.user.id).catch(() => {});
-        throw new Error(profileError.message || 'Failed to create user profile');
+    if (authError) {
+      if (authError.message.toLowerCase().includes('already registered')) {
+        throw new Error('An account with this email already exists. Please sign in instead.');
       }
+      throw new Error(authError.message || 'Account creation failed');
+    }
 
-      // If email confirmation is required, user needs to confirm email
-      if (!authData.session) {
-        throw new Error('Please check your email to confirm your account before signing in.');
-      }
+    if (!authData.user) {
+      throw new Error('Failed to create user account');
+    }
 
-      // Sign in after successful signup
-      return this.login({
-        email: data.email,
-        password: data.password,
-      });
-    } catch (error: any) {
-      console.error('Supabase signup error:', error);
-      throw new Error(error.message || 'Account creation failed. Please try again.');
+    // Email confirmation required — profile is created by DB trigger from user metadata
+    if (!authData.session) {
+      throw new EmailConfirmationRequiredError(email);
+    }
+
+    await upsertProfile(authData.user.id, { ...data, email });
+    const response = await buildAuthResponseFromSession(authData.session);
+    persistAuthSnapshot(response);
+    return response;
+  },
+
+  async requestPasswordReset(email: string): Promise<void> {
+    if (!isSupabaseAuthEnabled()) {
+      throw new Error('Supabase is not configured.');
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: getPasswordResetRedirectUrl(),
+    });
+
+    if (error) {
+      throw new Error(mapSupabaseAuthError(error));
+    }
+  },
+
+  async updatePassword(newPassword: string): Promise<void> {
+    if (!isSupabaseAuthEnabled()) {
+      throw new Error('Supabase is not configured.');
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      throw new Error(mapSupabaseAuthError(error));
     }
   },
 
   async logout(): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      return;
-    }
-
+    if (!isSupabaseAuthEnabled()) return;
     const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Logout error:', error);
-    }
+    if (error) console.error('Logout error:', error);
   },
 
   async getCurrentUser() {
-    if (!isSupabaseConfigured()) {
-      return null;
-    }
-
-    try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-
-      if (error || !user) {
-        return null;
-      }
-
-      // Get user profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile) {
-        return null;
-      }
-
-      return {
-        id: user.id,
-        email: profile.email,
-        organizationName: profile.organization_name || '',
-        role: profile.role || 'employee',
-        department: profile.department || 'general',
-        permissions: profile.permissions || {},
-        companyProfile: profile.company_profile,
-        selectedPlan: profile.selected_plan,
-      };
-    } catch (error) {
-      console.error('Error getting current user:', error);
-      return null;
-    }
-  },
-
-  async getToken(): Promise<string | null> {
-    if (!isSupabaseConfigured()) {
-      return null;
-    }
+    if (!isSupabaseAuthEnabled()) return null;
 
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    return session?.access_token || null;
+    if (!session) return null;
+
+    const response = await buildAuthResponseFromSession(session);
+    return response.user;
+  },
+
+  async getToken(): Promise<string | null> {
+    if (!isSupabaseAuthEnabled()) return null;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
   },
 
   async isAuthenticated(): Promise<boolean> {
-    if (!isSupabaseConfigured()) {
-      return false;
-    }
-
+    if (!isSupabaseAuthEnabled()) return false;
     const {
       data: { session },
     } = await supabase.auth.getSession();
     return !!session;
   },
 
-  // Listen to auth state changes
-  onAuthStateChange(callback: (event: string, session: any) => void) {
-    if (!isSupabaseConfigured()) {
-      return { data: { subscription: null }, unsubscribe: () => {} };
+  onAuthStateChange(callback: (event: string, session: Session | null) => void) {
+    if (!isSupabaseAuthEnabled()) {
+      return { data: { subscription: { unsubscribe: () => {} } } };
     }
-
     return supabase.auth.onAuthStateChange((event, session) => {
       callback(event, session);
     });
   },
+
+  buildAuthResponseFromSession,
 };
 
 export default authServiceSupabase;
-

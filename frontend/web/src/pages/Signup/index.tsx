@@ -30,11 +30,11 @@ import {
 } from '@mui/icons-material';
 import { useAppDispatch } from '../../store';
 import { signup } from '../../store/slices/authSlice';
+import { isSupabaseAuthEnabled } from '../../utils/authConfig';
 import ConditionalRegistration from '../../components/ConditionalRegistration';
 import { CompanyProfile, SubscriptionPlan } from '../../types/subscription';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { Department } from '../../types/auth';
-import authService from '../../services/auth';
 
 interface SignupForm {
   email: string;
@@ -55,6 +55,7 @@ const Signup = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showConditionalReg, setShowConditionalReg] = useState(false);
+  const [emailConfirmationSent, setEmailConfirmationSent] = useState<string | null>(null);
 
   // Check for invitation email in URL
   const inviteEmail = searchParams.get('invite');
@@ -95,13 +96,7 @@ const Signup = () => {
       setError('Please enter a valid email address');
       return false;
     }
-    
-    // Check if user already exists
-    if (authService.checkEmailExists(formData.email)) {
-      setError('An account with this email already exists. Please use a different email or login instead.');
-      return false;
-    }
-    
+
     if (formData.password.length < 8) {
       setError('Password must be at least 8 characters long');
       return false;
@@ -153,11 +148,24 @@ const Signup = () => {
           newUser: true 
         }
       });
-    } catch (err: any) {
-      if (err.message?.includes('email already exists')) {
-        setError('An account with this email already exists. Please use a different email or login instead.');
+    } catch (err: unknown) {
+      const payload = err as { code?: string; email?: string; message?: string } | string | undefined;
+      if (typeof payload === 'object' && payload?.code === 'EMAIL_CONFIRMATION') {
+        setShowConditionalReg(false);
+        setEmailConfirmationSent(payload.email ?? formData.email);
+        setError(null);
+        return;
+      }
+      const message =
+        typeof payload === 'object' && payload?.message
+          ? payload.message
+          : typeof err === 'string'
+            ? err
+            : 'An error occurred during signup. Please try again.';
+      if (message.includes('already exists')) {
+        setError('An account with this email already exists. Please sign in instead.');
       } else {
-        setError(err.message || 'An error occurred during signup. Please try again.');
+        setError(message);
       }
       setShowConditionalReg(false);
     } finally {
@@ -188,6 +196,27 @@ const Signup = () => {
                 </Typography>
               </Box>
 
+              {emailConfirmationSent ? (
+                <Alert severity="success" sx={{ borderRadius: 2 }}>
+                  <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                    Check your email
+                  </Typography>
+                  <Typography variant="body2">
+                    We sent a confirmation link to <strong>{emailConfirmationSent}</strong> from Timely Mate.
+                    Open it to activate your account, then sign in.
+                  </Typography>
+                  <Button
+                    component={RouterLink}
+                    to="/login"
+                    variant="contained"
+                    sx={{ mt: 2 }}
+                    fullWidth
+                  >
+                    Go to sign in
+                  </Button>
+                </Alert>
+              ) : (
+              <>
               <form onSubmit={handleSubmit}>
                 <Stack spacing={3}>
                   <TextField
@@ -371,6 +400,8 @@ const Signup = () => {
                   Small teams (1-5 employees) get free access forever!
                 </Typography>
               </Alert>
+              </>
+              )}
             </Stack>
           </CardContent>
         </Card>

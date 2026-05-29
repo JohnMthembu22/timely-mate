@@ -17,6 +17,7 @@ export interface OpsCalendarEventSeed {
 
 /** Deterministic operational events for the timeline runway. */
 export function buildOperationalMockEvents(anchor = new Date()): OpsCalendarEventSeed[] {
+  return [];
   const d = (offset: number, hour = 9) => {
     const day = addDays(anchor, offset);
     const h = String(hour).padStart(2, '0');

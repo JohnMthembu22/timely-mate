@@ -1,9 +1,11 @@
+import { EMPTY_AI_PRODUCTIVITY } from '../../utils/emptyData';
 import type { AiProductivityInsightsBundle, AiProductivityInsight } from './aiProductivityInsightsTypes';
 import type { TimeTrackingJobRow } from './timeTrackingTypes';
 
 export function buildAiProductivityInsights(
   activeJobs: TimeTrackingJobRow[] = []
 ): AiProductivityInsightsBundle {
+  return EMPTY_AI_PRODUCTIVITY;
   const sprintJob = activeJobs.find((j) => /platform|sprint/i.test(j.name));
   const sprintName = sprintJob?.name ?? 'Platform Sprint';
 

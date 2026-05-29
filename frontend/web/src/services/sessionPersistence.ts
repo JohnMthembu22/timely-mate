@@ -185,18 +185,6 @@ class SessionPersistenceService {
         localStorage.setItem(PERSISTENCE_KEYS.REGISTERED_USERS, JSON.stringify(mergedUsers));
       }
 
-      const existingEmployees = this.getParsedItem(PERSISTENCE_KEYS.EMPLOYEES) || [];
-      const sessionEmployees = sessionData.employees || [];
-      const mergedEmployees = [...existingEmployees];
-      sessionEmployees.forEach((emp: { id?: string }) => {
-        if (emp?.id && !mergedEmployees.find((e: { id?: string }) => e.id === emp.id)) {
-          mergedEmployees.push(emp);
-        }
-      });
-      if (mergedEmployees.length > 0) {
-        localStorage.setItem(PERSISTENCE_KEYS.EMPLOYEES, JSON.stringify(mergedEmployees));
-      }
-
       this.restoreItem(PERSISTENCE_KEYS.AUTH_TOKEN, sessionData.authToken);
       this.restoreItem(PERSISTENCE_KEYS.USER_DATA, sessionData.userData);
       this.restoreItem(PERSISTENCE_KEYS.CLOCK_IN_TODAY, sessionData.clockInToday);

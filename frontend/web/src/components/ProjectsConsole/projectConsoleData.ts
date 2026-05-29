@@ -59,12 +59,7 @@ function daysUntil(endDate: string): number | null {
 /** Mock operational AI insights — maps project names when portfolio exists */
 export function buildProjectInsights(projects: ConsoleProjectInput[]): ProjectAiInsight[] {
   const names = projects.map((p) => ({ id: p.id, name: p.name }));
-  return buildOperationalAiInsights(names.length > 0 ? names : [
-    { id: 'mock-ui', name: 'UI/UX Redesign' },
-    { id: 'mock-eng', name: 'Platform Development' },
-    { id: 'mock-legal', name: 'Legal Initiative' },
-    { id: 'mock-fin', name: 'Financial Analysis' },
-  ]);
+  return buildOperationalAiInsights(names);
 }
 
 export function buildProjectActivities(projects: ConsoleProjectInput[]): ProjectActivityItem[] {

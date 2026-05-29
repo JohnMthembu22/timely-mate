@@ -9,6 +9,7 @@ window.ENV.VITE_API_URL = window.ENV.VITE_API_URL || 'http://localhost:3003';
 window.ENV.VITE_SOCKET_URL = window.ENV.VITE_SOCKET_URL || 'http://localhost:3003';
 window.ENV.VITE_APP_NAME = window.ENV.VITE_APP_NAME || 'Timely Mate';
 window.ENV.VITE_ENABLE_REAL_TIME_CHAT = window.ENV.VITE_ENABLE_REAL_TIME_CHAT || 'true';
+window.ENV.VITE_APP_URL = window.ENV.VITE_APP_URL || 'https://www.timelymate.co.za';
 
 console.log('Environment configuration loaded:', {
   apiUrl: window.ENV.VITE_API_URL,

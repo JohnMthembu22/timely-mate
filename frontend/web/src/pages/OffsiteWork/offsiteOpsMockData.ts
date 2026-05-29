@@ -37,6 +37,7 @@ export function buildWorkforceTracking(
   alerts: OperationalAlert[];
   clockedInCount: number;
 } {
+  return { crew: [], routes: [], alerts: [], clockedInCount: 0 };
   const siteA = locations[0]?.name ?? 'Site A — Depot';
   const siteB = locations[1]?.name ?? 'Site B — Installation';
   const siteC = locations[2]?.name ?? 'Site C — Inspection';
@@ -158,6 +159,7 @@ export function buildWorkforceTracking(
 }
 
 export function buildAiOperationalInsights(locations: SiteLocation[]): AiOperationalInsight[] {
+  return [];
   const siteB = locations[1]?.name ?? 'Site B';
   return [
     {
@@ -300,9 +302,9 @@ export function buildScanAnalytics(records: OperationalScanRecord[]): ScanAnalyt
     byPurpose[r.purpose] = (byPurpose[r.purpose] ?? 0) + 1;
   });
   return {
-    todayTotal: records.length + 14,
-    verifiedRate: records.length ? Math.round((verified / records.length) * 100) : 94,
-    successStreak: 7,
+    todayTotal: records.length,
+    verifiedRate: records.length ? Math.round((verified / records.length) * 100) : 0,
+    successStreak: 0,
     byPurpose,
   };
 }
@@ -311,6 +313,7 @@ export function buildOffsiteFieldTasks(
   locations: SiteLocation[],
   employees: Employee[]
 ): OffsiteFieldTask[] {
+  return [];
   const sites = locations.length > 0 ? locations : [
     { id: 's1', name: 'Site A — Depot' },
     { id: 's2', name: 'Site B — Installation' },
@@ -444,6 +447,7 @@ export function buildFieldTimeline(
   locations: SiteLocation[],
   scans: { timestamp: string }[]
 ): FieldTimelineEvent[] {
+  return [];
   const siteA = locations[0]?.name ?? 'Site A — Depot';
   const siteB = locations[1]?.name ?? 'Site B — Installation';
   const siteC = locations[2]?.name ?? 'Site C — Inspection';
@@ -573,6 +577,18 @@ export function buildFieldTimeline(
 export { TIMELINE_CATEGORY_META };
 
 export function buildSmartReporting(locations: SiteLocation[]): SmartReportingBundle {
+  return {
+      executiveSummary: locations.length
+        ? `Reporting for ${locations.length} registered site(s).`
+        : 'No field sites yet. Add a site to begin reporting.',
+      aiSummary: 'AI summaries appear when connected to live analytics.',
+      metrics: [],
+      productivityTrend: [],
+      routeEfficiency: [],
+      attendanceWeekly: [],
+      siteCompletion: [],
+      scanStats: [],
+    };
   const completionRate =
     locations.length > 0
       ? Math.round(

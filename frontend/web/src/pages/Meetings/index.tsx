@@ -151,14 +151,7 @@ interface TeamMember {
 const Meetings: React.FC = () => {
   const theme = useTheme();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [teamMembers] = useState<TeamMember[]>([
-    { id: '1', name: 'John Smith', email: 'john.smith@company.com', role: 'Project Manager', avatar: '/avatars/john.jpg', department: 'Engineering' },
-    { id: '2', name: 'Sarah Johnson', email: 'sarah.johnson@company.com', role: 'Developer', avatar: '/avatars/sarah.jpg', department: 'Engineering' },
-    { id: '3', name: 'Mike Davis', email: 'mike.davis@company.com', role: 'Designer', avatar: '/avatars/mike.jpg', department: 'Design' },
-    { id: '4', name: 'Emily Brown', email: 'emily.brown@company.com', role: 'QA Engineer', avatar: '/avatars/emily.jpg', department: 'Engineering' },
-    { id: '5', name: 'David Wilson', email: 'david.wilson@company.com', role: 'Product Owner', avatar: '/avatars/david.jpg', department: 'Product' },
-    { id: '6', name: 'Lisa Anderson', email: 'lisa.anderson@company.com', role: 'Marketing Manager', avatar: '/avatars/lisa.jpg', department: 'Marketing' },
-  ]);
+  const [teamMembers] = useState<TeamMember[]>([]);
   const [newMeetingDialogOpen, setNewMeetingDialogOpen] = useState(false);
   const [editMeetingDialogOpen, setEditMeetingDialogOpen] = useState(false);
   const [attendeesDialogOpen, setAttendeesDialogOpen] = useState(false);

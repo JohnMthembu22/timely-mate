@@ -363,10 +363,28 @@ const IndustryModules: React.FC = () => {
 
   const handleSaveIntegration = () => {
     if (!selectedIntegration) return;
-    
-    // Here you would typically save the credentials securely
-    console.log('Saving integration:', selectedIntegration.id, integrationCredentials);
-    
+
+    const key = 'timelymate_industry_integrations';
+    try {
+      const raw = localStorage.getItem(key);
+      const stored = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      stored[selectedIntegration.id] = {
+        credentials: integrationCredentials,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(key, JSON.stringify(stored));
+      setIntegrations((prev) =>
+        prev.map((integration) =>
+          integration.id === selectedIntegration.id
+            ? { ...integration, status: 'connected' as const, lastSync: new Date().toISOString() }
+            : integration
+        )
+      );
+    } catch {
+      setConnectionError('Could not save integration on this device.');
+      return;
+    }
+
     setIntegrationDialogOpen(false);
     setSelectedIntegration(null);
     setIntegrationCredentials({});

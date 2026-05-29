@@ -4,6 +4,7 @@ import type { ProjectAiInsight } from './projectAiInsightTypes';
 export function buildOperationalAiInsights(
   projectNames: { id: string; name: string }[]
 ): ProjectAiInsight[] {
+  return [];
   const byName = (needle: string) =>
     projectNames.find((p) => p.name.toLowerCase().includes(needle.toLowerCase()));
 

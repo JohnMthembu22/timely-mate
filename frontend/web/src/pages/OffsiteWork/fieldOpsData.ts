@@ -132,6 +132,7 @@ export function buildFieldWorkers(locations: SiteLocation[], employees: Employee
 
 export function buildRouteLegs(locations: SiteLocation[]): RouteLeg[] {
   if (locations.length < 2) {
+    return [];
     return [
       {
         id: 'r-demo-1',
@@ -201,6 +202,7 @@ export function buildFieldActivity(
   });
 
   if (items.length === 0) {
+    return [];
     return [
       {
         id: 'act-seed-1',

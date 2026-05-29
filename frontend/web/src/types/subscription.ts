@@ -291,4 +291,34 @@ export const getCompanyTier = (employeeCount: number): CompanySize['tier'] => {
   if (employeeCount <= 25) return 'small';
   if (employeeCount <= 100) return 'medium';
   return 'enterprise';
+};
+
+export const getPlanTierIndex = (planId: string): number =>
+  SUBSCRIPTION_PLANS.findIndex((plan) => plan.id === planId);
+
+/** Lowest-tier plan that includes the given feature. */
+export const getMinimumPlanForFeature = (feature: keyof PlanFeatures): SubscriptionPlan => {
+  const match = SUBSCRIPTION_PLANS.find((plan) => Boolean(plan.features[feature]));
+  return match ?? SUBSCRIPTION_PLANS.find((plan) => plan.id === 'starter') ?? SUBSCRIPTION_PLANS[0];
+};
+
+/** Plan to offer when upgrading for a locked feature (respects current tier). */
+export const getRecommendedUpgradePlan = (
+  currentPlanId: string | undefined,
+  feature: keyof PlanFeatures
+): SubscriptionPlan => {
+  const minimum = getMinimumPlanForFeature(feature);
+  if (!currentPlanId) return minimum;
+
+  const currentIdx = getPlanTierIndex(currentPlanId);
+  const minimumIdx = getPlanTierIndex(minimum.id);
+  if (currentIdx < 0) return minimum;
+  if (minimumIdx > currentIdx) return minimum;
+
+  const nextIdx = currentIdx + 1;
+  if (nextIdx < SUBSCRIPTION_PLANS.length) {
+    const next = SUBSCRIPTION_PLANS[nextIdx];
+    if (next.features[feature]) return next;
+  }
+  return minimum;
 }; 

@@ -8,6 +8,7 @@ function minsAgo(m: number) {
 }
 
 export function buildTeamActivityFeed(employeeNames: string[] = []): TeamActivityEvent[] {
+  return [];
   const names = employeeNames.length >= 6 ? employeeNames.slice(0, 8) : [
     'Alex Rivera',
     'Jordan Kim',

@@ -83,39 +83,66 @@ const countryToCurrency: { [key: string]: string } = {
   'MR': 'MRU', // Mauritania
 };
 
-export const CurrencyProvider: React.FC<CurrencyProviderProps> = ({ children }) => {
-  const [currency, setCurrency] = useState('ZAR'); // Default fallback
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [detectedCountry, setDetectedCountry] = useState<string | null>(null);
+const DEFAULT_CURRENCY = 'ZAR';
 
-  // Detect currency based on geolocation
+function readStoredCurrency(): { currency: string; country: string | null } {
+  const preferred = localStorage.getItem('preferredCurrency');
+  if (preferred) {
+    return { currency: preferred, country: localStorage.getItem('detectedCountry') };
+  }
+
+  const detected = localStorage.getItem('detectedCurrency');
+  if (detected) {
+    return { currency: detected, country: localStorage.getItem('detectedCountry') };
+  }
+
+  return { currency: DEFAULT_CURRENCY, country: null };
+}
+
+export const CurrencyProvider: React.FC<CurrencyProviderProps> = ({ children }) => {
+  const stored = readStoredCurrency();
+  const [currency, setCurrency] = useState(stored.currency);
+  const [isLoading, setIsLoading] = useState(!localStorage.getItem('preferredCurrency') && !localStorage.getItem('detectedCurrency'));
+  const [error, setError] = useState<string | null>(null);
+  const [detectedCountry, setDetectedCountry] = useState<string | null>(stored.country);
+
+  // Detect currency based on geolocation (only when no saved preference exists)
   useEffect(() => {
+    if (localStorage.getItem('preferredCurrency') || localStorage.getItem('detectedCurrency')) {
+      setIsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
     const detectCurrency = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        // Check if geolocation is supported or if running in Electron
         if (!navigator.geolocation || window.electronAPI) {
-          console.info('Skipping geolocation detection. Using default currency.');
-          setCurrency('ZAR'); // Default to ZAR
-          setIsLoading(false);
+          if (import.meta.env.DEV) {
+            console.info('Skipping geolocation detection. Using default currency.');
+          }
+          if (!cancelled) {
+            setCurrency(stored.currency);
+            setIsLoading(false);
+          }
           return;
         }
 
-        // Get user's location
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: false,
-            timeout: 5000, // Reduced timeout for better UX
-            maximumAge: 300000, // 5 minutes
+            timeout: 8000,
+            maximumAge: 3600000, // 1 hour — avoid repeat slow prompts
           });
         });
 
+        if (cancelled) return;
+
         const { latitude, longitude } = position.coords;
 
-        // Use reverse geocoding to get country code
         const response = await fetch(
           `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
         );
@@ -126,55 +153,53 @@ export const CurrencyProvider: React.FC<CurrencyProviderProps> = ({ children }) 
 
         const data = await response.json();
         const countryCode = data.countryCode;
+        const detectedCurrency = countryToCurrency[countryCode] || DEFAULT_CURRENCY;
 
-        // Map country code to currency
-        const detectedCurrency = countryToCurrency[countryCode] || 'ZAR';
-        
-        console.log(`Detected location: ${data.countryName} (${countryCode}), using currency: ${detectedCurrency}`);
-        
+        if (import.meta.env.DEV) {
+          console.info(`Detected location: ${data.countryName} (${countryCode}), using currency: ${detectedCurrency}`);
+        }
+
         setCurrency(detectedCurrency);
         localStorage.setItem('detectedCurrency', detectedCurrency);
         setDetectedCountry(data.countryName);
         localStorage.setItem('detectedCountry', data.countryName);
-
       } catch (err) {
-        // Handle different types of geolocation errors gracefully
-        if (err instanceof GeolocationPositionError) {
-          switch (err.code) {
-            case err.PERMISSION_DENIED:
-              console.info('Location permission denied. Using default currency.');
-              break;
-            case err.POSITION_UNAVAILABLE:
-              console.info('Location unavailable. Using default currency.');
-              break;
-            case err.TIMEOUT:
-              console.info('Location request timed out. Using default currency.');
-              break;
-            default:
-              console.info('Location detection failed. Using default currency.');
+        if (cancelled) return;
+
+        if (import.meta.env.DEV) {
+          if (err instanceof GeolocationPositionError) {
+            const reason =
+              err.code === err.PERMISSION_DENIED
+                ? 'Location permission denied'
+                : err.code === err.POSITION_UNAVAILABLE
+                  ? 'Location unavailable'
+                  : err.code === err.TIMEOUT
+                    ? 'Location request timed out'
+                    : 'Location detection failed';
+            console.info(`${reason}. Using default currency.`);
+          } else {
+            console.info('Currency detection failed. Using default currency.');
           }
-        } else {
-          console.info('Currency detection failed. Using default currency.');
         }
-        
+
         setError('Could not detect your location. Using default currency.');
-        
-        // Try to use previously detected currency
+
         const savedCurrency = localStorage.getItem('detectedCurrency');
-        if (savedCurrency) {
-          setCurrency(savedCurrency);
-        } else {
-          setCurrency('ZAR'); // Default fallback
-        }
+        setCurrency(savedCurrency || DEFAULT_CURRENCY);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     detectCurrency();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Allow manual currency override (for testing or user preference)
   const handleSetCurrency = (newCurrency: string) => {
     setCurrency(newCurrency);
     localStorage.setItem('preferredCurrency', newCurrency);
@@ -211,4 +236,4 @@ export const useCurrency = (): CurrencyContextType => {
     throw new Error('useCurrency must be used within a CurrencyProvider');
   }
   return context;
-}; 
+};

@@ -25,9 +25,12 @@ export function getDesignSystemComponentOverrides(theme: Theme): Components {
         boxShadow: tmShadows.lightCard,
       };
 
+  const inputTextColor = theme.palette.text.primary;
+  const inputPlaceholder = theme.palette.text.secondary;
+
   const inputRoot = {
     borderRadius: tmShape.borderRadiusSm,
-    transition: `border-color ${tmMotion.durationNormal} ${tmMotion.easeOut}, box-shadow ${tmMotion.durationNormal} ${tmMotion.easeOut}, background-color ${tmMotion.durationNormal} ${tmMotion.easeOut}`,
+    transition: `border-color ${tmMotion.durationFast} ${tmMotion.easeOut}, box-shadow ${tmMotion.durationFast} ${tmMotion.easeOut}`,
     '& fieldset': {
       borderColor: isDark ? tmColors.borderSubtle : '#e2e8f0',
     },
@@ -71,6 +74,19 @@ export function getDesignSystemComponentOverrides(theme: Theme): Components {
           backgroundColor: alpha(primary, 0.35),
           color: isDark ? '#fff' : tmColors.lightText,
         },
+        'input, textarea, select': {
+          color: inputTextColor,
+        },
+        'input::placeholder, textarea::placeholder': {
+          color: inputPlaceholder,
+          opacity: 1,
+        },
+        'input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, textarea:-webkit-autofill':
+          {
+            WebkitTextFillColor: inputTextColor,
+            caretColor: primary,
+            transition: 'background-color 99999s ease-out 0s',
+          },
       },
     },
     MuiContainer: {
@@ -201,6 +217,15 @@ export function getDesignSystemComponentOverrides(theme: Theme): Components {
       styleOverrides: {
         root: {
           fontSize: '0.9375rem',
+        },
+        input: {
+          color: inputTextColor,
+          WebkitTextFillColor: inputTextColor,
+          caretColor: primary,
+          '&::placeholder': {
+            color: inputPlaceholder,
+            opacity: 1,
+          },
         },
       },
     },

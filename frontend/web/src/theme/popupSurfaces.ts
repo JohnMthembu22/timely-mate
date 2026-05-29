@@ -1,6 +1,7 @@
 import type { Components, SxProps, Theme } from '@mui/material/styles';
 import { alpha } from '@mui/material/styles';
 import { tmColors, tmGradients, tmShadows, tmShape } from './designTokens';
+import { getDialogFormInputSx } from './formFieldStyles';
 
 /** Brand hero gradient — dialogs, primary popup actions */
 export const POPUP_BRAND_GRADIENT = tmGradients.dialogTitle;
@@ -108,16 +109,24 @@ export const popupNestedPanelSx = {
   border: '1px solid #f1f5f9',
 };
 
-const dialogFieldRootSx = {
-  borderRadius: roundedLg,
-  bgcolor: 'rgba(248, 250, 252, 0.5)',
-  fontSize: '0.875rem',
-  transition: 'background-color 0.15s, border-color 0.15s, box-shadow 0.15s',
-  '& fieldset': { borderColor: '#e2e8f0' },
-  '&:hover fieldset': { borderColor: '#cbd5e1' },
-  '&.Mui-focused': { bgcolor: '#fff', boxShadow: '0 0 0 1px #0f172a' },
-  '&.Mui-focused fieldset': { borderColor: '#0f172a', borderWidth: '1px' },
-};
+function getDialogFieldRootSx(isLight: boolean) {
+  return {
+    borderRadius: roundedLg,
+    bgcolor: isLight ? 'rgba(248, 250, 252, 0.65)' : alpha(tmColors.charcoal750, 0.85),
+    fontSize: '0.9375rem',
+    transition: 'border-color 0.12s ease, box-shadow 0.12s ease',
+    '& fieldset': { borderColor: isLight ? '#e2e8f0' : tmColors.borderSubtle },
+    '&:hover fieldset': { borderColor: isLight ? '#cbd5e1' : tmColors.borderStrong },
+    '&.Mui-focused': {
+      bgcolor: isLight ? '#fff' : alpha(tmColors.charcoal700, 0.95),
+      boxShadow: isLight ? '0 0 0 1px #0f172a' : `0 0 0 1px ${tmColors.neonBlue}`,
+    },
+    '&.Mui-focused fieldset': {
+      borderColor: isLight ? '#0f172a' : tmColors.neonBlue,
+      borderWidth: '1px',
+    },
+  };
+}
 
 const dialogFieldInputSx = {
   minHeight: 40,
@@ -177,13 +186,15 @@ export const popupDialogMultilineFieldSx: SxProps<Theme> = {
 };
 
 /** Multiline fields inside dialog bodies */
-export const popupMultilineFieldSx = {
-  '.MuiDialogContent-root &': {
-    ...dialogFieldRootSx,
-    py: 1.25,
-    alignItems: 'flex-start',
-  },
-};
+export function getPopupMultilineFieldSx(isLight: boolean) {
+  return {
+    '.MuiDialogContent-root &': {
+      ...getDialogFieldRootSx(isLight),
+      py: 1.25,
+      alignItems: 'flex-start',
+    },
+  };
+}
 
 /**
  * Global MUI overrides for modal dialogs, popovers, poppers, and form controls inside dialogs.
@@ -267,10 +278,14 @@ export function getPopupSurfaceComponentOverrides(theme: Theme): Components {
     bgcolor: theme.palette.background.paper,
   };
 
+  const dialogFieldRootSx = getDialogFieldRootSx(isLight);
+  const dialogFormInputSx = getDialogFormInputSx(isLight);
+
   const dialogScopedField = {
     '.MuiDialogContent-root &': {
       ...dialogFieldRootSx,
       ...dialogFieldInputSx,
+      ...dialogFormInputSx,
     },
   };
 
@@ -323,11 +338,11 @@ export function getPopupSurfaceComponentOverrides(theme: Theme): Components {
       styleOverrides: {
         root: {
           ...dialogScopedField,
-          ...popupMultilineFieldSx,
+          ...getPopupMultilineFieldSx(isLight),
         },
         notchedOutline: {
           '.MuiDialogContent-root &': {
-            borderColor: '#e2e8f0',
+            borderColor: isLight ? '#e2e8f0' : tmColors.borderSubtle,
           },
         },
       },
@@ -346,7 +361,10 @@ export function getPopupSurfaceComponentOverrides(theme: Theme): Components {
           },
         },
         outlined: {
-          '.MuiDialogContent-root &': dialogFieldRootSx,
+          '.MuiDialogContent-root &': {
+            ...dialogFieldRootSx,
+            ...dialogFormInputSx,
+          },
         },
       },
     },

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { isPresentationActiveJob } from '../../utils/legacyDemoCleanup';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -216,18 +217,6 @@ interface AITimePrediction {
 
 // No mock data - empty array
 
-// Sample team members for job assignment
-const sampleTeamMembers: { id: string; name: string; role: string }[] = [
-  { id: 'tm1', name: 'Sarah Johnson', role: 'Project Manager' },
-  { id: 'tm2', name: 'Michael Chen', role: 'Senior Developer' },
-  { id: 'tm3', name: 'Emily Rodriguez', role: 'UI/UX Designer' },
-  { id: 'tm4', name: 'David Kim', role: 'Backend Developer' },
-  { id: 'tm5', name: 'Lisa Thompson', role: 'QA Tester' },
-  { id: 'tm6', name: 'James Wilson', role: 'DevOps Engineer' },
-  { id: 'tm7', name: 'Maria Garcia', role: 'Business Analyst' },
-  { id: 'tm8', name: 'Alex Brown', role: 'Frontend Developer' }
-];
-
 // Add pause conditions with associated tasks
 const pauseConditions = [
   { 
@@ -298,8 +287,7 @@ const TimeTracking: React.FC = () => {
       }));
       setTeamMembers(convertedTeamMembers);
     } else {
-      // Fallback to sample team members if no employees are available
-      setTeamMembers(sampleTeamMembers);
+      setTeamMembers([]);
     }
   }, [employees]);
   
@@ -324,6 +312,13 @@ const TimeTracking: React.FC = () => {
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [qrScanData, setQrScanData] = useState<string | null>(null);
   const [activeJobs, setActiveJobs] = useArrayPersistence<Job>('timelymate_active_jobs', []);
+
+  useEffect(() => {
+    setActiveJobs((prev) => {
+      if (!prev.some(isPresentationActiveJob)) return prev;
+      return prev.filter((j) => !isPresentationActiveJob(j));
+    });
+  }, [setActiveJobs]);
   const [newJobDialogOpen, setNewJobDialogOpen] = useState(false);
   const [teamViewOpen, setTeamViewOpen] = useState(false);
   const [selectedTeamMember, setSelectedTeamMember] = useState<string | null>(null);
@@ -381,89 +376,10 @@ const TimeTracking: React.FC = () => {
   const [reviewNotes, setReviewNotes] = useState('');
 
   // Enhanced Timesheet state
-  const [timesheetEntries, setTimesheetEntries] = useArrayPersistence<TimesheetEntry>('timelymate_timesheet_entries', [
-    {
-      id: '1',
-      employeeId: 'John Smith',
-      employeeName: 'John Smith',
-      date: '2024-01-15',
-      project: 'Website Redesign',
-      projectId: 'website-redesign',
-      hoursWorked: 8,
-      description: 'Frontend development and responsive design implementation',
-      status: 'approved',
-      submittedAt: '2024-01-15T18:00:00Z',
-      approvedBy: 'HR Manager',
-      approvedAt: '2024-01-16T10:00:00Z',
-      isAutomated: true,
-      tags: ['Frontend', 'Design'],
-      billableHours: 8,
-      hourlyRate: DEFAULT_HOURLY_RATE_ZAR,
-      totalAmount: 8 * DEFAULT_HOURLY_RATE_ZAR,
-      breakTime: 1,
-      overtime: 0,
-      category: 'development',
-      aiSuggestions: {
-        suggestedHours: 8,
-        suggestedDescription: 'Frontend development and responsive design implementation',
-        confidence: 95,
-      },
-    },
-    {
-      id: '2',
-      employeeId: 'Sarah Johnson',
-      employeeName: 'Sarah Johnson',
-      date: '2024-01-15',
-      project: 'Mobile App Development',
-      projectId: 'mobile-app-development',
-      hoursWorked: 7.5,
-      description: 'API integration and user authentication features',
-      status: 'pending',
-      submittedAt: '2024-01-15T17:30:00Z',
-      approvedBy: 'Project Manager',
-      approvedAt: '2024-01-16T11:00:00Z',
-      isAutomated: false,
-      tags: ['API', 'Authentication'],
-      billableHours: 7.5,
-      hourlyRate: 920,
-      totalAmount: Math.round(7.5 * 920),
-      breakTime: 1,
-      overtime: 0,
-      category: 'development',
-      aiSuggestions: {
-        suggestedHours: 7.5,
-        suggestedDescription: 'API integration and user authentication features',
-        confidence: 90,
-      },
-    },
-    {
-      id: '3',
-      employeeId: 'Mike Chen',
-      employeeName: 'Mike Chen',
-      date: '2024-01-14',
-      project: 'Database Optimization',
-      projectId: 'database-optimization',
-      hoursWorked: 6,
-      description: 'Query optimization and index creation',
-      status: 'rejected',
-      submittedAt: '2024-01-14T16:45:00Z',
-      approvedBy: 'Database Administrator',
-      approvedAt: '2024-01-15T15:00:00Z',
-      isAutomated: true,
-      tags: ['Database', 'Optimization'],
-      billableHours: 6,
-      hourlyRate: 780,
-      totalAmount: 6 * 780,
-      breakTime: 0,
-      overtime: 0,
-      category: 'administration',
-      aiSuggestions: {
-        suggestedHours: 6,
-        suggestedDescription: 'Query optimization and index creation',
-        confidence: 92,
-      },
-    }
-  ]);
+  const [timesheetEntries, setTimesheetEntries] = useArrayPersistence<TimesheetEntry>(
+    'timelymate_timesheet_entries',
+    []
+  );
 
   // Persist timesheets to localStorage
   useEffect(() => {
@@ -1608,62 +1524,6 @@ const TimeTracking: React.FC = () => {
       setTeamTimeStats(stats);
     }
   }, [employees, activeJobs]);
-
-  // Generate sample jobs based on imported employees
-  useEffect(() => {
-    if (employees.length > 0 && activeJobs.length === 0) {
-      const departments = [...new Set(employees.map(emp => emp.department))];
-      const sampleJobs: Job[] = [];
-      
-      departments.forEach((dept, index) => {
-        const deptEmployees = employees.filter(emp => emp.department === dept);
-        const assignedMemberIds = deptEmployees.slice(0, 3).map(emp => emp.id); // Assign up to 3 employees per job
-        
-        const jobNames: { [key: string]: string } = {
-          'Engineering': 'Platform Development Sprint',
-          'Design': 'UI/UX Redesign Project',
-          'Marketing': 'Brand Campaign Launch',
-          'Sales': 'Revenue Optimization Initiative',
-          'Product': 'Feature Development Cycle',
-          'Project Management': 'Process Improvement Project',
-          'HR': 'Employee Engagement Program',
-          'Finance': 'Financial Analysis Report'
-        };
-        
-        const clients: { [key: string]: string } = {
-          'Engineering': 'Internal Platform Team',
-          'Design': 'Product Design Team',
-          'Marketing': 'Marketing Department',
-          'Sales': 'Sales Operations',
-          'Product': 'Product Management',
-          'Project Management': 'Operations Team',
-          'HR': 'Human Resources',
-          'Finance': 'Finance Department'
-        };
-        
-        const job: Job = {
-          id: (index + 1).toString(),
-          name: jobNames[dept] || `${dept} Project`,
-          client: clients[dept] || dept,
-          startTime: '09:00',
-          startDate: new Date().toISOString().split('T')[0],
-          endTime: '17:00',
-          elapsedTime: `${Math.floor(Math.random() * 4) + 1}h ${Math.floor(Math.random() * 60)}m`,
-          totalTime: `${Math.floor(Math.random() * 8) + 4}h 00m`,
-          progress: Math.floor(Math.random() * 80) + 10,
-          status: ['pending', 'active', 'completed'][Math.floor(Math.random() * 3)],
-          assignedMembers: assignedMemberIds,
-          pauseCondition: '',
-          pauseTask: null,
-        };
-        
-        sampleJobs.push(job);
-      });
-      
-      console.log('Generated sample jobs:', sampleJobs);
-      setActiveJobs(sampleJobs);
-    }
-  }, [employees, activeJobs.length]);
 
   const generateDailyCode = () => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();

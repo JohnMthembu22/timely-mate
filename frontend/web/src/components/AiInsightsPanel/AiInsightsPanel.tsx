@@ -26,7 +26,6 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { DashboardPanel, panelScrollSx } from '../../pages/Dashboard/components/DashboardPanel';
 import { tmColors, tmGradients } from '../../theme/designTokens';
-import { MOCK_AI_OPERATIONAL_INSIGHTS } from './aiInsightsMockData';
 import type {
   AiInsightCategory,
   AiInsightPriority,
@@ -35,7 +34,6 @@ import type {
 } from './aiInsightsTypes';
 
 export type { AiOperationalInsight, AiInsightCategory, AiInsightPriority, AiInsightsPanelProps } from './aiInsightsTypes';
-export { MOCK_AI_OPERATIONAL_INSIGHTS } from './aiInsightsMockData';
 
 const CATEGORY_META: Record<
   AiInsightCategory,
@@ -246,7 +244,7 @@ const ALL_CATEGORIES: AiInsightCategory[] = [
  */
 export const AiInsightsPanel = memo(function AiInsightsPanel({
   insights,
-  useMockData = true,
+  useMockData = false,
   title = 'AI insights',
   subtitle = 'Smart operational recommendations · mock intelligence (not connected to live AI)',
   maxVisible = 8,
@@ -258,10 +256,9 @@ export const AiInsightsPanel = memo(function AiInsightsPanel({
   const [categoryFilter, setCategoryFilter] = useState<AiInsightCategory | 'all'>('all');
 
   const source = useMemo(() => {
-    if (useMockData) return MOCK_AI_OPERATIONAL_INSIGHTS;
     if (insights && insights.length > 0) return insights;
-    return MOCK_AI_OPERATIONAL_INSIGHTS;
-  }, [insights, useMockData]);
+    return [];
+  }, [insights]);
 
   const filtered = useMemo(() => {
     const list =
@@ -301,20 +298,22 @@ export const AiInsightsPanel = memo(function AiInsightsPanel({
               <Typography sx={{ fontWeight: 700, fontSize: '0.8125rem', color: 'text.primary' }}>
                 Command intelligence
               </Typography>
-              <Chip
-                icon={<Brain size={12} strokeWidth={2} />}
-                label="Mock data"
-                size="small"
-                sx={{
-                  height: 22,
-                  fontSize: '0.625rem',
-                  fontWeight: 700,
-                  bgcolor: alpha(tmColors.emerald, 0.12),
-                  color: tmColors.emerald,
-                  border: `1px solid ${alpha(tmColors.emerald, 0.35)}`,
-                  '& .MuiChip-icon': { color: 'inherit', ml: 0.5 },
-                }}
-              />
+              {false && (
+                <Chip
+                  icon={<Brain size={12} strokeWidth={2} />}
+                  label="Presentation data"
+                  size="small"
+                  sx={{
+                    height: 22,
+                    fontSize: '0.625rem',
+                    fontWeight: 700,
+                    bgcolor: alpha(tmColors.emerald, 0.12),
+                    color: tmColors.emerald,
+                    border: `1px solid ${alpha(tmColors.emerald, 0.35)}`,
+                    '& .MuiChip-icon': { color: 'inherit', ml: 0.5 },
+                  }}
+                />
+              )}
             </Stack>
             <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mt: 0.25 }}>
               {source.length} signals · {filtered.length} shown
@@ -379,7 +378,9 @@ export const AiInsightsPanel = memo(function AiInsightsPanel({
         <Stack spacing={1.25}>
           {filtered.length === 0 ? (
             <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', py: 2, textAlign: 'center' }}>
-              No insights in this category.
+              {source.length === 0
+                ? 'No insights yet. Add people, projects, and activity to see recommendations here.'
+                : 'No insights in this category.'}
             </Typography>
           ) : (
             filtered.map((insight) => (

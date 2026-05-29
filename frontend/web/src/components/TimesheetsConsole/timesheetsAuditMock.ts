@@ -1,3 +1,5 @@
+import { EMPTY_TIMESHEETS_AUDIT } from '../../utils/emptyData';
+
 export type AuditInsightSeverity = 'info' | 'warning' | 'critical';
 
 export interface AuditInsight {
@@ -22,6 +24,7 @@ export function buildTimesheetsAuditBundle(
   approvedHours: string,
   pendingHours: string
 ): TimesheetsAuditBundle {
+  return EMPTY_TIMESHEETS_AUDIT;
   return {
     insights: [
       {

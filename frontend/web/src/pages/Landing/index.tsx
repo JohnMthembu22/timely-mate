@@ -24,6 +24,7 @@ import {
   Dialog,
   DialogContent,
   IconButton,
+  Link,
 } from '@mui/material';
 import {
   Timer,
@@ -42,6 +43,7 @@ import {
   Close,
 } from '@mui/icons-material';
 import LandingLayout from '../../components/LandingLayout';
+import { Link as RouterLink } from 'react-router-dom';
 
 // Animation delay utility
 const ANIMATION_DELAY = 200;
@@ -977,42 +979,18 @@ const Landing: React.FC = () => {
                   Product
                 </Typography>
                 <Stack spacing={1}>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  <Link component={RouterLink} to="/features" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Features
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/pricing" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Pricing
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/integrations" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Integrations
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/updates" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Updates
-                  </Typography>
+                  </Link>
                 </Stack>
               </Grid>
               <Grid item xs={6} sm={3} md={2}>
@@ -1027,42 +1005,15 @@ const Landing: React.FC = () => {
                   Company
                 </Typography>
                 <Stack spacing={1}>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  <Link component={RouterLink} to="/about" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     About
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/careers" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Careers
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
-                    Blog
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/contact" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Contact
-                  </Typography>
+                  </Link>
                 </Stack>
               </Grid>
               <Grid item xs={6} sm={3} md={2}>
@@ -1077,42 +1028,18 @@ const Landing: React.FC = () => {
                   Resources
                 </Typography>
                 <Stack spacing={1}>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  <Link component={RouterLink} to="/documentation" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Documentation
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/help-center" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Help Center
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/api" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     API
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/community" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Community
-                  </Typography>
+                  </Link>
                 </Stack>
               </Grid>
               <Grid item xs={6} sm={3} md={2}>
@@ -1127,42 +1054,18 @@ const Landing: React.FC = () => {
                   Legal
                 </Typography>
                 <Stack spacing={1}>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  <Link component={RouterLink} to="/privacy" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Privacy
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/terms" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Terms
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/security" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Security
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{
-                      fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' }
-                    }}
-                  >
+                  </Link>
+                  <Link component={RouterLink} to="/compliance" underline="hover" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
                     Compliance
-                  </Typography>
+                  </Link>
                 </Stack>
               </Grid>
             </Grid>
@@ -1198,25 +1101,19 @@ const Landing: React.FC = () => {
                     fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' }
                   }}
                 >
-                  Privacy Policy
+                  <Link component={RouterLink} to="/privacy" underline="hover" color="text.secondary">
+                    Privacy Policy
+                  </Link>
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  color="text.secondary"
-                  sx={{
-                    fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' }
-                  }}
-                >
-                  Terms of Service
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}>
+                  <Link component={RouterLink} to="/terms" underline="hover" color="text.secondary">
+                    Terms of Service
+                  </Link>
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  color="text.secondary"
-                  sx={{
-                    fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' }
-                  }}
-                >
-                  Cookies
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}>
+                  <Link component={RouterLink} to="/privacy" underline="hover" color="text.secondary">
+                    Cookies
+                  </Link>
                 </Typography>
               </Stack>
             </Box>

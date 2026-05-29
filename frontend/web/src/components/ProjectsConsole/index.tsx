@@ -11,6 +11,7 @@ import {
   Snackbar,
   Alert,
 } from '@mui/material';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   Folder,
   Plus,
@@ -126,6 +127,7 @@ const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
   onNotifyTeam,
   isLoading = false,
 }) => {
+  const { canCreateProjects, canAssignTasks } = usePermissions();
   const [filters, setFilters] = useState<ProjectFilterState>(defaultProjectFilters);
   const [actionToast, setActionToast] = useState<string | null>(null);
 
@@ -186,7 +188,7 @@ const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
             ? 'Create a project space to activate milestones, task routing, and operational intelligence for your portfolio.'
             : 'Adjust search, department, status, or utilization filters to see more workspaces.'}
         </Typography>
-        {projects.length === 0 ? (
+        {projects.length === 0 && canCreateProjects() ? (
           <Button
             variant="contained"
             startIcon={<Plus size={16} />}
@@ -195,7 +197,7 @@ const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
           >
             New Project Space
           </Button>
-        ) : (
+        ) : projects.length === 0 ? null : (
           <Button
             variant="outlined"
             onClick={() => setFilters(defaultProjectFilters)}
@@ -384,6 +386,7 @@ const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
                   <Kanban size={16} />
                 </IconButton>
               </Box>
+              {canCreateProjects() && (
               <Button
                 data-tour="new-project"
                 variant="contained"
@@ -403,6 +406,7 @@ const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
               >
                 New Project Space
               </Button>
+              )}
             </Stack>
           </Box>
         </Paper>
@@ -420,6 +424,7 @@ const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
 
         <ProjectAiInsightsSection insights={insights} onProjectClick={onProjectClick} />
 
+        {canAssignTasks() && (
         <SmartAssignmentHub
           insights={assignmentInsights}
           queue={assignmentQueue}
@@ -429,6 +434,7 @@ const ProjectsConsole: React.FC<ProjectsConsoleProps> = ({
           onAssignToProject={onProjectClick}
           onQuickAssign={onQuickAssign}
         />
+        )}
 
         <Box sx={consoleSplitLayoutSx}>
           <Paper elevation={0} sx={{ ...sectionShellSx, minWidth: 0 }}>

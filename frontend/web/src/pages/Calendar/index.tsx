@@ -265,7 +265,7 @@ const Calendar: React.FC = () => {
 
   const newBlockDialogCopy = getNewBlockDialogCopy(newEvent, selectedDate);
 
-  // Generate mock tasks from employees data
+  // Generate demo tasks from employees (presentation mode only)
   useEffect(() => {
     if (employees.length > 0) {
       const mockTasks: Task[] = [];
@@ -541,6 +541,7 @@ const Calendar: React.FC = () => {
         };
       });
     }
+    return [];
     return SAMPLE_OPERATIONAL_BACKLOG.map((r) => ({ ...r }));
   };
 

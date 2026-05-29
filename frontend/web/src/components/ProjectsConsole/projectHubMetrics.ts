@@ -86,25 +86,9 @@ export function buildProjectHubRow(
   const daysLeft = daysUntilEnd(project.endDate);
   const aiRisk = computeAiRisk(project.progress, daysLeft, overdueTasks);
   const seed = hashId(project.id);
-
-  const teamWorkload = Math.min(
-    98,
-    Math.max(
-      42,
-      55 +
-        project.team.length * 6 +
-        (project.tasks - project.completedTasks) * 3 +
-        (seed % 18)
-    )
-  );
-
-  const budgetUsage = Math.min(
-    100,
-    Math.max(
-      12,
-      Math.round(project.progress * 0.55 + (seed % 35) + overdueTasks * 4)
-    )
-  );
+  const openTasks = Math.max(0, project.tasks - project.completedTasks);
+  const teamWorkload = Math.min(98, Math.max(0, project.team.length * 12 + openTasks * 8));
+  const budgetUsage = Math.min(100, Math.max(0, project.progress));
 
   let healthScore = project.progress;
   healthScore -= overdueTasks * 8;
@@ -128,14 +112,21 @@ export function buildProjectHubRow(
   let taskTrendLabel = 'Stable';
   if (completionRate >= 60) {
     taskTrend = 'up';
-    taskTrendLabel = `+${Math.min(24, Math.round(completionRate / 4) + (seed % 8))}%`;
+    taskTrendLabel = presentation
+      ? `+${Math.min(24, Math.round(completionRate / 4) + (seed % 8))}%`
+      : `+${Math.round(completionRate)}% done`;
   } else if (overdueTasks > 0 || activeBlockers > 1) {
     taskTrend = 'down';
-    taskTrendLabel = `-${Math.min(18, overdueTasks * 3 + activeBlockers * 2)}%`;
+    taskTrendLabel = presentation
+      ? `-${Math.min(18, overdueTasks * 3 + activeBlockers * 2)}%`
+      : `${overdueTasks} overdue`;
   }
 
   const trendSeries = Array.from({ length: 6 }, (_, i) => {
     const base = project.progress / 100;
+    if (!presentation) {
+      return Math.min(1, Math.max(0, base));
+    }
     const wave = ((seed + i * 17) % 30) / 100;
     return Math.min(1, Math.max(0.15, base * 0.7 + wave * 0.35 + i * 0.04));
   });

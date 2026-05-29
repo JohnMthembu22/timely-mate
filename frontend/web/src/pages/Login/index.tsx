@@ -25,7 +25,7 @@ import {
 } from '@mui/icons-material';
 import { useAppDispatch } from '../../store';
 import { login } from '../../store/slices/authSlice';
-import authService from '../../services/auth';
+import { isSupabaseAuthEnabled } from '../../utils/authConfig';
 import UserRegistrationInfo from '../../components/UserRegistrationInfo';
 
 const Login = () => {
@@ -58,13 +58,7 @@ const Login = () => {
       setError('Please enter a valid email address');
       return false;
     }
-    
-    // Check if user is registered
-    if (!authService.checkEmailExists(formData.email)) {
-      setError('No account found with this email. Please sign up first or check your email address.');
-      return false;
-    }
-    
+
     return true;
   };
 
@@ -76,12 +70,14 @@ const Login = () => {
     try {
       await dispatch(login(formData)).unwrap();
       navigate('/dashboard');
-    } catch (err: any) {
-      if (err.message?.includes('Invalid email or password')) {
-        setError('Invalid email or password. Please check your credentials.');
-      } else {
-        setError(err.message || 'Login failed. Please try again.');
-      }
+    } catch (err: unknown) {
+      const message =
+        typeof err === 'string'
+          ? err
+          : err instanceof Error
+            ? err.message
+            : 'Login failed. Please try again.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -99,7 +95,7 @@ const Login = () => {
       }}
     >
       <Container component="main" maxWidth="md" sx={{ mb: 3 }}>
-        <UserRegistrationInfo />
+        {!isSupabaseAuthEnabled() && <UserRegistrationInfo />}
       </Container>
         
       <Container component="main" maxWidth="xs">
@@ -176,7 +172,25 @@ const Login = () => {
                 {error && (
                   <Alert severity="error" sx={{ mt: 2 }}>
                     {error}
+                    {isSupabaseAuthEnabled() && error.includes('confirm your email') && (
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        Check your spam folder. You must click the confirmation link before you can sign in.
+                      </Typography>
+                    )}
                   </Alert>
+                )}
+
+                {isSupabaseAuthEnabled() && (
+                  <Box textAlign="right">
+                    <Link
+                      component={RouterLink}
+                      to="/forgot-password"
+                      variant="body2"
+                      sx={{ textDecoration: 'none' }}
+                    >
+                      Forgot password?
+                    </Link>
+                  </Box>
                 )}
 
                 <Button
@@ -197,7 +211,7 @@ const Login = () => {
                       to="/signup"
                       sx={{ textDecoration: 'none' }}
                     >
-                      Create Account
+                      Register
                     </Link>
                   </Typography>
                 </Box>

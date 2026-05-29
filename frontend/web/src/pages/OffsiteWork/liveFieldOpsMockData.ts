@@ -1,6 +1,8 @@
+import { EMPTY_LIVE_FIELD_OPS } from '../../utils/emptyData';
 import type { LiveFieldOpsSnapshot } from './liveFieldOpsTypes';
 
 export function buildLiveFieldOpsSnapshot(): LiveFieldOpsSnapshot {
+  return EMPTY_LIVE_FIELD_OPS;
   return {
     updatedAt: new Date().toISOString(),
     metrics: [

@@ -82,8 +82,8 @@ const TimeTrackingConsole: React.FC<TimeTrackingConsoleProps> = ({
   );
   const productivityInsights = useMemo(() => buildAiProductivityInsights(activeJobs), [activeJobs]);
   const teamActivity = useMemo(() => buildTeamActivityFeed(employeeNames), [employeeNames]);
-  const totalHoursAnimated = useAnimatedNumber(245);
-  const efficiencyAnimated = useAnimatedNumber(92);
+  const totalHoursAnimated = useAnimatedNumber(0);
+  const efficiencyAnimated = useAnimatedNumber(0);
 
   const handleProductivityAction = (actionId: string, insight: AiProductivityInsight) => {
     if (onProductivityInsightNotify) {
@@ -112,13 +112,19 @@ const TimeTrackingConsole: React.FC<TimeTrackingConsoleProps> = ({
         notify('Mobile action', 'Use assignment cards to control timers.');
         break;
       case 'field_capture':
-        notify('Field capture', 'Photo and GPS proof placeholder.');
+        notify(
+          'Field capture',
+          'Camera and GPS proof will be available when mobile field capture is connected.'
+        );
         break;
       case 'biometric':
-        notify('Biometric verify', 'Mobile verification channel (pilot).');
+        notify('Biometric verify', 'Connect your identity provider to enable biometric check-in.');
         break;
       case 'whatsapp':
-        notify('WhatsApp workflow', 'Approval thread bridge (placeholder).');
+        notify(
+          'WhatsApp workflow',
+          'Messaging bridge requires WhatsApp Business API configuration.'
+        );
         break;
     }
   };

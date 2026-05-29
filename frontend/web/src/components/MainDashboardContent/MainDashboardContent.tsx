@@ -45,76 +45,6 @@ export interface MainDashboardContentProps {
   clockInTime?: string | null;
 }
 
-export const MAIN_DASHBOARD_SAMPLE_PROJECTS: DashboardProjectTile[] = [
-  {
-    id: 'sample-platform',
-    title: 'Platform Development Sprint',
-    department: 'IT / Product',
-    progress: 68,
-    dueDate: '28 May 2026',
-    teamSize: 5,
-  },
-  {
-    id: 'sample-brand',
-    title: 'Brand Re-design Protocol',
-    department: 'Creative / Marketing',
-    progress: 42,
-    dueDate: '04 Jun 2026',
-    teamSize: 3,
-  },
-  {
-    id: 'sample-mobile',
-    title: 'Mobile Messaging Architecture',
-    department: 'IT Engineering',
-    progress: 90,
-    dueDate: '24 May 2026',
-    teamSize: 4,
-  },
-  {
-    id: 'sample-data',
-    title: 'Data Integration Engine',
-    department: 'Data Science',
-    progress: 15,
-    dueDate: '18 Jun 2026',
-    teamSize: 2,
-  },
-];
-
-export const MAIN_DASHBOARD_SAMPLE_METRICS: MetricsGridItem[] = [
-  {
-    title: 'Active Projects',
-    value: '4',
-    change: 'Critical path items',
-    icon: Briefcase,
-    iconColor: '#3b82f6',
-    iconBg: '#eff6ff',
-  },
-  {
-    title: 'Avg. Progress',
-    value: '54%',
-    change: 'Across workspace sample',
-    icon: TrendingUp,
-    iconColor: '#10b981',
-    iconBg: '#ecfdf5',
-  },
-  {
-    title: 'Contributors',
-    value: '14',
-    change: 'Allocated headcount',
-    icon: Users,
-    iconColor: '#f59e0b',
-    iconBg: '#fffbeb',
-  },
-  {
-    title: 'Cycle Focus',
-    value: 'May ’26',
-    change: 'Current delivery window',
-    icon: Clock,
-    iconColor: '#a855f7',
-    iconBg: '#faf5ff',
-  },
-];
-
 /**
  * AI-powered operations command center — profile, executive KPIs, insights,
  * project health, critical projects, workforce, live feed, and attendance.
@@ -267,7 +197,12 @@ export const MainDashboardContent = memo(function MainDashboardContent({
 
         <Grid container spacing={{ xs: 2, md: 2.5 }}>
           <Grid item xs={12} lg={7}>
-            <AiInsightsPanel useMockData />
+            <AiInsightsPanel
+              insights={[]}
+              subtitle={
+                'Recommendations will appear from your live projects, people, and activity.'
+              }
+            />
           </Grid>
           <Grid item xs={12} lg={5}>
             {workforce ? <WorkforceSnapshot data={workforce} clockInTime={clockInTime} /> : null}

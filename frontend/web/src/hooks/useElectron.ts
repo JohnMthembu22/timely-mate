@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { showBrowserNotification } from '../utils/browserNotifications';
 
 // Type definitions for Electron API
 declare global {
@@ -44,10 +45,7 @@ export const useElectron = () => {
 
   const showNotification = useCallback(async (title: string, body: string) => {
     if (!isElectron) {
-      // Fallback for web version - use browser notifications
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body });
-      }
+      showBrowserNotification(title, body);
       return;
     }
     await window.electronAPI!.showNotification({ title, body });

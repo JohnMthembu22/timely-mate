@@ -1,4 +1,5 @@
-/** Shared project scoring for cards and health overview (mock until live analytics). */
+
+/** Shared project scoring for cards and health overview. */
 
 export type ProjectDisplayStatus = 'on-track' | 'at-risk' | 'critical' | 'completed';
 
@@ -33,29 +34,21 @@ export function deriveProjectMetrics(
   teamSize: number
 ): ProjectEnrichedMetrics {
   const status = deriveStatusFromProgress(progress);
-  const h = hashId(id);
-  const budgetUsedPercent = Math.min(98, Math.max(32, 45 + (h % 40) + Math.floor((100 - progress) / 5)));
-  let budgetHealth: BudgetHealth = 'healthy';
-  if (budgetUsedPercent >= 88) budgetHealth = 'critical';
-  else if (budgetUsedPercent >= 72) budgetHealth = 'warning';
-
-  const riskScore = Math.min(
-    100,
-    Math.max(
-      5,
-      Math.round((100 - progress) * 0.55 + (budgetUsedPercent > 80 ? 18 : 0) + (teamSize < 2 ? 12 : 0) + (h % 15))
-    )
-  );
-
-  const aiRecommendation = pickAiRecommendation(status, progress, budgetUsedPercent, teamSize);
-
+  const riskScore = Math.max(0, Math.min(100, Math.round(100 - progress)));
   return {
     status,
     riskScore,
-    budgetHealth,
-    budgetUsedPercent,
-    budgetLabel: `${budgetUsedPercent}% budget used`,
-    aiRecommendation,
+    budgetHealth: 'healthy',
+    budgetUsedPercent: 0,
+    budgetLabel: 'No budget data',
+    aiRecommendation:
+      status === 'completed'
+        ? 'Project marked complete.'
+        : status === 'critical'
+          ? 'Progress is low — review timeline and resourcing.'
+          : status === 'at-risk'
+            ? 'Behind target progress — confirm next milestone.'
+            : 'On track based on recorded progress.',
   };
 }
 

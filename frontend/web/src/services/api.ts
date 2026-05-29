@@ -10,9 +10,19 @@ const api = axios.create({
 // Add a request interceptor
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth')
-      ? JSON.parse(localStorage.getItem('auth')!).token
-      : null;
+    let token: string | null = null;
+    try {
+      const authRaw = localStorage.getItem('auth');
+      if (authRaw) {
+        const parsed = JSON.parse(authRaw) as { token?: string };
+        token = parsed.token ?? null;
+      }
+    } catch {
+      /* ignore */
+    }
+    if (!token) {
+      token = localStorage.getItem('timelymate_token');
+    }
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -30,7 +40,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('auth');
-      window.location.href = '/login';
+      window.dispatchEvent(new CustomEvent('timelymate:auth-expired'));
     }
     return Promise.reject(error);
   }

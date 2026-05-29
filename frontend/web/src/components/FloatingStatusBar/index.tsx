@@ -34,6 +34,8 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import { styled, useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useNavigate } from 'react-router-dom';
+import { useAppDispatch } from '../../store';
+import { performAppLogout } from '../../utils/authSession';
 import TourGuideButton from '../TourGuideButton';
 import StatusBarCountdown from './StatusBarCountdown';
 import NotificationsMenu from './NotificationsMenu';
@@ -59,6 +61,11 @@ interface FloatingStatusBarProps {
 const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({ mobileAppBarOffset = 0 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+
+  const handleLogout = async () => {
+    await performAppLogout(dispatch, navigate);
+  };
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isCompact = useMediaQuery(theme.breakpoints.down('sm'));
   const [isClockedIn, setIsClockedIn] = useState(() => {
@@ -115,9 +122,7 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({ mobileAppBarOffse
         window.dispatchEvent(new CustomEvent('tm:startTour'));
         break;
       case 'logout':
-        // Handle logout logic here
-        localStorage.clear();
-        navigate('/login');
+        void handleLogout();
         break;
       default:
         break;
