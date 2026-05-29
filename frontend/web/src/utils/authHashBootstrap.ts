@@ -5,7 +5,14 @@
 export function bootstrapAuthHashRedirect(): void {
   if (typeof window === 'undefined') return;
 
-  const rawHash = window.location.hash;
+  const { pathname, search, hash: rawHash } = window.location;
+
+  // PKCE OAuth (Google) returns ?code= on the redirect URL
+  if (search.includes('code=') && !pathname.startsWith('/auth/callback')) {
+    window.location.replace(`/auth/callback${search}${rawHash}`);
+    return;
+  }
+
   if (!rawHash || rawHash === '#') return;
 
   const params = new URLSearchParams(rawHash.startsWith('#') ? rawHash.slice(1) : rawHash);
@@ -30,7 +37,6 @@ export function bootstrapAuthHashRedirect(): void {
     targetPath = '/auth/callback';
   }
 
-  const { pathname } = window.location;
   if (!pathname.startsWith(targetPath)) {
     window.location.replace(`${targetPath}${rawHash}`);
   }

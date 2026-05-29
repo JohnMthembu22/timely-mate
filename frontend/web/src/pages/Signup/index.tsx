@@ -32,6 +32,7 @@ import { useAppDispatch } from '../../store';
 import { signup } from '../../store/slices/authSlice';
 import { isSupabaseAuthEnabled } from '../../utils/authConfig';
 import ConditionalRegistration from '../../components/ConditionalRegistration';
+import GoogleSignInButton, { AuthMethodDivider } from '../../components/GoogleSignInButton';
 import { CompanyProfile, SubscriptionPlan } from '../../types/subscription';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { Department } from '../../types/auth';
@@ -217,6 +218,12 @@ const Signup = () => {
                 </Alert>
               ) : (
               <>
+              {isSupabaseAuthEnabled() && (
+                <>
+                  <GoogleSignInButton label="Sign up with Google" disabled={loading} />
+                  <AuthMethodDivider />
+                </>
+              )}
               <form onSubmit={handleSubmit}>
                 <Stack spacing={3}>
                   <TextField

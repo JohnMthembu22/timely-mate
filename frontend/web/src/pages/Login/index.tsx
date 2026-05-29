@@ -27,6 +27,7 @@ import { useAppDispatch } from '../../store';
 import { login } from '../../store/slices/authSlice';
 import { isSupabaseAuthEnabled } from '../../utils/authConfig';
 import UserRegistrationInfo from '../../components/UserRegistrationInfo';
+import GoogleSignInButton, { AuthMethodDivider } from '../../components/GoogleSignInButton';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -119,6 +120,13 @@ const Login = () => {
                 Sign in to continue to Timely Mate
               </Typography>
             </Box>
+
+            {isSupabaseAuthEnabled() && (
+              <>
+                <GoogleSignInButton label="Sign in with Google" disabled={loading} />
+                <AuthMethodDivider />
+              </>
+            )}
 
             <form onSubmit={handleSubmit}>
               <Stack spacing={3}>

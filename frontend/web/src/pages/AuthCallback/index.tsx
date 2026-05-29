@@ -25,7 +25,7 @@ const AuthCallback: React.FC = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState('Confirming your account…');
+  const [message, setMessage] = useState('Completing sign-in…');
 
   useEffect(() => {
     if (!isSupabaseAuthEnabled()) {
@@ -37,16 +37,28 @@ const AuthCallback: React.FC = () => {
 
     const finish = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
+        const queryParams = new URLSearchParams(window.location.search);
+        const authCode = queryParams.get('code');
 
-        if (data.session) {
-          const response = await authServiceSupabase.buildAuthResponseFromSession(data.session);
+        let session = null;
+
+        if (authCode) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(authCode);
+          if (error) throw error;
+          session = data.session;
+        } else {
+          const { data, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          session = data.session;
+        }
+
+        if (session) {
+          const response = await authServiceSupabase.buildAuthResponseFromSession(session);
           persistAuthSnapshot(response);
           dispatch(setSession({ user: response.user, token: response.token }));
           if (!cancelled) {
             setStatus('success');
-            setMessage('Email confirmed. Taking you to your dashboard…');
+            setMessage('Signed in successfully. Taking you to your dashboard…');
             setTimeout(() => navigate('/dashboard', { replace: true }), 1200);
           }
           return;

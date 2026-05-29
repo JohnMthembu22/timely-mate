@@ -70,6 +70,8 @@ function resolvePermissions(
 }
 
 export async function buildAuthResponseFromSession(session: Session): Promise<AuthResponse> {
+  await ensureProfileFromSession(session);
+
   const userId = session.user.id;
   const fallbackEmail = session.user.email ?? '';
 
@@ -124,6 +126,50 @@ export function mapSupabaseAuthError(error: AuthError): string {
   }
 
   return error.message || 'Sign-in failed. Please check your email and password.';
+}
+
+/** Ensure profiles row exists for OAuth users (Google does not send org metadata). */
+export async function ensureProfileFromSession(session: Session): Promise<void> {
+  const userId = session.user.id;
+  const email = session.user.email ?? '';
+  const meta = session.user.user_metadata ?? {};
+  const fullName = (meta.full_name as string) || (meta.name as string) || '';
+  const emailDomain = email.includes('@') ? email.split('@')[1] : '';
+  const fallbackOrg =
+    (meta.organization_name as string) ||
+    fullName ||
+    (emailDomain ? emailDomain.split('.')[0] : '') ||
+    'My Organization';
+
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id, organization_name')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (!existing) {
+    const { error } = await supabase.from('profiles').upsert(
+      {
+        id: userId,
+        email,
+        organization_name: fallbackOrg,
+        role: 'employee',
+        department: 'general',
+        permissions: {},
+      },
+      { onConflict: 'id' }
+    );
+    if (error) console.warn('Profile create for OAuth user failed:', error.message);
+    return;
+  }
+
+  if (!existing.organization_name) {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ email, organization_name: fallbackOrg })
+      .eq('id', userId);
+    if (error) console.warn('Profile update for OAuth user failed:', error.message);
+  }
 }
 
 async function upsertProfile(userId: string, data: SignupData): Promise<void> {
@@ -212,6 +258,27 @@ const authServiceSupabase = {
     const response = await buildAuthResponseFromSession(authData.session);
     persistAuthSnapshot(response);
     return response;
+  },
+
+  async signInWithGoogle(): Promise<void> {
+    if (!isSupabaseAuthEnabled()) {
+      throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: getAuthCallbackUrl(),
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
+      },
+    });
+
+    if (error) {
+      throw new Error(mapSupabaseAuthError(error));
+    }
   },
 
   async requestPasswordReset(email: string): Promise<void> {

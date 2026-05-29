@@ -21,7 +21,13 @@ BEGIN
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'organization_name', ''),
+    COALESCE(
+      NULLIF(NEW.raw_user_meta_data->>'organization_name', ''),
+      NULLIF(NEW.raw_user_meta_data->>'full_name', ''),
+      NULLIF(NEW.raw_user_meta_data->>'name', ''),
+      NULLIF(split_part(COALESCE(NEW.email, ''), '@', 2), ''),
+      'My Organization'
+    ),
     COALESCE(NEW.raw_user_meta_data->>'role', 'employee'),
     COALESCE(NEW.raw_user_meta_data->>'department', 'general'),
     '{}'::jsonb,

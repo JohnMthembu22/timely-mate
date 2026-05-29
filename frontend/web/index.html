@@ -29,7 +29,13 @@
     <!-- Route Supabase email hash tokens before the app bundle loads -->
     <script>
       (function () {
-        var hash = window.location.hash;
+        var pathname = window.location.pathname;
+        var search = window.location.search || '';
+        var hash = window.location.hash || '';
+        if (search.indexOf('code=') !== -1 && pathname.indexOf('/auth/callback') !== 0) {
+          window.location.replace('/auth/callback' + search + hash);
+          return;
+        }
         if (!hash || hash === '#') return;
         var params = new URLSearchParams(hash.charAt(0) === '#' ? hash.slice(1) : hash);
         var hasPayload =

@@ -13,6 +13,12 @@ const AuthHashRedirect: React.FC = () => {
   useEffect(() => {
     if (!isSupabaseAuthEnabled()) return;
 
+    const { pathname, search } = location;
+    if (search.includes('code=') && !pathname.startsWith('/auth/callback')) {
+      navigate(`/auth/callback${search}${window.location.hash}`, { replace: true });
+      return;
+    }
+
     const rawHash = window.location.hash;
     if (!rawHash || rawHash === '#') return;
 
@@ -48,7 +54,7 @@ const AuthHashRedirect: React.FC = () => {
     if (!location.pathname.startsWith('/auth/callback')) {
       navigate(`/auth/callback${rawHash}`, { replace: true });
     }
-  }, [location.pathname, navigate]);
+  }, [location.pathname, location.search, navigate]);
 
   return null;
 };
