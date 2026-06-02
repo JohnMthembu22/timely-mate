@@ -54,11 +54,16 @@ const ProfileCircle = styled(Box)(({ theme }) => ({
 }));
 
 interface FloatingStatusBarProps {
+  /** Renders inside the mobile dashboard app bar (not fixed below it). */
+  embedded?: boolean;
   /** Offset from top when dashboard mobile app bar is visible */
   mobileAppBarOffset?: number;
 }
 
-const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({ mobileAppBarOffset = 0 }) => {
+const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({
+  embedded = false,
+  mobileAppBarOffset = 0,
+}) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
@@ -169,23 +174,8 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({ mobileAppBarOffse
     window.dispatchEvent(evt);
   };
 
-  return (
+  const statusControls = (
     <>
-    <Box
-      sx={{
-        position: 'fixed',
-        top: isMobile ? mobileAppBarOffset + 8 : 16,
-        right: { xs: 8, sm: 12, md: 20 },
-        left: isMobile ? 'auto' : 'auto',
-        maxWidth: isMobile ? 'calc(100vw - 72px)' : 'none',
-        zIndex: (t) => t.zIndex.appBar + 5,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        flexWrap: 'nowrap',
-        gap: { xs: 0.5, sm: 1, md: 2 },
-      }}
-    >
       <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
         <StatusBarCountdown
           isClockedIn={isClockedIn}
@@ -200,21 +190,22 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({ mobileAppBarOffse
         />
       </Box>
 
-      <TourGuideButton variant="button" size="small" />
+      {!embedded && <TourGuideButton variant="button" size="small" />}
 
       <Button
         data-tour="status-clock-in"
         variant="contained"
-        endIcon={isCompact ? undefined : <ArrowForward />}
+        endIcon={isCompact && !embedded ? undefined : embedded || isCompact ? undefined : <ArrowForward />}
         sx={{
-          px: { xs: 1.25, sm: 2, md: 2.5 },
-          py: { xs: 0.75, md: 1.25 },
-          minWidth: { xs: 'auto', sm: 100 },
+          px: embedded ? 1 : { xs: 1.25, sm: 2, md: 2.5 },
+          py: embedded ? 0.5 : { xs: 0.75, md: 1.25 },
+          minWidth: { xs: 'auto', sm: embedded ? 'auto' : 100 },
+          minHeight: embedded ? 36 : undefined,
           fontWeight: 800,
           letterSpacing: 0.5,
-          borderRadius: { xs: 2, md: 10 },
+          borderRadius: embedded ? 2 : { xs: 2, md: 10 },
           textTransform: 'uppercase',
-          fontSize: { xs: 10, sm: 11, md: 13 },
+          fontSize: embedded ? 9 : { xs: 10, sm: 11, md: 13 },
           border: '1px solid rgba(255,255,255,0.9)',
           boxShadow: 'none',
           background: isClockedIn ? 'linear-gradient(135deg, #ff5a52, #e53935)' : 'rgba(255,255,255,1)',
@@ -223,17 +214,17 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({ mobileAppBarOffse
         }}
         onClick={handleClockButton}
       >
-        {isCompact ? (isClockedIn ? 'Out' : 'In') : isClockedIn ? 'Clock Out' : 'Clock In'}
+        {embedded || isCompact ? (isClockedIn ? 'Out' : 'In') : isClockedIn ? 'Clock Out' : 'Clock In'}
       </Button>
 
-      <NotificationsMenu isCompact={isCompact} />
+      <NotificationsMenu isCompact={embedded || isCompact} />
 
       <ProfileCircle
         onClick={handleUserMenuClick}
         sx={{
           cursor: 'pointer',
-          width: { xs: 40, md: 50 },
-          height: { xs: 40, md: 50 },
+          width: embedded ? 36 : { xs: 40, md: 50 },
+          height: embedded ? 36 : { xs: 40, md: 50 },
           flexShrink: 0,
           border: userMenuOpen ? '1px solid #ff5a52' : '1px solid rgba(255,255,255,0.9)',
           background: userMenuOpen ? '#ff5a52' : currentStatus.color,
@@ -241,8 +232,41 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({ mobileAppBarOffse
         }}
         aria-label="Open user menu"
       >
-        <Person sx={{ fontSize: { xs: 20, md: 24 } }} />
+        <Person sx={{ fontSize: embedded ? 18 : { xs: 20, md: 24 } }} />
       </ProfileCircle>
+    </>
+  );
+
+  return (
+    <>
+    <Box
+      sx={
+        embedded
+          ? {
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              flexWrap: 'nowrap',
+              gap: 0.5,
+              flexShrink: 0,
+              minWidth: 0,
+            }
+          : {
+              position: 'fixed',
+              top: isMobile ? mobileAppBarOffset + 8 : 16,
+              right: { xs: 8, sm: 12, md: 20 },
+              left: 'auto',
+              maxWidth: isMobile ? 'calc(100vw - 72px)' : 'none',
+              zIndex: (t) => t.zIndex.appBar + 5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              flexWrap: 'nowrap',
+              gap: { xs: 0.5, sm: 1, md: 2 },
+            }
+      }
+    >
+      {statusControls}
     </Box>
     <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
       <DialogTitle>Clock Out</DialogTitle>

@@ -1,5 +1,6 @@
 import type { Driver } from 'driver.js';
 import type { TourStep } from '../config/guidedTour';
+import { isNavTourSelector, prepareNavTargetForTour } from './guidedTourNavPrep';
 
 /** Re-measure highlights after SPA route changes or lazy mounts. */
 export function scheduleTourRefresh(driver: Driver | null, attempts = 5, delayMs = 280): void {
@@ -21,14 +22,15 @@ export function scheduleTourRefresh(driver: Driver | null, attempts = 5, delayMs
 export function waitForTourTarget(
   selector: string,
   maxWaitMs = 8000,
-  intervalMs = 100
+  intervalMs = 100,
+  requireVisible = true
 ): Promise<Element | null> {
   return new Promise((resolve) => {
     const start = Date.now();
 
     const check = () => {
       const el = document.querySelector(selector);
-      if (el && isElementVisible(el)) {
+      if (el && (!requireVisible || isElementVisible(el))) {
         resolve(el);
         return;
       }
@@ -68,12 +70,23 @@ export async function prepareTourStep(
 
   if (step.route && window.location.pathname !== step.route) {
     navigate(step.route);
+    await new Promise((resolve) => setTimeout(resolve, 650));
   }
 
   const selector = getStepSelector(step);
+  if (selector && isNavTourSelector(selector)) {
+    await prepareNavTargetForTour();
+    await waitForTourTarget(selector, 3000, 80, false);
+    const el = document.querySelector(selector);
+    el?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    return;
+  }
+
   if (selector) {
-    await waitForTourTarget(selector, 8000, 100);
+    await waitForTourTarget(selector, 4000, 100);
+    const el = document.querySelector(selector);
+    el?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
   } else if (step.route) {
-    await new Promise((resolve) => setTimeout(resolve, 450));
+    await new Promise((resolve) => setTimeout(resolve, 350));
   }
 }

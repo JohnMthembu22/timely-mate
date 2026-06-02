@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, IconButton, Tooltip } from '@mui/material';
+import { Button, IconButton, Tooltip, useMediaQuery, useTheme } from '@mui/material';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import { useGuidedTour } from '../../contexts/GuidedTourContext';
 
@@ -10,10 +10,16 @@ type TourGuideButtonProps = {
 
 const TourGuideButton: React.FC<TourGuideButtonProps> = ({ variant = 'button', size = 'small' }) => {
   const { startTour } = useGuidedTour();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const handleClick = () => {
     startTour({ force: true });
   };
+
+  if (isMobile) {
+    return null;
+  }
 
   if (variant === 'icon') {
     return (

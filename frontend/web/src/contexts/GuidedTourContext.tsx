@@ -1,20 +1,23 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useMediaQuery, useTheme } from '@mui/material';
 import type { Config, Driver } from 'driver.js';
 import {
-  guidedTourSteps,
   TOUR_AUTO_START_KEY,
   TOUR_COMPLETED_KEY,
   getTourAutoStartKey,
   getTourCompletedKey,
+  type TourStep,
 } from '../config/guidedTour';
 import { renderTimelyMateTourChrome } from '../utils/guidedTourPopover';
+import { setTourNavHandlers } from '../utils/guidedTourActions';
 import {
   getStepSelector,
   prepareTourStep,
   scheduleTourRefresh,
   waitForTourTarget,
 } from '../utils/guidedTourDriver';
+import { resolveGuidedTourSteps } from '../utils/guidedTourSteps';
 import { useAppSelector } from '../store';
 
 type GuidedTourContextValue = {
@@ -43,10 +46,14 @@ async function loadDriverFactory() {
 export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
   const driverRef = useRef<Driver | null>(null);
   const driverFactoryRef = useRef<Awaited<ReturnType<typeof loadDriverFactory>> | null>(null);
-  const navigatingRef = useRef(false);
+  const activeStepsRef = useRef<TourStep[]>(resolveGuidedTourSteps(false));
+  const stepTransitionLockRef = useRef<number | null>(null);
+  const activeIndexRef = useRef(0);
   const prevAuthRef = useRef<boolean>(false);
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
@@ -63,30 +70,65 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const transitionToStep = useCallback(async (targetIndex: number) => {
-    if (navigatingRef.current) return;
-
     const driver = driverRef.current;
     if (!driver?.isActive()) return;
 
-    const step = guidedTourSteps[targetIndex];
+    const steps = activeStepsRef.current;
+    const step = steps[targetIndex];
     if (!step) {
       driver.destroy();
       return;
     }
 
-    navigatingRef.current = true;
+    if (stepTransitionLockRef.current === targetIndex) return;
+    stepTransitionLockRef.current = targetIndex;
+
     try {
       await prepareTourStep(step, navigateRef.current);
       if (!driver.isActive()) return;
+      activeIndexRef.current = targetIndex;
       driver.moveTo(targetIndex);
-      scheduleTourRefresh(driver, 4, 220);
+      scheduleTourRefresh(driver, 3, 100);
+    } catch {
+      /* allow retry on next click */
     } finally {
-      navigatingRef.current = false;
+      if (stepTransitionLockRef.current === targetIndex) {
+        stepTransitionLockRef.current = null;
+      }
     }
   }, []);
 
+  const handleTourNext = useCallback(() => {
+    const driver = driverRef.current;
+    if (!driver?.isActive()) return;
+
+    const current = activeIndexRef.current;
+    const steps = activeStepsRef.current;
+    if (current >= steps.length - 1) {
+      driver.destroy();
+      return;
+    }
+    void transitionToStep(current + 1);
+  }, [transitionToStep]);
+
+  const handleTourPrev = useCallback(() => {
+    const driver = driverRef.current;
+    if (!driver?.isActive()) return;
+
+    const current = activeIndexRef.current;
+    if (current <= 0) return;
+    void transitionToStep(current - 1);
+  }, [transitionToStep]);
+
+  useEffect(() => {
+    setTourNavHandlers({ onNext: handleTourNext, onPrev: handleTourPrev });
+    return () => setTourNavHandlers(null);
+  }, [handleTourNext, handleTourPrev]);
+
   const buildDriverConfig = useCallback((): Config => {
-    const totalSteps = guidedTourSteps.length;
+    const steps = resolveGuidedTourSteps(isMobile);
+    activeStepsRef.current = steps;
+    const totalSteps = steps.length;
 
     return {
       showProgress: false,
@@ -102,12 +144,13 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       nextBtnText: 'Continue',
       prevBtnText: 'Back',
       doneBtnText: 'Got it',
-      steps: guidedTourSteps,
+      steps,
       onPopoverRender: (popover, { state }) => {
+        activeIndexRef.current = state.activeIndex ?? 0;
         renderTimelyMateTourChrome(popover, state, totalSteps);
       },
       onHighlightStarted: (element, _step, { state }) => {
-        const config = guidedTourSteps[state.activeIndex ?? 0];
+        const config = steps[state.activeIndex ?? 0];
         const selector = getStepSelector(config);
         if (!element && selector) {
           void waitForTourTarget(selector, 2500).then(() => {
@@ -115,34 +158,13 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           });
         }
       },
-      onNextClick: (_element, _step, { state }) => {
-        const driver = driverRef.current;
-        if (!driver?.isActive()) return;
-
-        const current = state.activeIndex ?? 0;
-        if (current >= guidedTourSteps.length - 1) {
-          driver.destroy();
-          return;
-        }
-
-        void transitionToStep(current + 1);
-      },
-      onPrevClick: (_element, _step, { state }) => {
-        const driver = driverRef.current;
-        if (!driver?.isActive()) return;
-
-        const current = state.activeIndex ?? 0;
-        if (current <= 0) return;
-
-        void transitionToStep(current - 1);
-      },
       onDestroyed: () => {
         localStorage.setItem(getTourCompletedKey(user?.id), 'true');
         driverRef.current = null;
-        navigatingRef.current = false;
+        stepTransitionLockRef.current = null;
       },
     };
-  }, [transitionToStep]);
+  }, [isMobile, user?.id]);
 
   const createDriverInstance = useCallback(async (): Promise<Driver> => {
     if (!driverFactoryRef.current) {

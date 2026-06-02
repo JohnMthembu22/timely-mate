@@ -19,6 +19,7 @@ import {
 } from './dashboardSidebarTokens';
 import { MOBILE_APP_BAR_HEIGHT } from '../../theme/layout';
 import { tmColors } from '../../theme/designTokens';
+import { TOUR_PREPARE_NAV_EVENT } from '../../utils/guidedTourNavPrep';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -42,6 +43,18 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     if (isMobile) {
       setSidebarCollapsed(false);
     }
+  }, [isMobile]);
+
+  useEffect(() => {
+    const openNavForTour = () => {
+      if (isMobile) {
+        setMobileOpen(true);
+      } else {
+        setSidebarCollapsed(false);
+      }
+    };
+    window.addEventListener(TOUR_PREPARE_NAV_EVENT, openNavForTour);
+    return () => window.removeEventListener(TOUR_PREPARE_NAV_EVENT, openNavForTour);
   }, [isMobile]);
 
   const handleToggleCollapsed = useCallback(() => {
@@ -162,8 +175,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
               height: MOBILE_APP_BAR_HEIGHT,
               display: 'flex',
               alignItems: 'center',
-              gap: 1.25,
-              px: 1.5,
+              gap: 0.75,
+              pl: 1,
+              pr: 1.25,
               bgcolor: sidebarTokens.bg,
               borderBottom: `1px solid ${sidebarTokens.border}`,
               boxShadow: `0 4px 24px ${alpha('#000', 0.35)}`,
@@ -178,6 +192,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                 border: `1px solid ${alpha(tmColors.neonBlue, 0.35)}`,
                 borderRadius: '3px',
                 bgcolor: alpha(tmColors.neonBlue, 0.1),
+                flexShrink: 0,
                 '&:hover': {
                   bgcolor: alpha(tmColors.neonBlue, 0.18),
                   borderColor: tmColors.neonBlue,
@@ -188,8 +203,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             </IconButton>
             <Box
               sx={{
-                width: 30,
-                height: 30,
+                width: 28,
+                height: 28,
                 borderRadius: '3px',
                 flexShrink: 0,
                 background: sidebarTokens.brandGradient,
@@ -198,13 +213,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                 justifyContent: 'center',
                 fontWeight: 800,
                 color: '#fff',
-                fontSize: '0.75rem',
+                fontSize: '0.6875rem',
               }}
             >
               T
             </Box>
             <Typography
-              variant="subtitle1"
+              variant="subtitle2"
               sx={{
                 fontWeight: 700,
                 color: sidebarTokens.textBright,
@@ -214,10 +229,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                fontSize: '0.875rem',
               }}
             >
               TimelyMate
             </Typography>
+            <FloatingStatusBar embedded />
           </Box>
         )}
 
@@ -234,9 +251,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         >
           {children}
         </Box>
-        <Box sx={{ position: 'relative', zIndex: (t) => t.zIndex.appBar + 2 }}>
-          <FloatingStatusBar mobileAppBarOffset={isMobile ? MOBILE_APP_BAR_HEIGHT : 0} />
-        </Box>
+        {!isMobile && (
+          <Box sx={{ position: 'relative', zIndex: (t) => t.zIndex.appBar + 2 }}>
+            <FloatingStatusBar />
+          </Box>
+        )}
       </Box>
     </Box>
   );

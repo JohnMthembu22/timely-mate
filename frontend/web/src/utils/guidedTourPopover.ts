@@ -1,4 +1,5 @@
 import type { PopoverDOM, State } from 'driver.js';
+import { invokeTourNext, invokeTourPrev } from './guidedTourActions';
 
 const CHROME_CLASS = 'tm-tour-chrome';
 
@@ -63,4 +64,21 @@ export function renderTimelyMateTourChrome(
   const isLast = current >= totalSteps;
   popover.nextButton.classList.remove('driver-popover-next-btn', 'driver-popover-done-btn');
   popover.nextButton.classList.add(isLast ? 'driver-popover-done-btn' : 'driver-popover-next-btn');
+
+  popover.footer.style.pointerEvents = 'auto';
+  popover.nextButton.style.pointerEvents = 'auto';
+  popover.previousButton.style.pointerEvents = 'auto';
+  popover.nextButton.setAttribute('type', 'button');
+  popover.previousButton.setAttribute('type', 'button');
+
+  popover.nextButton.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    invokeTourNext();
+  };
+  popover.previousButton.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    invokeTourPrev();
+  };
 }

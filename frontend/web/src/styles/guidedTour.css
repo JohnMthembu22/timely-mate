@@ -4,10 +4,8 @@
   z-index: 13900 !important;
 }
 
-.driver-active .driver-overlay,
-.driver-active .driver-active-element,
-.driver-popover,
-.driver-popover * {
+.driver-popover.tm-guided-tour-popover,
+.driver-popover.tm-guided-tour-popover * {
   pointer-events: auto;
 }
 
@@ -17,8 +15,10 @@
   box-sizing: border-box;
   display: flex !important;
   flex-direction: column;
-  min-width: min(340px, calc(100vw - 32px));
-  max-width: min(400px, calc(100vw - 32px));
+  width: clamp(280px, calc(100vw - 24px), 400px);
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+  max-height: min(85dvh, 90svh);
   margin: 0;
   padding: 0;
   border-radius: 16px;
@@ -120,6 +120,10 @@
 
 .tm-guided-tour-popover .tm-tour-body {
   padding: 18px 20px 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tm-guided-tour-popover .driver-popover-title.tm-tour-title {
@@ -168,12 +172,16 @@
 .tm-guided-tour-popover .driver-popover-footer {
   margin: 0;
   padding: 16px 20px 18px;
+  padding-bottom: max(18px, env(safe-area-inset-bottom, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   border-top: 1px solid #f1f5f9;
   background: #f8fafc;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .tm-guided-tour-popover .driver-popover-progress-text {
@@ -193,19 +201,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 16px;
   font-size: 0.875rem;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.2;
   letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
+  text-shadow: none !important;
   border-radius: 10px;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
   transition:
     background 0.15s ease,
     color 0.15s ease,
-    box-shadow 0.15s ease,
     transform 0.1s ease;
 }
 
@@ -228,10 +239,11 @@
 
 .tm-guided-tour-popover .driver-popover-next-btn,
 .tm-guided-tour-popover .driver-popover-done-btn {
-  color: #fff;
+  color: #fff !important;
   background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
   border: none;
-  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.35);
+  box-shadow: none;
+  filter: none;
 }
 
 .tm-guided-tour-popover .driver-popover-next-btn:hover,
@@ -239,7 +251,7 @@
 .tm-guided-tour-popover .driver-popover-done-btn:hover,
 .tm-guided-tour-popover .driver-popover-done-btn:focus {
   background: linear-gradient(135deg, #42a5f5 0%, #2196f3 100%);
-  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.45);
+  box-shadow: none;
 }
 
 .tm-guided-tour-popover .driver-popover-footer .driver-popover-btn-disabled {
@@ -279,13 +291,23 @@
 
 @media (max-width: 600px) {
   .driver-popover.tm-guided-tour-popover {
-    min-width: calc(100vw - 24px);
-    max-width: calc(100vw - 24px);
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
     border-radius: 14px;
   }
 
   .tm-guided-tour-popover .tm-tour-header {
-    padding: 12px 14px 10px;
+    padding: 12px 12px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .tm-guided-tour-popover .tm-tour-brand-label {
+    font-size: 0.75rem;
+  }
+
+  .tm-guided-tour-popover .tm-tour-body {
+    padding: 14px 16px 0;
   }
 
   .tm-guided-tour-popover .driver-popover-title.tm-tour-title {
@@ -293,15 +315,25 @@
   }
 
   .tm-guided-tour-popover .driver-popover-footer {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px 16px max(16px, env(safe-area-inset-bottom, 0px));
   }
 
   .tm-guided-tour-popover .driver-popover-navigation-btns {
     width: 100%;
     justify-content: stretch;
+    gap: 10px;
   }
 
   .tm-guided-tour-popover .driver-popover-navigation-btns button {
     flex: 1;
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 380px) {
+  .tm-guided-tour-popover .tm-tour-brand-label {
+    display: none;
   }
 }
