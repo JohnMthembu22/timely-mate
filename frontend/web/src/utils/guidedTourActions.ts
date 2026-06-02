@@ -1,6 +1,7 @@
 export type TourNavHandlers = {
   onNext: () => void;
   onPrev: () => void;
+  onDone: () => void;
 };
 
 let handlers: TourNavHandlers | null = null;
@@ -15,4 +16,8 @@ export function invokeTourNext(): void {
 
 export function invokeTourPrev(): void {
   handlers?.onPrev();
+}
+
+export function invokeTourDone(): void {
+  handlers?.onDone();
 }

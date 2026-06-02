@@ -1,5 +1,5 @@
 import type { PopoverDOM, State } from 'driver.js';
-import { invokeTourNext, invokeTourPrev } from './guidedTourActions';
+import { invokeTourDone, invokeTourNext, invokeTourPrev } from './guidedTourActions';
 
 const CHROME_CLASS = 'tm-tour-chrome';
 
@@ -61,9 +61,12 @@ export function renderTimelyMateTourChrome(
   popover.description.classList.add('tm-tour-description');
   popover.previousButton.classList.add('driver-popover-prev-btn');
 
-  const isLast = current >= totalSteps;
+  const isLast = activeIndex >= totalSteps - 1;
   popover.nextButton.classList.remove('driver-popover-next-btn', 'driver-popover-done-btn');
   popover.nextButton.classList.add(isLast ? 'driver-popover-done-btn' : 'driver-popover-next-btn');
+  popover.nextButton.textContent = isLast ? 'Got it' : 'Continue';
+  popover.nextButton.disabled = false;
+  popover.nextButton.classList.remove('driver-popover-btn-disabled');
 
   popover.footer.style.pointerEvents = 'auto';
   popover.nextButton.style.pointerEvents = 'auto';
@@ -74,7 +77,11 @@ export function renderTimelyMateTourChrome(
   popover.nextButton.onclick = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    invokeTourNext();
+    if (isLast) {
+      invokeTourDone();
+    } else {
+      invokeTourNext();
+    }
   };
   popover.previousButton.onclick = (event) => {
     event.preventDefault();

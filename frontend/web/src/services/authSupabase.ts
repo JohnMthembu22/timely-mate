@@ -1,6 +1,13 @@
 import { AuthError, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { UserRole, UserPermissions, Department, getUserPermissions, isManagerRole } from '../types/auth';
+import {
+  UserRole,
+  UserPermissions,
+  Department,
+  getUserPermissions,
+  isManagerRole,
+  MANAGER_PERMISSIONS,
+} from '../types/auth';
 import { CompanyProfile } from '../types/subscription';
 import {
   getAuthCallbackUrl,
@@ -61,11 +68,35 @@ type ProfileRow = {
   selected_plan?: string | null;
 };
 
+const DEPARTMENT_VALUES: Department[] = [
+  'executive',
+  'hr',
+  'finance',
+  'marketing',
+  'sales',
+  'engineering',
+  'design',
+  'operations',
+  'customer_success',
+  'legal',
+  'it',
+  'other',
+];
+
+export function normalizeDepartment(value: string | null | undefined): Department {
+  const raw = (value || 'other').toLowerCase().trim();
+  if (raw === 'general') return 'other';
+  return DEPARTMENT_VALUES.includes(raw as Department) ? (raw as Department) : 'other';
+}
+
 function resolvePermissions(
   userRole: UserRole,
   userDepartment: Department,
   _storedPermissions?: UserPermissions | null
 ): UserPermissions {
+  if (isManagerRole(userRole, userDepartment)) {
+    return { ...MANAGER_PERMISSIONS };
+  }
   return getUserPermissions(userRole, userDepartment);
 }
 
@@ -87,7 +118,7 @@ export async function buildAuthResponseFromSession(session: Session): Promise<Au
   };
 
   const userRole = (userProfile.role as UserRole) || 'employee';
-  const userDepartment = (userProfile.department as Department) || 'general';
+  const userDepartment = normalizeDepartment(userProfile.department);
 
   return {
     token: session.access_token,
@@ -154,7 +185,7 @@ export async function ensureProfileFromSession(session: Session): Promise<void> 
         email,
         organization_name: fallbackOrg,
         role: 'employee',
-        department: 'general',
+        department: 'other',
         permissions: {},
       },
       { onConflict: 'id' }
@@ -179,7 +210,7 @@ async function upsertProfile(userId: string, data: SignupData): Promise<void> {
       email: data.email,
       organization_name: data.organizationName,
       role: data.role || 'employee',
-      department: data.department || 'general',
+      department: normalizeDepartment(data.department),
       permissions: {},
       company_profile: data.companyProfile ?? null,
       selected_plan: data.selectedPlan ?? null,
@@ -231,7 +262,7 @@ const authServiceSupabase = {
         data: {
           organization_name: data.organizationName,
           role: data.role || 'employee',
-          department: data.department || 'general',
+          department: normalizeDepartment(data.department),
           company_profile: data.companyProfile ?? null,
           selected_plan: data.selectedPlan ?? null,
         },

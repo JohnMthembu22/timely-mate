@@ -28,6 +28,7 @@ interface UsePermissionsReturn {
   canAccessReports: () => boolean;
   canModifySettings: () => boolean;
   canManageUsers: () => boolean;
+  canManageBilling: () => boolean;
   canAccessHR: () => boolean;
   canAccessFinance: () => boolean;
   canAccessProjects: () => boolean;
@@ -89,6 +90,7 @@ export const usePermissions = (): UsePermissionsReturn => {
     canAccessReports: () => hasPermission('canAccessReports'),
     canModifySettings: () => hasPermission('canModifySettings'),
     canManageUsers: () => hasPermission('canManageUsers'),
+    canManageBilling: () => manager,
     canAccessHR: () => hasPermission('canAccessHR'),
     canAccessFinance: () => hasPermission('canAccessFinance'),
     canAccessProjects: () => hasPermission('canAccessProjects'),

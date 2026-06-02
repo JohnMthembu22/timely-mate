@@ -98,18 +98,25 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, []);
 
+  const handleTourDone = useCallback(() => {
+    stepTransitionLockRef.current = null;
+    const driver = driverRef.current;
+    if (!driver?.isActive()) return;
+    driver.destroy();
+  }, []);
+
   const handleTourNext = useCallback(() => {
     const driver = driverRef.current;
     if (!driver?.isActive()) return;
 
     const current = activeIndexRef.current;
     const steps = activeStepsRef.current;
-    if (current >= steps.length - 1) {
-      driver.destroy();
+    if (current + 1 >= steps.length) {
+      handleTourDone();
       return;
     }
     void transitionToStep(current + 1);
-  }, [transitionToStep]);
+  }, [transitionToStep, handleTourDone]);
 
   const handleTourPrev = useCallback(() => {
     const driver = driverRef.current;
@@ -121,9 +128,9 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [transitionToStep]);
 
   useEffect(() => {
-    setTourNavHandlers({ onNext: handleTourNext, onPrev: handleTourPrev });
+    setTourNavHandlers({ onNext: handleTourNext, onPrev: handleTourPrev, onDone: handleTourDone });
     return () => setTourNavHandlers(null);
-  }, [handleTourNext, handleTourPrev]);
+  }, [handleTourNext, handleTourPrev, handleTourDone]);
 
   const buildDriverConfig = useCallback((): Config => {
     const steps = resolveGuidedTourSteps(isMobile);

@@ -47,6 +47,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import AdminUserManager from '../../components/AdminUserManager';
+import TeamInvitePanel from '../../components/TeamInvitePanel';
 import { useNotifications, createNotification } from '../../contexts/NotificationContext';
 import { useAppAction } from '../../hooks/useAppAction';
 import { notifyActionSuccess, notifyActionError } from '../../utils/appFeedback';
@@ -88,7 +89,7 @@ const Settings: React.FC = () => {
   const subscriptionSectionRef = useRef<HTMLDivElement>(null);
   const { currency, setCurrency, isLoading, error, detectedCountry } = useCurrency();
   const { mode, setMode } = useTheme();
-  const { canManageUsers } = usePermissions();
+  const { canManageUsers, canManageBilling, isManager } = usePermissions();
   const { addNotification } = useNotifications();
   const { loading: saving, run: runSave, error: saveError } = useAppAction();
   const [settings, setSettings] = useState(loadStoredSettings);
@@ -217,8 +218,9 @@ const Settings: React.FC = () => {
               </Box>
 
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Manage your plan, view limits, and review renewal dates. Billing changes are restricted for company-managed
-                accounts.
+                {canManageBilling
+                  ? 'Manage your organization plan, view limits, and review renewal dates.'
+                  : 'View your plan details. Billing changes are managed by your organization administrator.'}
               </Typography>
 
               {subscriptionLoading ? (
@@ -258,8 +260,8 @@ const Settings: React.FC = () => {
                           <Typography variant="subtitle2" color="text.secondary">
                             Billing access
                           </Typography>
-                          <Typography variant="body2" sx={{ mt: 1 }}>
-                            {user?.role === 'admin' || user?.role === 'team_leader'
+                          <Typography variant="body2" sx={{ mt: 1, color: 'text.primary' }}>
+                            {canManageBilling
                               ? 'You can manage subscription upgrades for your organization.'
                               : 'Your account is managed by your organization. Please contact your Company Administrator for subscription changes or upgrades.'}
                           </Typography>
@@ -276,8 +278,7 @@ const Settings: React.FC = () => {
                   <Grid container spacing={2}>
                     {SUBSCRIPTION_PLANS.map((plan) => {
                       const isCurrent = currentPlan?.id === plan.id;
-                      const canManage =
-                        user?.role === 'admin' || user?.role === 'team_leader';
+                      const canManage = canManageBilling;
                       return (
                         <Grid item xs={12} md={6} key={plan.id}>
                           <Card
@@ -495,7 +496,12 @@ const Settings: React.FC = () => {
               </List>
             </Paper>
 
-            {/* User Management Section - Admin Only */}
+            {/* Team invites & user management — admins / managers */}
+            {isManager() && (
+              <Box sx={{ mb: 3 }}>
+                <TeamInvitePanel />
+              </Box>
+            )}
             {canManageUsers && (
               <Box sx={{ mb: 3 }}>
                 <AdminUserManager />

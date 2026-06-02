@@ -31,7 +31,8 @@ import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import { styled, useTheme } from '@mui/material/styles';
+import { alpha, styled, useTheme } from '@mui/material/styles';
+import { tmColors } from '../../theme/designTokens';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch } from '../../store';
@@ -73,6 +74,7 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({
   };
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isCompact = useMediaQuery(theme.breakpoints.down('sm'));
+  const isDark = theme.palette.mode === 'dark';
   const [isClockedIn, setIsClockedIn] = useState(() => {
     const clockInToday = localStorage.getItem('clockInToday');
     return clockInToday === new Date().toDateString();
@@ -294,12 +296,26 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({
           left: 'auto',
           bottom: 'auto',
           borderRadius: 3,
-          boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+          boxShadow: isDark
+            ? '0 20px 40px rgba(0,0,0,0.55)'
+            : '0 20px 40px rgba(0,0,0,0.3)',
           backdropFilter: 'blur(20px)',
-          background: 'rgba(255,255,255,0.95)',
+          bgcolor: isDark ? alpha(tmColors.charcoal850, 0.98) : 'rgba(255,255,255,0.97)',
+          color: 'text.primary',
+          border: '1px solid',
+          borderColor: 'divider',
           minWidth: 200,
           mt: 1,
-        }
+          '& .MuiMenuItem-root': {
+            color: 'text.primary',
+          },
+          '& .MuiListItemIcon-root': {
+            color: 'text.secondary',
+          },
+          '& .MuiListItemText-primary': {
+            color: 'text.primary',
+          },
+        },
       }}
       transformOrigin={{
         vertical: 'top',
@@ -312,7 +328,7 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({
     >
       <MenuList sx={{ p: 1 }}>
         {/* Current Status Display */}
-        <Box sx={{ px: 2, py: 1, borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+        <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
           <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
             Current Status
           </Typography>
@@ -320,7 +336,7 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({
             <Box sx={{ color: currentStatus.color }}>
               {currentStatus.icon}
             </Box>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
               {currentStatus.label}
             </Typography>
           </Stack>
@@ -347,13 +363,13 @@ const FloatingStatusBar: React.FC<FloatingStatusBarProps> = ({
               <ListItemIcon sx={{ color: status.color }}>
                 {status.icon}
               </ListItemIcon>
-              <ListItemText 
+              <ListItemText
                 primary={status.label}
-                sx={{ 
-                  '& .MuiListItemText-primary': {
-                    fontWeight: userStatus === status.value ? 600 : 400,
-                    color: userStatus === status.value ? status.color : 'inherit'
-                  }
+                primaryTypographyProps={{
+                  fontWeight: userStatus === status.value ? 600 : 400,
+                  sx: {
+                    color: userStatus === status.value ? status.color : 'text.primary',
+                  },
                 }}
               />
               {userStatus === status.value && (

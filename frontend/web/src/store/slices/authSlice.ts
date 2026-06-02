@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import authService, { LoginCredentials, SignupData, AuthResponse, EmailConfirmationRequiredError } from '../../services/auth';
-import authServiceSupabase from '../../services/authSupabase';
+import authServiceSupabase, { normalizeDepartment } from '../../services/authSupabase';
 import { isSupabaseAuthEnabled } from '../../utils/authConfig';
 import { getUserPermissions, UserRole, Department, UserPermissions, MANAGER_PERMISSIONS, isManagerRole } from '../../types/auth';
 import { clearAuthStorage, readStoredAuth } from '../../utils/authSession';
@@ -15,7 +15,7 @@ interface AuthState {
 
 function mergeUserPermissions(user: AuthResponse['user']): AuthResponse['user'] {
   const userRole = (user.role as UserRole) || 'employee';
-  const userDepartment = (user.department as Department) || 'other';
+  const userDepartment = normalizeDepartment(user.department as string);
   if (isManagerRole(userRole, userDepartment)) {
     return { ...user, permissions: { ...MANAGER_PERMISSIONS } };
   }

@@ -11,6 +11,7 @@ import {
 } from '../types/subscription';
 import { useAppSelector } from '../store';
 import { TESTING_MODE_UNLOCK_ALL } from '../config/testingMode';
+import { Department, UserRole, isManagerRole } from '../types/auth';
 import {
   readStoredEmployeeCount,
   readStoredSubscription,
@@ -131,7 +132,9 @@ export const SubscriptionProvider: React.FC<SubscriptionProviderProps> = ({ chil
 
   const hasFeature = (feature: keyof PlanFeatures): boolean => {
     if (TESTING_MODE_UNLOCK_ALL) return true;
-    if (user?.role === 'admin') return true;
+    const role = (user?.role as UserRole) || 'employee';
+    const department = (user?.department as Department) || 'other';
+    if (isManagerRole(role, department)) return true;
     if (!currentPlan) return false;
     if (currentPlan.id === 'enterprise') return true;
     return Boolean(currentPlan.features[feature]);

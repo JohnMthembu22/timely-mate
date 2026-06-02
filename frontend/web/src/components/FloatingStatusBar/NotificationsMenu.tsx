@@ -29,7 +29,8 @@ import GroupIcon from '@mui/icons-material/Group';
 import FolderIcon from '@mui/icons-material/Folder';
 import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { styled } from '@mui/material/styles';
+import { alpha, styled, useTheme } from '@mui/material/styles';
+import { tmColors } from '../../theme/designTokens';
 import { useNavigate } from 'react-router-dom';
 import {
   useNotifications,
@@ -71,6 +72,8 @@ type NotificationsMenuProps = {
 const NotificationsMenu: React.FC<NotificationsMenuProps> = memo(function NotificationsMenu({
   isCompact = false,
 }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const navigate = useNavigate();
   const { unreadCount, notifications, markAsRead, markAllAsRead } = useNotifications();
   const [open, setOpen] = useState(false);
@@ -140,12 +143,19 @@ const NotificationsMenu: React.FC<NotificationsMenuProps> = memo(function Notifi
             width: { xs: 'min(calc(100vw - 24px), 400px)', sm: 400 },
             maxHeight: 'min(70vh, 480px)',
             borderRadius: 3,
-            boxShadow: '0 16px 40px rgba(15, 23, 42, 0.2)',
-            background: '#fff',
+            boxShadow: isDark
+              ? '0 16px 40px rgba(0,0,0,0.55)'
+              : '0 16px 40px rgba(15, 23, 42, 0.2)',
+            bgcolor: isDark ? alpha(tmColors.charcoal850, 0.98) : '#fff',
+            color: 'text.primary',
+            border: '1px solid',
+            borderColor: 'divider',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
             mt: 1,
+            '& .MuiListItemText-primary': { color: 'text.primary' },
+            '& .MuiListItemText-secondary': { color: 'text.secondary' },
           },
         }}
       >
@@ -180,9 +190,15 @@ const NotificationsMenu: React.FC<NotificationsMenuProps> = memo(function Notifi
                     button
                     onClick={() => handleItemClick(notification)}
                     sx={{
-                      backgroundColor: notification.read ? 'transparent' : 'rgba(25, 118, 210, 0.08)',
-                      borderLeft: notification.read ? 'none' : '4px solid #1976d2',
-                      '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.12)' },
+                      backgroundColor: notification.read
+                        ? 'transparent'
+                        : (t) => alpha(t.palette.primary.main, 0.1),
+                      borderLeft: notification.read ? 'none' : 4,
+                      borderLeftColor: notification.read ? 'transparent' : 'primary.main',
+                      borderLeftStyle: 'solid',
+                      '&:hover': {
+                        backgroundColor: (t) => alpha(t.palette.primary.main, 0.14),
+                      },
                     }}
                   >
                     <ListItemIcon sx={{ minWidth: 40 }}>

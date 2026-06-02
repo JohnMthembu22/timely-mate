@@ -93,6 +93,10 @@ type PermissionOptions = {
 export const isManagerRole = (role: UserRole, department: Department): boolean =>
   role === 'admin' || role === 'team_leader' || department === 'executive';
 
+/** Admins, team leaders, and executives can manage billing and organization settings. */
+export const canManageOrganizationBilling = (role: UserRole, department: Department): boolean =>
+  isManagerRole(role, department);
+
 /** Default permissions for standard employees (limited nav + no create/assign on projects/jobs) */
 export const getEmployeePermissions = (options: PermissionOptions = {}): UserPermissions => ({
   canAccessDashboard: true,

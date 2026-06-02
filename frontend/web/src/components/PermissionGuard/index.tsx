@@ -28,14 +28,18 @@ const PermissionGuard: React.FC<PermissionGuardProps> = ({
   customMessage,
   allowedRoles
 }) => {
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isManager } = usePermissions();
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
 
   if (TESTING_MODE_UNLOCK_ALL) {
     return <>{children}</>;
   }
 
-  // Check role-based access first if allowedRoles is provided
+  // Managers (admin, team leader, executive dept) bypass role-only gates
+  if (allowedRoles && isManager()) {
+    return <>{children}</>;
+  }
+
   if (allowedRoles && user?.role) {
     if (allowedRoles.includes(user.role)) {
       return <>{children}</>;

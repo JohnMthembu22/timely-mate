@@ -59,27 +59,36 @@ const Signup = () => {
   const [showConditionalReg, setShowConditionalReg] = useState(false);
   const [emailConfirmationSent, setEmailConfirmationSent] = useState<string | null>(null);
 
-  // Check for invitation email in URL
   const inviteEmail = searchParams.get('invite');
+  const inviteOrg = searchParams.get('org');
+  const inviteRole = searchParams.get('role') as UserRole | null;
 
   const [formData, setFormData] = useState<SignupForm>({
     email: inviteEmail || '',
     password: '',
     confirmPassword: '',
-    organizationName: '',
-    role: 'employee',
-    department: 'other',
+    organizationName: inviteOrg || '',
+    role:
+      inviteRole === 'admin' || inviteRole === 'team_leader' || inviteRole === 'employee'
+        ? inviteRole
+        : 'employee',
+    department: inviteRole === 'admin' ? 'executive' : 'other',
   });
 
-  // Update email if invite parameter changes
   useEffect(() => {
-    if (inviteEmail) {
-      setFormData(prev => ({
-        ...prev,
-        email: inviteEmail,
-      }));
-    }
-  }, [inviteEmail]);
+    if (!inviteEmail && !inviteOrg && !inviteRole) return;
+    setFormData((prev) => ({
+      ...prev,
+      ...(inviteEmail ? { email: inviteEmail } : {}),
+      ...(inviteOrg ? { organizationName: inviteOrg } : {}),
+      ...(inviteRole === 'admin' || inviteRole === 'team_leader' || inviteRole === 'employee'
+        ? {
+            role: inviteRole,
+            department: inviteRole === 'admin' ? ('executive' as Department) : prev.department,
+          }
+        : {}),
+    }));
+  }, [inviteEmail, inviteOrg, inviteRole]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -228,6 +237,12 @@ const Signup = () => {
               )}
               <form onSubmit={handleSubmit}>
                 <Stack spacing={3}>
+                  {inviteEmail && (
+                    <Alert severity="info">
+                      You&apos;ve been invited to join
+                      {inviteOrg ? ` ${inviteOrg}` : ' TimelyMate'}. Complete registration below.
+                    </Alert>
+                  )}
                   <TextField
                     id="signup-organization"
                     fullWidth
