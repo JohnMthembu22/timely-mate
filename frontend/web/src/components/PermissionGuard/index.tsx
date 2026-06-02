@@ -1,10 +1,11 @@
 import React from 'react';
-import { Box, Typography, Alert } from '@mui/material';
+import { Box, Typography, Alert, Container, Paper } from '@mui/material';
 import { Lock } from '@mui/icons-material';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useAppSelector } from '../../store';
 import { UserPermissions } from '../../types/auth';
 import { TESTING_MODE_UNLOCK_ALL } from '../../config/testingMode';
+import DashboardLayout from '../DashboardLayout';
 
 interface PermissionGuardProps {
   children: React.ReactNode;
@@ -28,7 +29,7 @@ const PermissionGuard: React.FC<PermissionGuardProps> = ({
   allowedRoles
 }) => {
   const { hasPermission } = usePermissions();
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, isAuthenticated } = useAppSelector((state) => state.auth);
 
   if (TESTING_MODE_UNLOCK_ALL) {
     return <>{children}</>;
@@ -68,31 +69,38 @@ const PermissionGuard: React.FC<PermissionGuardProps> = ({
     return null;
   }
 
-  return (
-    <Box sx={{ p: 3, textAlign: 'center' }}>
-      <Alert 
-        severity="warning" 
-        icon={<Lock />}
-        sx={{ 
-          maxWidth: 400, 
-          mx: 'auto',
-          '& .MuiAlert-message': {
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 1
-          }
-        }}
-      >
-        <Typography variant="h6" component="div">
-          Access Restricted
-        </Typography>
-        <Typography variant="body2">
-          {customMessage || 'You do not have permission to access this feature. Contact your administrator for access.'}
-        </Typography>
-      </Alert>
-    </Box>
+  const content = (
+    <Container maxWidth="sm" sx={{ py: 6 }}>
+      <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid', borderColor: 'divider' }}>
+        <Alert
+          severity="warning"
+          icon={<Lock />}
+          sx={{
+            '& .MuiAlert-message': {
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+            },
+          }}
+        >
+          <Typography variant="h6" component="div" sx={{ fontWeight: 800 }}>
+            Access Restricted
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {customMessage ||
+              'You do not have permission to access this feature. Contact your administrator for access.'}
+          </Typography>
+        </Alert>
+      </Paper>
+    </Container>
   );
+
+  // If the user is signed in, keep app chrome consistent.
+  if (isAuthenticated) {
+    return <DashboardLayout>{content}</DashboardLayout>;
+  }
+
+  return <Box sx={{ minHeight: '100vh' }}>{content}</Box>;
 };
 
 export default PermissionGuard; 

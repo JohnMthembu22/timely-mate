@@ -26,6 +26,9 @@
   background: #ffffff !important;
   color: #0f172a;
   font-family: 'Inter', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
   pointer-events: auto;
   box-shadow:
     0 4px 6px -1px rgba(15, 23, 42, 0.08),
@@ -139,10 +142,8 @@
   color: #475569;
 }
 
-.tm-guided-tour-popover .driver-popover-close-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+.tm-guided-tour-popover .driver-popover-close-btn.tm-tour-close-btn {
+  position: relative;
   width: 32px;
   height: 32px;
   border-radius: 8px;
@@ -154,6 +155,8 @@
   align-items: center;
   justify-content: center;
   transition: background 0.15s ease, color 0.15s ease;
+  margin-left: 6px;
+  flex-shrink: 0;
 }
 
 .tm-guided-tour-popover .driver-popover-close-btn:hover,
@@ -195,6 +198,8 @@
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
   border-radius: 10px;
   cursor: pointer;
   transition:

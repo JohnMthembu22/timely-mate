@@ -259,8 +259,8 @@ const AppRoutes = () => {
             path="/settings"
             element={
               <PermissionGuard
-                permission="canModifySettings"
-                customMessage="Settings access is restricted to administrators and IT department only."
+                permission="canAccessDashboard"
+                customMessage="Please sign in to access settings."
               >
                 <Settings />
               </PermissionGuard>

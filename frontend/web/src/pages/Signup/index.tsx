@@ -35,13 +35,14 @@ import ConditionalRegistration from '../../components/ConditionalRegistration';
 import GoogleSignInButton, { AuthMethodDivider } from '../../components/GoogleSignInButton';
 import { CompanyProfile, SubscriptionPlan } from '../../types/subscription';
 import { useSubscription } from '../../contexts/SubscriptionContext';
-import { Department } from '../../types/auth';
+import { Department, UserRole } from '../../types/auth';
 
 interface SignupForm {
   email: string;
   password: string;
   confirmPassword: string;
   organizationName: string;
+  role: UserRole;
   department: Department;
 }
 
@@ -66,6 +67,7 @@ const Signup = () => {
     password: '',
     confirmPassword: '',
     organizationName: '',
+    role: 'employee',
     department: 'other',
   });
 
@@ -320,11 +322,33 @@ const Signup = () => {
                   />
 
                   <FormControl fullWidth>
+                    <InputLabel id="signup-role-label">Role</InputLabel>
+                    <Select
+                      id="signup-role"
+                      name="role"
+                      labelId="signup-role-label"
+                      label="Role"
+                      value={formData.role}
+                      onChange={handleChange}
+                      startAdornment={
+                        <InputAdornment position="start">
+                          <FaceIcon />
+                        </InputAdornment>
+                      }
+                    >
+                      <MenuItem value="employee">Employee</MenuItem>
+                      <MenuItem value="team_leader">Manager / Team Leader</MenuItem>
+                      <MenuItem value="admin">Executive / Admin</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <FormControl fullWidth>
                     <InputLabel id="signup-department-label">Department</InputLabel>
                     <Select
                       id="signup-department"
                       name="department"
                       labelId="signup-department-label"
+                      label="Department"
                       value={formData.department}
                       onChange={handleChange}
                       startAdornment={

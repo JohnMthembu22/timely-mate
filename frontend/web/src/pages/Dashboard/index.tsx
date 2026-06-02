@@ -46,7 +46,6 @@ import { useArrayPersistence } from '../../hooks/usePersistence';
 import { useGuidedTour } from '../../contexts/GuidedTourContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useNotifications } from '../../contexts/NotificationContext';
-import { TOUR_AUTO_START_KEY, TOUR_COMPLETED_KEY } from '../../config/guidedTour';
 import {
   deriveProjectHealth,
   buildLiveActivityFeed,
@@ -151,17 +150,7 @@ const Dashboard: React.FC = () => {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // First-time guided tour (replay anytime via Tour guide in the top bar)
-  useEffect(() => {
-    if (!user) return;
-    const autoStarted = localStorage.getItem(TOUR_AUTO_START_KEY) === 'true';
-    const completed = localStorage.getItem(TOUR_COMPLETED_KEY) === 'true';
-    if (!autoStarted && !completed) {
-      localStorage.setItem(TOUR_AUTO_START_KEY, 'true');
-      const timer = window.setTimeout(() => startTour(), 1200);
-      return () => window.clearTimeout(timer);
-    }
-  }, [user, startTour]);
+  // Guided tour auto-start is handled in GuidedTourProvider (runs once on first sign-in).
   
   // Use persistence hooks for data that should survive sessions
   const [clockInRecords, setClockInRecords] = useArrayPersistence<{

@@ -5,6 +5,8 @@ import {
   guidedTourSteps,
   TOUR_AUTO_START_KEY,
   TOUR_COMPLETED_KEY,
+  getTourAutoStartKey,
+  getTourCompletedKey,
 } from '../config/guidedTour';
 import { renderTimelyMateTourChrome } from '../utils/guidedTourPopover';
 import {
@@ -13,6 +15,7 @@ import {
   scheduleTourRefresh,
   waitForTourTarget,
 } from '../utils/guidedTourDriver';
+import { useAppSelector } from '../store';
 
 type GuidedTourContextValue = {
   startTour: (options?: { force?: boolean }) => void;
@@ -40,9 +43,11 @@ async function loadDriverFactory() {
 export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAuthenticated } = useAppSelector((state) => state.auth);
   const driverRef = useRef<Driver | null>(null);
   const driverFactoryRef = useRef<Awaited<ReturnType<typeof loadDriverFactory>> | null>(null);
   const navigatingRef = useRef(false);
+  const prevAuthRef = useRef<boolean>(false);
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
 
@@ -132,7 +137,7 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         void transitionToStep(current - 1);
       },
       onDestroyed: () => {
-        localStorage.setItem(TOUR_COMPLETED_KEY, 'true');
+        localStorage.setItem(getTourCompletedKey(user?.id), 'true');
         driverRef.current = null;
         navigatingRef.current = false;
       },
@@ -149,7 +154,7 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const startTour = useCallback(
     (options?: { force?: boolean }) => {
-      const completed = localStorage.getItem(TOUR_COMPLETED_KEY) === 'true';
+      const completed = localStorage.getItem(getTourCompletedKey(user?.id)) === 'true';
       if (completed && !options?.force) return;
 
       const run = async () => {
@@ -173,18 +178,36 @@ export const GuidedTourProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         window.setTimeout(begin, 320);
       }
     },
-    [createDriverInstance, destroyDriver, location.pathname, navigate]
+    [createDriverInstance, destroyDriver, location.pathname, navigate, user?.id]
   );
 
   const isTourCompleted = useCallback(
-    () => localStorage.getItem(TOUR_COMPLETED_KEY) === 'true',
-    []
+    () => localStorage.getItem(getTourCompletedKey(user?.id)) === 'true',
+    [user?.id]
   );
 
   const resetTourProgress = useCallback(() => {
-    localStorage.removeItem(TOUR_COMPLETED_KEY);
-    localStorage.removeItem(TOUR_AUTO_START_KEY);
-  }, []);
+    localStorage.removeItem(getTourCompletedKey(user?.id));
+    localStorage.removeItem(getTourAutoStartKey(user?.id));
+  }, [user?.id]);
+
+  // Auto-start once, on the first successful sign-in for this user.
+  useEffect(() => {
+    const wasAuthed = prevAuthRef.current;
+    prevAuthRef.current = isAuthenticated;
+    if (!user?.id) return;
+    if (wasAuthed || !isAuthenticated) return;
+
+    const autoKey = getTourAutoStartKey(user.id);
+    const completedKey = getTourCompletedKey(user.id);
+    const autoStarted = localStorage.getItem(autoKey) === 'true';
+    const completed = localStorage.getItem(completedKey) === 'true';
+    if (autoStarted || completed) return;
+
+    localStorage.setItem(autoKey, 'true');
+    const timer = window.setTimeout(() => startTour(), 900);
+    return () => window.clearTimeout(timer);
+  }, [isAuthenticated, startTour, user?.id]);
 
   useEffect(() => {
     const onStartTour = () => startTour({ force: true });

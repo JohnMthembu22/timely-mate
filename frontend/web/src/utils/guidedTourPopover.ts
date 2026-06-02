@@ -35,12 +35,20 @@ export function renderTimelyMateTourChrome(
   const fill = chrome.querySelector('[data-tm-tour-progress]') as HTMLElement | null;
   const track = chrome.querySelector('.tm-tour-progress-track');
   const body = chrome.querySelector('.tm-tour-body');
+  const header = chrome.querySelector('.tm-tour-header');
 
   if (badge) badge.textContent = `Step ${current} of ${totalSteps}`;
   if (fill) fill.style.width = `${pct}%`;
   if (track) {
     track.setAttribute('aria-valuenow', String(pct));
     track.setAttribute('aria-label', `Tour progress: step ${current} of ${totalSteps}`);
+  }
+
+  // Move the close button into the header so it never overlaps driver content.
+  if (header && popover.closeButton && !header.contains(popover.closeButton)) {
+    popover.closeButton.setAttribute('aria-label', 'Close tour');
+    popover.closeButton.classList.add('tm-tour-close-btn');
+    header.appendChild(popover.closeButton);
   }
 
   // Re-sync driver content each step (driver recreates title/description nodes).

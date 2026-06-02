@@ -5,6 +5,12 @@ export const TOUR_AUTO_START_KEY = 'timelymate_tour_auto_started';
 
 export type TourStep = DriveStep & { route?: string };
 
+export const getTourCompletedKey = (userId?: string | null): string =>
+  userId ? `${TOUR_COMPLETED_KEY}:${userId}` : TOUR_COMPLETED_KEY;
+
+export const getTourAutoStartKey = (userId?: string | null): string =>
+  userId ? `${TOUR_AUTO_START_KEY}:${userId}` : TOUR_AUTO_START_KEY;
+
 export const guidedTourSteps: TourStep[] = [
   {
     element: '[data-tour="status-clock-in"]',

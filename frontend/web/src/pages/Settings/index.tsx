@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -49,6 +49,9 @@ import AdminUserManager from '../../components/AdminUserManager';
 import { useNotifications, createNotification } from '../../contexts/NotificationContext';
 import { useAppAction } from '../../hooks/useAppAction';
 import { notifyActionSuccess, notifyActionError } from '../../utils/appFeedback';
+import { useSubscription } from '../../contexts/SubscriptionContext';
+import { SUBSCRIPTION_PLANS } from '../../types/subscription';
+import { useAppSelector } from '../../store';
 
 const SETTINGS_STORAGE_KEY = 'timelymate_app_settings';
 
@@ -79,7 +82,9 @@ function loadStoredSettings() {
 
 const Settings: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const securitySectionRef = useRef<HTMLDivElement>(null);
+  const subscriptionSectionRef = useRef<HTMLDivElement>(null);
   const { currency, setCurrency, isLoading, error, detectedCountry } = useCurrency();
   const { mode, setMode } = useTheme();
   const { canManageUsers } = usePermissions();
@@ -87,6 +92,9 @@ const Settings: React.FC = () => {
   const { loading: saving, run: runSave, error: saveError } = useAppAction();
   const [settings, setSettings] = useState(loadStoredSettings);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const { currentPlan, subscription, companyProfile, updateSubscription, isLoading: subscriptionLoading } =
+    useSubscription();
+  const { user } = useAppSelector((state) => state.auth);
 
   const handleSaveSettings = () => {
     void runSave(async () => {
@@ -103,6 +111,10 @@ const Settings: React.FC = () => {
     const state = location.state as { focusSection?: string } | null;
     if (state?.focusSection === 'security') {
       securitySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.history.replaceState({}, document.title);
+    }
+    if (state?.focusSection === 'subscription') {
+      subscriptionSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
@@ -185,6 +197,143 @@ const Settings: React.FC = () => {
         <Grid container spacing={3}>
           {/* Left Column - Main Settings */}
           <Grid item xs={12} md={8}>
+            {/* Subscription Management Section */}
+            <Paper ref={subscriptionSectionRef} sx={{ p: 3, mb: 3, borderRadius: 4, boxShadow: 4 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1 }}>
+                <Typography
+                  variant="h6"
+                  gutterBottom
+                  sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, mb: 0 }}
+                >
+                  <AttachMoney /> Subscription & Billing
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => subscriptionSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                >
+                  Upgrade plan
+                </Button>
+              </Box>
+
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Manage your plan, view limits, and review renewal dates. Billing changes are restricted for company-managed
+                accounts.
+              </Typography>
+
+              {subscriptionLoading ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <CircularProgress size={20} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading subscription…
+                  </Typography>
+                </Box>
+              ) : (
+                <>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                        <CardContent>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Current plan
+                          </Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5 }}>
+                            {currentPlan?.name ?? '—'}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            Renewal:{' '}
+                            {subscription?.nextBillingDate
+                              ? new Date(subscription.nextBillingDate).toLocaleDateString()
+                              : '—'}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            Seats: {companyProfile?.employeeCount ?? subscription?.companySize?.employees ?? '—'}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                        <CardContent>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Billing access
+                          </Typography>
+                          <Typography variant="body2" sx={{ mt: 1 }}>
+                            {user?.role === 'admin' || user?.role === 'team_leader'
+                              ? 'You can manage subscription upgrades for your organization.'
+                              : 'Your account is managed by your organization. Please contact your Company Administrator for subscription changes or upgrades.'}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  </Grid>
+
+                  <Divider sx={{ my: 2.5 }} />
+
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1 }}>
+                    Available plans
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {SUBSCRIPTION_PLANS.map((plan) => {
+                      const isCurrent = currentPlan?.id === plan.id;
+                      const canManage =
+                        user?.role === 'admin' || user?.role === 'team_leader';
+                      return (
+                        <Grid item xs={12} md={6} key={plan.id}>
+                          <Card
+                            variant="outlined"
+                            sx={{
+                              borderRadius: 3,
+                              borderColor: isCurrent ? 'primary.main' : 'divider',
+                              boxShadow: isCurrent ? 3 : 0,
+                            }}
+                          >
+                            <CardContent>
+                              <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                                {plan.name}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {plan.description}
+                              </Typography>
+                              <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+                                <Chip
+                                  label={
+                                    plan.maxEmployees === -1
+                                      ? 'Unlimited seats'
+                                      : `Up to ${plan.maxEmployees} employees`
+                                  }
+                                  size="small"
+                                  color={isCurrent ? 'primary' : 'default'}
+                                  variant={isCurrent ? 'filled' : 'outlined'}
+                                />
+                                {isCurrent && <Chip label="Current" size="small" color="primary" />}
+                              </Stack>
+
+                              <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+                                <Button
+                                  fullWidth
+                                  variant={isCurrent ? 'outlined' : 'contained'}
+                                  disabled={!canManage || isCurrent}
+                                  onClick={() => void updateSubscription(plan.id)}
+                                >
+                                  {isCurrent ? 'Selected' : 'Choose plan'}
+                                </Button>
+                              </Stack>
+
+                              {!canManage && (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                  Your account is company-managed. Contact your Company Administrator for plan changes.
+                                </Alert>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                      );
+                    })}
+                  </Grid>
+                </>
+              )}
+            </Paper>
+
             {/* Regional Settings Section */}
             <Paper sx={{ p: 3, mb: 3, borderRadius: 4, boxShadow: 4 }}>
               <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
