@@ -93,6 +93,15 @@ type PermissionOptions = {
 export const isManagerRole = (role: UserRole, department: Department): boolean =>
   role === 'admin' || role === 'team_leader' || department === 'executive';
 
+/** Human-readable role for profile UI (includes executive / HR by department). */
+export const getRoleDisplayLabel = (role: UserRole, department: Department): string => {
+  if (department === 'hr') return role === 'admin' ? 'HR Administrator' : 'HR';
+  if (department === 'executive') return 'Executive';
+  if (role === 'admin') return 'Administrator';
+  if (role === 'team_leader') return 'Team Leader';
+  return 'Employee';
+};
+
 /** Admins, team leaders, and executives can manage billing and organization settings. */
 export const canManageOrganizationBilling = (role: UserRole, department: Department): boolean =>
   isManagerRole(role, department);

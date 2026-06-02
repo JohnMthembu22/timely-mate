@@ -62,6 +62,7 @@ import {
 } from '../../utils/employeeProfileLink';
 import jsPDF from 'jspdf';
 import { formatZAR } from '../../utils/currency';
+import { getRoleDisplayLabel, isManagerRole } from '../../types/auth';
 
 const LEAVE_ICONS: Record<string, React.ReactNode> = {
   annual: <BeachAccess />,
@@ -696,13 +697,9 @@ Location: ${profile.location}
                     Current Role
                   </Typography>
                   <Chip 
-                    label={
-                      user.role === 'admin' ? 'Administrator' :
-                      user.role === 'team_leader' ? 'Team Leader' :
-                      'Employee'
-                    }
+                    label={getRoleDisplayLabel(user.role, user.department)}
                     color={
-                      user.role === 'admin' ? 'error' :
+                      isManagerRole(user.role, user.department) ? 'error' :
                       user.role === 'team_leader' ? 'warning' :
                       'primary'
                     }
@@ -734,7 +731,7 @@ Location: ${profile.location}
                   ))}
                 </Grid>
                 
-                {user.role === 'employee' && (
+                {!isManagerRole(user.role, user.department) && (
                   <Alert severity="info" sx={{ mt: 2 }}>
                     <Typography variant="body2">
                       As an employee, you have limited permissions. Contact your team leader or administrator for access to additional features.

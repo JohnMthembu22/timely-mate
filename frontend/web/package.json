@@ -21,6 +21,7 @@
     "build:staging": "npm run env:validate staging && vite build --mode staging",
     "build:prod": "npm run env:validate production && vite build --mode production",
     "clear-demo": "node scripts/clearDemoData.js",
+    "icons:generate": "python3 scripts/generate-icons.py",
     "fresh-start": "npm run clear-demo && npm run dev",
     "electron": "electron .",
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",

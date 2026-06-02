@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import authService, { LoginCredentials, SignupData, AuthResponse, EmailConfirmationRequiredError } from '../../services/auth';
-import authServiceSupabase, { normalizeDepartment } from '../../services/authSupabase';
+import authServiceSupabase, { normalizeDepartment, normalizeRole } from '../../services/authSupabase';
 import { isSupabaseAuthEnabled } from '../../utils/authConfig';
 import { getUserPermissions, UserRole, Department, UserPermissions, MANAGER_PERMISSIONS, isManagerRole } from '../../types/auth';
 import { clearAuthStorage, readStoredAuth } from '../../utils/authSession';
@@ -14,7 +14,7 @@ interface AuthState {
 }
 
 function mergeUserPermissions(user: AuthResponse['user']): AuthResponse['user'] {
-  const userRole = (user.role as UserRole) || 'employee';
+  const userRole = normalizeRole(user.role as string);
   const userDepartment = normalizeDepartment(user.department as string);
   if (isManagerRole(userRole, userDepartment)) {
     return { ...user, permissions: { ...MANAGER_PERMISSIONS } };
@@ -95,6 +95,27 @@ export const logout = createAsyncThunk(
   async () => {
     await authService.logout();
     clearAuthStorage();
+  }
+);
+
+/** Re-fetch role/department from public.profiles (after SQL or HR updates). */
+export const refreshUserFromSupabase = createAsyncThunk(
+  'auth/refreshUserFromSupabase',
+  async (_, { rejectWithValue }) => {
+    try {
+      if (!isSupabaseAuthEnabled()) {
+        return rejectWithValue('Supabase auth is not enabled');
+      }
+      const token = await authServiceSupabase.getToken();
+      const user = await authServiceSupabase.getCurrentUser();
+      if (!token || !user) {
+        return rejectWithValue('No active session');
+      }
+      return { token, user } as AuthResponse;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to refresh profile';
+      return rejectWithValue(message);
+    }
   }
 );
 
@@ -185,6 +206,11 @@ const authSlice = createSlice({
         state.isAuthenticated = true;
         state.user = mergeUserPermissions(action.payload.user);
         state.token = action.payload.token;
+      })
+      .addCase(refreshUserFromSupabase.fulfilled, (state, action) => {
+        state.user = mergeUserPermissions(action.payload.user);
+        state.token = action.payload.token;
+        state.isAuthenticated = true;
       });
   },
 });

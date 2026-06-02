@@ -89,6 +89,64 @@ export function normalizeDepartment(value: string | null | undefined): Departmen
   return DEPARTMENT_VALUES.includes(raw as Department) ? (raw as Department) : 'other';
 }
 
+/** Map DB / signup / manual SQL values to app roles (case-insensitive). */
+export function normalizeRole(value: string | null | undefined): UserRole {
+  const raw = (value || 'employee').toLowerCase().trim().replace(/\s+/g, '_');
+  if (raw === 'admin' || raw === 'administrator' || raw === 'exec' || raw === 'executive') {
+    return 'admin';
+  }
+  if (
+    raw === 'team_leader' ||
+    raw === 'teamleader' ||
+    raw === 'team-leader' ||
+    raw === 'manager' ||
+    raw === 'lead'
+  ) {
+    return 'team_leader';
+  }
+  return 'employee';
+}
+
+async function fetchProfileRow(userId: string): Promise<{ profile: ProfileRow | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, organization_name, role, department, permissions, company_profile, selected_plan')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[TimelyMate] Could not load profiles row:', error.message, error.code);
+    return { profile: null, error: error.message };
+  }
+  return { profile: data as ProfileRow | null, error: null };
+}
+
+async function syncAuthUserMetadata(
+  session: Session,
+  role: UserRole,
+  department: Department,
+  organizationName: string
+): Promise<void> {
+  const meta = session.user.user_metadata ?? {};
+  const metaDept = normalizeDepartment(meta.department as string | undefined);
+  if (meta.role === role && metaDept === department && meta.organization_name === organizationName) {
+    return;
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    data: {
+      ...meta,
+      role,
+      department,
+      organization_name: organizationName,
+    },
+  });
+
+  if (error) {
+    console.warn('[TimelyMate] Could not sync auth user_metadata from profile:', error.message);
+  }
+}
+
 function resolvePermissions(
   userRole: UserRole,
   userDepartment: Department,
@@ -105,27 +163,40 @@ export async function buildAuthResponseFromSession(session: Session): Promise<Au
 
   const userId = session.user.id;
   const fallbackEmail = session.user.email ?? '';
+  const meta = session.user.user_metadata ?? {};
 
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+  const { profile } = await fetchProfileRow(userId);
 
   const userProfile: ProfileRow = profile ?? {
     id: userId,
     email: fallbackEmail,
-    organization_name: (session.user.user_metadata?.organization_name as string) ?? '',
-    role: (session.user.user_metadata?.role as string) ?? 'employee',
-    department: (session.user.user_metadata?.department as string) ?? 'general',
+    organization_name: (meta.organization_name as string) ?? '',
+    role: (meta.role as string) ?? 'employee',
+    department: (meta.department as string) ?? 'general',
     permissions: {},
   };
 
-  const userRole = (userProfile.role as UserRole) || 'employee';
+  if (!profile) {
+    console.warn(
+      '[TimelyMate] No profiles row for auth user',
+      userId,
+      fallbackEmail,
+      '— using auth metadata defaults. Ensure public.profiles.id matches auth.users.id.'
+    );
+  }
+
+  const userRole = normalizeRole(userProfile.role);
   const userDepartment = normalizeDepartment(userProfile.department);
+  const organizationName = userProfile.organization_name || (meta.organization_name as string) || '';
+
+  await syncAuthUserMetadata(session, userRole, userDepartment, organizationName);
 
   return {
     token: session.access_token,
     user: {
       id: userId,
       email: userProfile.email || fallbackEmail,
-      organizationName: userProfile.organization_name || '',
+      organizationName,
       role: userRole,
       department: userDepartment,
       permissions: resolvePermissions(userRole, userDepartment, userProfile.permissions),
@@ -184,8 +255,8 @@ export async function ensureProfileFromSession(session: Session): Promise<void> 
         id: userId,
         email,
         organization_name: fallbackOrg,
-        role: 'employee',
-        department: 'other',
+        role: normalizeRole(meta.role as string | undefined),
+        department: normalizeDepartment(meta.department as string | undefined),
         permissions: {},
       },
       { onConflict: 'id' }
@@ -347,11 +418,18 @@ const authServiceSupabase = {
     if (!isSupabaseAuthEnabled()) return null;
 
     const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) return null;
+
+    const {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) return null;
 
     const response = await buildAuthResponseFromSession(session);
+    persistAuthSnapshot(response);
     return response.user;
   },
 

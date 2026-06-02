@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAppDispatch } from '../store';
-import { hydrateAuth } from '../store/slices/authSlice';
+import { hydrateAuth, refreshUserFromSupabase } from '../store/slices/authSlice';
 import authServiceSupabase from '../services/authSupabase';
 import { clearSession, setSession } from '../store/slices/authSlice';
 import { isSupabaseAuthEnabled } from '../utils/authConfig';
@@ -17,13 +17,29 @@ const AuthBootstrap: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   useEffect(() => {
     if (!isSupabaseAuthEnabled()) return;
 
+    const refreshOnFocus = () => {
+      void dispatch(refreshUserFromSupabase());
+    };
+    window.addEventListener('focus', refreshOnFocus);
+    return () => window.removeEventListener('focus', refreshOnFocus);
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (!isSupabaseAuthEnabled()) return;
+
     const { data } = authServiceSupabase.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         clearAuthStorage();
         dispatch(clearSession());
         return;
       }
-      if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+      if (
+        session &&
+        (event === 'SIGNED_IN' ||
+          event === 'TOKEN_REFRESHED' ||
+          event === 'INITIAL_SESSION' ||
+          event === 'USER_UPDATED')
+      ) {
         try {
           const response = await authServiceSupabase.buildAuthResponseFromSession(session);
           persistAuthSnapshot(response);
