@@ -92,6 +92,14 @@ import { useEmployees, Employee } from '../../contexts/EmployeeContext';
 import { useNotifications, createNotification } from '../../contexts/NotificationContext';
 import { emailService } from '../../services/emailService';
 import { useAppSelector } from '../../store';
+import { canOnboardEmployees } from '../../utils/hrAccess';
+import {
+  cloneLeaveEntitlements,
+  createEmptyNewEmployeeForm,
+  LEAVE_ENTITLEMENT_LABELS,
+  type EmployeeLeaveEntitlements,
+  type NewEmployeeFormState,
+} from '../../types/employeeHr';
 // @ts-ignore
 import { saveAs } from 'file-saver';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -292,6 +300,7 @@ const HR: React.FC = () => {
   const navigate = useNavigate();
   const { currentPlan } = useSubscription();
   const user = useAppSelector((state) => state.auth.user);
+  const canOnboard = canOnboardEmployees(user);
   const [currentTab, setCurrentTab] = useState(0);
   const [openAddEmployee, setOpenAddEmployee] = useState(false);
   const [openAddLeave, setOpenAddLeave] = useState(false);
@@ -299,16 +308,38 @@ const HR: React.FC = () => {
   const [openPromoteEmployee, setOpenPromoteEmployee] = useState(false);
   const [openExcelImport, setOpenExcelImport] = useState(false);
   const [selectedEmployeeForPromotion, setSelectedEmployeeForPromotion] = useState<Employee | null>(null);
-  const [newEmployee, setNewEmployee] = useState({
-    name: '',
-    position: '',
-    department: '',
-    email: '',
-    salary: 0,
-    level: 'junior' as 'junior' | 'mid' | 'senior' | 'lead',
-    benefits: [] as string[],
-    employmentType: 'permanent' as 'permanent' | 'contract' | 'freelancer',
-  });
+  const [newEmployee, setNewEmployee] = useState<NewEmployeeFormState>(createEmptyNewEmployeeForm);
+
+  const closeAddEmployeeDialog = () => {
+    setOpenAddEmployee(false);
+    setNewEmployee(createEmptyNewEmployeeForm());
+  };
+
+  const openOnboardingDialog = () => {
+    if (!canOnboard) {
+      addNotification(
+        createNotification.employee(
+          'Access denied',
+          'Only administrators and HR can add employees and configure leave entitlements.'
+        )
+      );
+      return;
+    }
+    setOpenAddEmployee(true);
+  };
+
+  const updateLeaveEntitlementTotal = (
+    key: keyof EmployeeLeaveEntitlements,
+    totalDays: number
+  ) => {
+    setNewEmployee((prev) => ({
+      ...prev,
+      leaveEntitlements: {
+        ...prev.leaveEntitlements,
+        [key]: { ...prev.leaveEntitlements[key], totalDays: Math.max(0, totalDays) },
+      },
+    }));
+  };
   const [newLeave, setNewLeave] = useState({
     employeeId: '',
     type: '',
@@ -375,6 +406,23 @@ const HR: React.FC = () => {
   };
 
   const handleAddEmployee = () => {
+    if (!canOnboard) {
+      addNotification(
+        createNotification.employee(
+          'Access denied',
+          'Only administrators and HR can onboard employees and set leave entitlements.'
+        )
+      );
+      return;
+    }
+
+    if (!newEmployee.name.trim() || !newEmployee.email.trim() || !newEmployee.position.trim()) {
+      addNotification(
+        createNotification.employee('Missing information', 'Name, email, and position are required.')
+      );
+      return;
+    }
+
     // Check free tier employee limit
     if (currentPlan?.id === 'free' && employees.length >= 5) {
       addNotification(createNotification.employee(
@@ -388,17 +436,22 @@ const HR: React.FC = () => {
     // Create new employee with proper structure
     const newEmp: Employee = {
       id: `emp-${Date.now()}`,
-      name: newEmployee.name,
-      position: newEmployee.position,
+      name: newEmployee.name.trim(),
+      position: newEmployee.position.trim(),
       department: newEmployee.department,
-      email: newEmployee.email,
-      joinDate: new Date().toISOString().split('T')[0],
+      email: newEmployee.email.trim().toLowerCase(),
+      phone: newEmployee.phone.trim(),
+      joinDate: newEmployee.joinDate,
+      startDate: newEmployee.joinDate,
       status: 'active',
       avatar: '',
       salary: newEmployee.salary,
       benefits: newEmployee.benefits,
-      level: newEmployee.level as 'junior' | 'mid' | 'senior' | 'lead',
+      level: newEmployee.level,
       employmentType: newEmployee.employmentType,
+      workLocation: newEmployee.workLocation,
+      leaveEntitlements: newEmployee.leaveEntitlements,
+      payslips: [],
     };
     
     addEmployee(newEmp);
@@ -438,8 +491,7 @@ const HR: React.FC = () => {
       ));
     });
     
-    setNewEmployee({ name: '', position: '', department: '', email: '', salary: 0, level: 'junior', benefits: [], employmentType: 'permanent' });
-    setOpenAddEmployee(false);
+    closeAddEmployeeDialog();
   };
 
   const handleAddLeave = () => {
@@ -762,11 +814,26 @@ const HR: React.FC = () => {
       return total + days;
     }, 0);
 
-    // Default leave allocations based on type
-    const totalDays = leaveType === 'Annual Leave' ? 25 : 
-                     leaveType === 'Sick Leave' ? 15 :
-                     leaveType === 'Personal Leave' ? 5 :
-                     leaveType === 'Maternity Leave' ? 90 : 10;
+    const entitlementByType: Record<string, keyof EmployeeLeaveEntitlements> = {
+      'Annual Leave': 'annual',
+      'Sick Leave': 'sick',
+      'Personal Leave': 'personal',
+      'Study Leave': 'study',
+      'Maternity Leave': 'maternity',
+    };
+    const entitlementKey = entitlementByType[leaveType];
+    const totalDays =
+      entitlementKey && employee.leaveEntitlements
+        ? employee.leaveEntitlements[entitlementKey].totalDays
+        : leaveType === 'Annual Leave'
+          ? 25
+          : leaveType === 'Sick Leave'
+            ? 15
+            : leaveType === 'Personal Leave'
+              ? 5
+              : leaveType === 'Maternity Leave'
+                ? 90
+                : 10;
 
     return {
       employeeId,
@@ -1539,6 +1606,7 @@ const HR: React.FC = () => {
           name: excelEmp.name,
           position: excelEmp.position,
           department: excelEmp.department,
+          email: excelEmp.email,
           joinDate: excelEmp.joinDate,
           status: excelEmp.status,
           avatar: '',
@@ -1546,6 +1614,8 @@ const HR: React.FC = () => {
           benefits: excelEmp.benefits ? excelEmp.benefits.split(', ') : [],
           level: excelEmp.level,
           employmentType: excelEmp.employmentType,
+          leaveEntitlements: cloneLeaveEntitlements(),
+          payslips: [],
         }));
         
         // Simulate batch processing delay
@@ -2593,7 +2663,7 @@ const HR: React.FC = () => {
                           variant="outlined"
                           startIcon={<PersonAdd />}
                           fullWidth
-                          onClick={() => setOpenAddEmployee(true)}
+                          onClick={openOnboardingDialog}
                         >
                           Add Employee
                         </Button>
@@ -2713,7 +2783,7 @@ const HR: React.FC = () => {
                   <Button
                     variant="contained"
                     startIcon={<PersonAdd />}
-                    onClick={() => setOpenAddEmployee(true)}
+                    onClick={openOnboardingDialog}
                   >
                     Add Employee
                   </Button>
@@ -2782,7 +2852,7 @@ const HR: React.FC = () => {
                             variant="contained"
                             startIcon={<PersonAdd />}
                             size="large"
-                            onClick={() => setOpenAddEmployee(true)}
+                            onClick={openOnboardingDialog}
                             sx={{ 
                               borderRadius: 3, 
                               mt: 2, 
@@ -3792,7 +3862,7 @@ const HR: React.FC = () => {
               <Button
                 variant="contained"
                 startIcon={<PersonAdd />}
-                onClick={() => setOpenAddEmployee(true)}
+                onClick={openOnboardingDialog}
                         sx={{ 
                   borderRadius: 3,
                   px: 4,
@@ -3878,7 +3948,7 @@ const HR: React.FC = () => {
                             variant="contained"
                             startIcon={<PersonAdd />}
                             size="large"
-                            onClick={() => setOpenAddEmployee(true)}
+                            onClick={openOnboardingDialog}
                             sx={{ borderRadius: 2, mt: 2 }}
                           >
                             Add Employee
@@ -3925,7 +3995,7 @@ const HR: React.FC = () => {
               <Button
                 variant="contained"
                 startIcon={<PersonAdd />}
-                onClick={() => setOpenAddEmployee(true)}
+                onClick={openOnboardingDialog}
                 sx={{
                   borderRadius: 3,
                   px: 4,
@@ -3950,9 +4020,9 @@ const HR: React.FC = () => {
 
       {/* Add Employee Dialog */}
       <Dialog 
-        open={openAddEmployee} 
-        onClose={() => setOpenAddEmployee(false)} 
-        maxWidth="sm" 
+        open={openAddEmployee && canOnboard} 
+        onClose={closeAddEmployeeDialog} 
+        maxWidth="md" 
         fullWidth
         PaperProps={{
           sx: {
@@ -3980,102 +4050,209 @@ const HR: React.FC = () => {
                 Add New Employee
               </Typography>
               <Typography variant="subtitle1" sx={{ opacity: 0.9, fontWeight: 500 }}>
-                Expand your team with new talent
+                Complete employee, employment, and leave entitlement details (admin / HR only)
               </Typography>
             </Box>
           </Box>
         </DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 2 }}>
-            <TextField
-              label="Full Name"
-              fullWidth
-              value={newEmployee.name}
-              onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
-            />
-            <TextField
-              label="Position"
-              fullWidth
-              value={newEmployee.position}
-              onChange={(e) => setNewEmployee({ ...newEmployee, position: e.target.value })}
-            />
-            <FormControl fullWidth>
-              <InputLabel>Department</InputLabel>
-              <Select
-                value={newEmployee.department}
-                label="Department"
-                onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
-              >
-                <MenuItem value="Engineering">Engineering</MenuItem>
-                <MenuItem value="Project Management">Project Management</MenuItem>
-                <MenuItem value="Design">Design</MenuItem>
-                <MenuItem value="Product">Product</MenuItem>
-                <MenuItem value="Marketing">Marketing</MenuItem>
-                <MenuItem value="Sales">Sales</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField
-              label="Email"
-              fullWidth
-              type="email"
-              value={newEmployee.email}
-              onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
-            />
-            <TextField
-              label="Salary"
-              fullWidth
-              type="number"
-              value={newEmployee.salary}
-              onChange={(e) => setNewEmployee({ ...newEmployee, salary: Number(e.target.value) })}
-            />
-            <FormControl fullWidth>
-              <InputLabel>Level</InputLabel>
-              <Select
-                value={newEmployee.level}
-                label="Level"
-                onChange={(e) => setNewEmployee({ ...newEmployee, level: e.target.value as 'junior' | 'mid' | 'senior' | 'lead' })}
-              >
-                <MenuItem value="junior">Junior</MenuItem>
-                <MenuItem value="mid">Mid</MenuItem>
-                <MenuItem value="senior">Senior</MenuItem>
-                <MenuItem value="lead">Lead</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>Employment Type</InputLabel>
-              <Select
-                value={newEmployee.employmentType}
-                label="Employment Type"
-                onChange={(e) => setNewEmployee({ ...newEmployee, employmentType: e.target.value as 'permanent' | 'contract' | 'freelancer' })}
-              >
-                <MenuItem value="permanent">Permanent</MenuItem>
-                <MenuItem value="contract">Contract</MenuItem>
-                <MenuItem value="freelancer">Freelancer</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>Benefits</InputLabel>
-              <Select
-                multiple
-                value={newEmployee.benefits}
-                label="Benefits"
-                onChange={(e) => setNewEmployee({ ...newEmployee, benefits: e.target.value as string[] })}
-                renderValue={(selected) => (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {selected.map((value) => (
-                      <Chip key={value} label={value} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              Personal & contact
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Full name"
+                  fullWidth
+                  required
+                  value={newEmployee.name}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Work email"
+                  fullWidth
+                  required
+                  type="email"
+                  value={newEmployee.email}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Phone"
+                  fullWidth
+                  value={newEmployee.phone}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Start date"
+                  fullWidth
+                  type="date"
+                  InputLabelProps={{ shrink: true }}
+                  value={newEmployee.joinDate}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, joinDate: e.target.value })}
+                />
+              </Grid>
+            </Grid>
+
+            <Divider />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              Role & employment
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Position"
+                  fullWidth
+                  required
+                  value={newEmployee.position}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, position: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Department</InputLabel>
+                  <Select
+                    value={newEmployee.department}
+                    label="Department"
+                    onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
+                  >
+                    <MenuItem value="Engineering">Engineering</MenuItem>
+                    <MenuItem value="Project Management">Project Management</MenuItem>
+                    <MenuItem value="Design">Design</MenuItem>
+                    <MenuItem value="Product">Product</MenuItem>
+                    <MenuItem value="Marketing">Marketing</MenuItem>
+                    <MenuItem value="Sales">Sales</MenuItem>
+                    <MenuItem value="Human Resources">Human Resources</MenuItem>
+                    <MenuItem value="Finance">Finance</MenuItem>
+                    <MenuItem value="Operations">Operations</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Annual salary (ZAR)"
+                  fullWidth
+                  type="number"
+                  value={newEmployee.salary}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, salary: Number(e.target.value) })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Work location</InputLabel>
+                  <Select
+                    value={newEmployee.workLocation}
+                    label="Work location"
+                    onChange={(e) =>
+                      setNewEmployee({
+                        ...newEmployee,
+                        workLocation: e.target.value as NewEmployeeFormState['workLocation'],
+                      })
+                    }
+                  >
+                    <MenuItem value="office">Office</MenuItem>
+                    <MenuItem value="offsite">Offsite / field</MenuItem>
+                    <MenuItem value="hybrid">Hybrid</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Level</InputLabel>
+                  <Select
+                    value={newEmployee.level}
+                    label="Level"
+                    onChange={(e) =>
+                      setNewEmployee({
+                        ...newEmployee,
+                        level: e.target.value as NewEmployeeFormState['level'],
+                      })
+                    }
+                  >
+                    <MenuItem value="junior">Junior</MenuItem>
+                    <MenuItem value="mid">Mid</MenuItem>
+                    <MenuItem value="senior">Senior</MenuItem>
+                    <MenuItem value="lead">Lead</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Employment type</InputLabel>
+                  <Select
+                    value={newEmployee.employmentType}
+                    label="Employment type"
+                    onChange={(e) =>
+                      setNewEmployee({
+                        ...newEmployee,
+                        employmentType: e.target.value as NewEmployeeFormState['employmentType'],
+                      })
+                    }
+                  >
+                    <MenuItem value="permanent">Permanent</MenuItem>
+                    <MenuItem value="contract">Contract</MenuItem>
+                    <MenuItem value="freelancer">Freelancer</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Benefits</InputLabel>
+                  <Select
+                    multiple
+                    value={newEmployee.benefits}
+                    label="Benefits"
+                    onChange={(e) =>
+                      setNewEmployee({ ...newEmployee, benefits: e.target.value as string[] })
+                    }
+                    renderValue={(selected) => (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {selected.map((value) => (
+                          <Chip key={value} label={value} />
+                        ))}
+                      </Box>
+                    )}
+                  >
+                    {availableBenefits.map((benefit) => (
+                      <MenuItem key={benefit} value={benefit}>
+                        <Checkbox checked={newEmployee.benefits.indexOf(benefit) > -1} />
+                        <MuiListItemText primary={benefit} />
+                      </MenuItem>
                     ))}
-                  </Box>
-                )}
-              >
-                {availableBenefits.map((benefit) => (
-                  <MenuItem key={benefit} value={benefit}>
-                    <Checkbox checked={newEmployee.benefits.indexOf(benefit) > -1} />
-                    <MuiListItemText primary={benefit} />
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+
+            <Divider />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              Leave entitlements (days per year)
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Used balances start at zero. Employees see these totals on their profile after they register with the same email.
+            </Typography>
+            <Grid container spacing={2}>
+              {(Object.keys(LEAVE_ENTITLEMENT_LABELS) as (keyof EmployeeLeaveEntitlements)[]).map(
+                (key) => (
+                  <Grid item xs={12} sm={6} key={key}>
+                    <TextField
+                      label={LEAVE_ENTITLEMENT_LABELS[key]}
+                      fullWidth
+                      type="number"
+                      inputProps={{ min: 0 }}
+                      value={newEmployee.leaveEntitlements[key].totalDays}
+                      onChange={(e) => updateLeaveEntitlementTotal(key, Number(e.target.value))}
+                    />
+                  </Grid>
+                )
+              )}
+            </Grid>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ 
@@ -4089,7 +4266,7 @@ const HR: React.FC = () => {
         }}>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
             <Button 
-              onClick={() => setOpenAddEmployee(false)}
+              onClick={closeAddEmployeeDialog}
               variant="outlined"
               size="large"
               sx={{

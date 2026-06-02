@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo } from 'react';
 import { useArrayPersistence } from '../hooks/usePersistence';
 import { isPresentationEmployeeRecord, stripLegacyEmployees } from '../utils/legacyDemoCleanup';
+import type { EmployeeLeaveEntitlements, EmployeePayslip } from '../types/employeeHr';
 
 export interface Employee {
   id: string;
@@ -18,6 +19,8 @@ export interface Employee {
   phone?: string;
   employmentType: 'permanent' | 'contract' | 'freelancer';
   workLocation?: 'office' | 'offsite' | 'hybrid';
+  leaveEntitlements?: EmployeeLeaveEntitlements;
+  payslips?: EmployeePayslip[];
 }
 
 interface EmployeeContextType {

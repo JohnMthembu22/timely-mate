@@ -53,27 +53,33 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAppSelector } from '../../store';
 import { userProfileApi } from '../../services/api';
 import timezoneService from '../../services/timezoneService';
-import jsPDF from 'jspdf';
 import { getBrowserNotificationPermission, requestBrowserNotificationPermission } from '../../utils/browserNotifications';
+import { useEmployees } from '../../contexts/EmployeeContext';
+import {
+  findEmployeeByEmail,
+  getEmployeeLeaveEntitlements,
+  leaveEntitlementsForDisplay,
+} from '../../utils/employeeProfileLink';
+import jsPDF from 'jspdf';
+import { formatZAR } from '../../utils/currency';
 
-interface Payslip {
-  id: string;
-  month: string;
-  year: number;
-  amount: string;
-  downloadUrl: string;
-}
-
-interface LeaveBalance {
-  type: string;
-  total: number;
-  used: number;
-  icon: React.ReactNode;
-}
+const LEAVE_ICONS: Record<string, React.ReactNode> = {
+  annual: <BeachAccess />,
+  sick: <Sick />,
+  personal: <EventAvailable />,
+  study: <WorkOff />,
+  maternity: <EventAvailable />,
+};
 
 const Profile: React.FC = () => {
   const { currency, setCurrency, isLoading, error, detectedCountry } = useCurrency();
   const { user } = useAppSelector((state) => state.auth);
+  const { employees } = useEmployees();
+  const linkedEmployee = findEmployeeByEmail(employees, user?.email);
+  const leaveBalances = linkedEmployee
+    ? leaveEntitlementsForDisplay(getEmployeeLeaveEntitlements(linkedEmployee))
+    : [];
+  const payslips = linkedEmployee?.payslips ?? [];
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({
     name: '',
@@ -96,78 +102,6 @@ const Profile: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [timezoneLoading, setTimezoneLoading] = useState(false);
   const [timezoneInfo, setTimezoneInfo] = useState<{ timezone: string; city: string; offset: string } | null>(null);
-
-  const payslips: Payslip[] = [
-    {
-      id: '1',
-      month: 'December',
-      year: 2024,
-      amount: 'R 15,500.00',
-      downloadUrl: '/api/payslips/2024-12.pdf'
-    },
-    {
-      id: '2',
-      month: 'November',
-      year: 2024,
-      amount: 'R 15,500.00',
-      downloadUrl: '/api/payslips/2024-11.pdf'
-    },
-    {
-      id: '3',
-      month: 'October',
-      year: 2024,
-      amount: 'R 15,500.00',
-      downloadUrl: '/api/payslips/2024-10.pdf'
-    },
-    {
-      id: '4',
-      month: 'September',
-      year: 2024,
-      amount: 'R 15,500.00',
-      downloadUrl: '/api/payslips/2024-09.pdf'
-    },
-    {
-      id: '5',
-      month: 'August',
-      year: 2024,
-      amount: 'R 15,500.00',
-      downloadUrl: '/api/payslips/2024-08.pdf'
-    },
-    {
-      id: '6',
-      month: 'July',
-      year: 2024,
-      amount: 'R 15,500.00',
-      downloadUrl: '/api/payslips/2024-07.pdf'
-    }
-  ];
-
-  const leaveBalances: LeaveBalance[] = [
-    {
-      type: 'Annual Leave',
-      total: 21,
-      used: 8,
-      icon: <BeachAccess />
-    },
-    {
-      type: 'Sick Leave',
-      total: 10,
-      used: 2,
-      icon: <Sick />
-    },
-    {
-      type: 'Personal Leave',
-      total: 5,
-      used: 1,
-      icon: <EventAvailable />
-    },
-    {
-      type: 'Study Leave',
-      total: 3,
-      used: 0,
-      icon: <WorkOff />
-    }
-  ];
 
   // Auto-detect timezone when component mounts
   useEffect(() => {
@@ -201,18 +135,14 @@ const Profile: React.FC = () => {
   // Populate profile with user data when user changes
   useEffect(() => {
     if (user) {
-      setProfile(prev => ({
+      setProfile((prev) => ({
         ...prev,
-        // Use organization name as the display name for now
-        name: user.organizationName || user.email || prev.name,
+        name: linkedEmployee?.name || user.organizationName || user.email || prev.name,
         email: user.email || prev.email,
-        // Set department and position based on role
-        department: user.organizationName ? 'Organization Owner' : prev.department,
-        position: user.role === 'admin' ? 'Administrator' : 
-                 user.role === 'team_leader' ? 'Team Leader' : 
-                 'Employee',
-        // Keep existing timezone if already detected
-        // You can add more mappings here as the user object gets more properties
+        phone: linkedEmployee?.phone || prev.phone,
+        department: linkedEmployee?.department || prev.department,
+        position: linkedEmployee?.position || prev.position,
+        location: linkedEmployee?.workLocation || prev.location,
       }));
     } else {
       // Reset profile if no user is logged in (except timezone)
@@ -227,7 +157,7 @@ const Profile: React.FC = () => {
         avatar: '',
       }));
     }
-  }, [user]);
+  }, [user, linkedEmployee]);
 
   const handleNotificationChange = async (type: keyof typeof notifications) => {
     const enabling = !notifications[type];
@@ -297,87 +227,17 @@ const Profile: React.FC = () => {
     }
   };
 
-  const handleDownload = (payslipId: string) => {
-    const payslip = payslips.find(p => p.id === payslipId);
-    if (payslip) {
-      // Generate actual PDF payslip
-      const doc = new jsPDF();
-      
-      // Company Header
-      doc.setFontSize(20);
-      doc.setFont('helvetica', 'bold');
-      doc.text('TIMELY MATE CONSTRUCTION', 20, 30);
-      
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
-      doc.text('123 Business Street, Johannesburg, 2000', 20, 40);
-      doc.text('Tel: +27 11 123 4567 | Email: hr@timelymate.co.za', 20, 50);
-      
-      // Payslip Title
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text('PAYSLIP', 20, 70);
-      
-      // Employee Information
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Employee: ${profile.name || 'John Doe'}`, 20, 85);
-      doc.text(`Employee ID: EMP001`, 20, 95);
-      doc.text(`Position: ${profile.position || 'Project Manager'}`, 20, 105);
-      doc.text(`Department: ${profile.department || 'Construction'}`, 20, 115);
-      
-      // Pay Period
-      doc.text(`Pay Period: ${payslip.month} ${payslip.year}`, 20, 130);
-      doc.text(`Pay Date: ${payslip.month} 31, ${payslip.year}`, 20, 140);
-      
-      // Earnings Section
-      doc.setFont('helvetica', 'bold');
-      doc.text('EARNINGS', 20, 160);
-      
-      doc.setFont('helvetica', 'normal');
-      doc.text('Basic Salary', 20, 175);
-      doc.text('R 12,500.00', 150, 175);
-      
-      doc.text('Overtime (8 hours)', 20, 185);
-      doc.text('R 1,250.00', 150, 185);
-      
-      doc.text('Project Bonus', 20, 195);
-      doc.text('R 1,750.00', 150, 195);
-      
-      // Deductions Section
-      doc.setFont('helvetica', 'bold');
-      doc.text('DEDUCTIONS', 20, 215);
-      
-      doc.setFont('helvetica', 'normal');
-      doc.text('PAYE Tax', 20, 230);
-      doc.text('R 2,500.00', 150, 230);
-      
-      doc.text('UIF', 20, 240);
-      doc.text('R 150.00', 150, 240);
-      
-      doc.text('Medical Aid', 20, 250);
-      doc.text('R 800.00', 150, 250);
-      
-      doc.text('Pension Fund', 20, 260);
-      doc.text('R 1,250.00', 150, 260);
-      
-      // Net Pay
-      doc.setFont('helvetica', 'bold');
-      doc.text('NET PAY', 20, 280);
-      doc.text('R 15,500.00', 150, 280);
-      
-      // Footer
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text('This is a computer-generated payslip. No signature required.', 20, 300);
-      doc.text('For queries, contact HR at hr@timelymate.co.za', 20, 310);
-      
-      // Save the PDF
-      doc.save(`payslip-${payslip.month}-${payslip.year}.pdf`);
-      
-      setMessage({ type: 'success', text: `Downloading ${payslip.month} ${payslip.year} payslip...` });
-      setTimeout(() => setMessage(null), 3000);
+  const handleDownloadPayslip = (payslipId: string) => {
+    const payslip = payslips.find((p) => p.id === payslipId);
+    if (!payslip?.documentUrl) {
+      setMessage({
+        type: 'info',
+        text: 'This payslip file is not available yet. Contact HR if you need a copy.',
+      });
+      setTimeout(() => setMessage(null), 4000);
+      return;
     }
+    window.open(payslip.documentUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleCopyContact = () => {
@@ -901,27 +761,31 @@ Location: ${profile.location}
                 <EventAvailable /> Leave Balance
               </Typography>
               <Stack spacing={2}>
-                {leaveBalances.length === 0 ? (
+                {!linkedEmployee ? (
                   <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                    No leave balance information available.
+                    Leave balances appear here after HR adds you to the employee roster with leave entitlements.
+                  </Typography>
+                ) : leaveBalances.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                    No leave balance information on file.
                   </Typography>
                 ) : (
                   leaveBalances.map((leave) => (
-                    <Card key={leave.type} variant="outlined">
+                    <Card key={leave.key} variant="outlined">
                       <CardContent>
                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                          {leave.icon}
+                          {LEAVE_ICONS[leave.key] ?? <EventAvailable />}
                           <Typography variant="subtitle1" sx={{ ml: 1 }}>
                             {leave.type}
                           </Typography>
                         </Box>
                         <LinearProgress
                           variant="determinate"
-                          value={(leave.used / leave.total) * 100}
+                          value={leave.total > 0 ? (leave.used / leave.total) * 100 : 0}
                           sx={{ mb: 1, height: 8, borderRadius: 4 }}
                         />
                         <Typography variant="body2" color="text.secondary">
-                          {leave.used} used of {leave.total} days ({leave.total - leave.used} remaining)
+                          {leave.used} used of {leave.total} days ({leave.remaining} remaining)
                         </Typography>
                       </CardContent>
                     </Card>
@@ -938,25 +802,31 @@ Location: ${profile.location}
                 <Download /> Payslips
               </Typography>
               <List>
-                {payslips.length === 0 ? (
+                {!linkedEmployee ? (
                   <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                    No payslips available.
+                    Payslips appear here after HR processes payroll and attaches them to your employee record.
+                  </Typography>
+                ) : payslips.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                    No payslips on file yet.
                   </Typography>
                 ) : (
                   payslips.map((payslip) => (
                     <React.Fragment key={payslip.id}>
                       <ListItem
                         secondaryAction={
-                          <Tooltip title="Download Payslip">
-                            <IconButton 
-                              edge="end" 
-                              aria-label="download" 
-                              color="primary"
-                              onClick={() => handleDownload(payslip.id)}
-                            >
-                              <Download />
-                            </IconButton>
-                          </Tooltip>
+                          payslip.documentUrl ? (
+                            <Tooltip title="Download payslip">
+                              <IconButton
+                                edge="end"
+                                aria-label="download"
+                                color="primary"
+                                onClick={() => handleDownloadPayslip(payslip.id)}
+                              >
+                                <Download />
+                              </IconButton>
+                            </Tooltip>
+                          ) : null
                         }
                       >
                         <ListItemIcon>
@@ -964,7 +834,7 @@ Location: ${profile.location}
                         </ListItemIcon>
                         <ListItemText
                           primary={`${payslip.month} ${payslip.year}`}
-                          secondary={payslip.amount}
+                          secondary={formatZAR(payslip.amount)}
                         />
                       </ListItem>
                       <Divider />
@@ -972,14 +842,6 @@ Location: ${profile.location}
                   ))
                 )}
               </List>
-              <Button
-                variant="outlined"
-                fullWidth
-                startIcon={<AccessTime />}
-                sx={{ mt: 2 }}
-              >
-                View All Payslips
-              </Button>
             </Paper>
           </Grid>
         </Grid>
